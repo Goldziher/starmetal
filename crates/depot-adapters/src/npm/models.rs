@@ -3,7 +3,7 @@
 //! Works with raw `serde_json::Value` to handle the wide variety of field shapes
 //! across npm packages without strict deserialization failures.
 
-use ahash::{AHashMap, AHashSet};
+use ahash::AHashMap;
 use depot_core::package::{ArtifactDigest, PackageName, VersionInfo, VersionMetadata};
 
 /// Extract version info from a raw packument JSON.
@@ -64,23 +64,6 @@ pub fn extract_version_metadata(
         license,
         yanked: false,
     })
-}
-
-/// Extract all unique dependency package names from a raw packument.
-///
-/// Collects from `dependencies` across all versions (not devDependencies).
-pub fn extract_dependency_names(packument: &serde_json::Value) -> AHashSet<String> {
-    let mut deps = AHashSet::new();
-    if let Some(versions) = packument["versions"].as_object() {
-        for ver in versions.values() {
-            if let Some(dep_obj) = ver["dependencies"].as_object() {
-                for dep_name in dep_obj.keys() {
-                    deps.insert(dep_name.clone());
-                }
-            }
-        }
-    }
-    deps
 }
 
 /// Rewrite tarball URLs in a raw packument JSON to point through depot.
@@ -162,15 +145,6 @@ mod tests {
             meta.artifacts[0].upstream_hashes.get("integrity").unwrap(),
             "sha512-xyz789"
         );
-    }
-
-    #[test]
-    fn should_extract_dependency_names() {
-        let packument = sample_packument();
-        let deps = extract_dependency_names(&packument);
-
-        assert_eq!(deps.len(), 1);
-        assert!(deps.contains("is-number"));
     }
 
     #[test]

@@ -30,6 +30,25 @@ pub trait PackageService: Send + Sync {
 
     /// List all cached packages for an ecosystem.
     async fn list_packages(&self, ecosystem: Ecosystem) -> Result<Vec<PackageName>>;
+
+    /// Get the raw upstream response for a package, stored as an opaque blob.
+    ///
+    /// Protocol adapters use this to serve the full upstream response
+    /// (preserving all protocol-specific fields) without depending on
+    /// the upstream client's memory cache.
+    async fn get_raw_upstream(
+        &self,
+        ecosystem: Ecosystem,
+        name: &PackageName,
+    ) -> Result<Option<Bytes>>;
+
+    /// Store the raw upstream response for a package.
+    async fn put_raw_upstream(
+        &self,
+        ecosystem: Ecosystem,
+        name: &PackageName,
+        data: Bytes,
+    ) -> Result<()>;
 }
 
 // ---------------------------------------------------------------------------

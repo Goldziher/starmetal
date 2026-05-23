@@ -49,25 +49,42 @@ async fn package_metadata<S: HasHexState>(
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let name = PackageName::new(name);
+    let service = state.package_service();
 
-    // Trigger caching lifecycle through PackageService (populates upstream cache)
-    let _versions = state
-        .package_service()
-        .list_versions(Ecosystem::Hex, &name)
+    // Storage is the source of truth
+    let package: depot_core::registry::hex::HexPackage = if let Some(raw) = service
+        .get_raw_upstream(Ecosystem::Hex, &name)
         .await
-        .map_err(|err| map_error(&err))?;
+        .map_err(|err| map_error(&err))?
+    {
+        serde_json::from_slice(&raw)
+            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?
+    } else {
+        // Cache miss — fetch from upstream
+        let _versions = service
+            .list_versions(Ecosystem::Hex, &name)
+            .await
+            .map_err(|err| map_error(&err))?;
 
-    // Get the full package from upstream cache (has all release data already)
-    let package = state
-        .hex_upstream()
-        .get_cached_package(&name)
-        .await
-        .ok_or_else(|| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "package not cached after list_versions".to_string(),
-            )
-        })?;
+        let upstream_package = state
+            .hex_upstream()
+            .get_cached_package(&name)
+            .await
+            .ok_or_else(|| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "package not cached after upstream fetch".to_string(),
+                )
+            })?;
+
+        if let Ok(raw) = serde_json::to_vec(&upstream_package) {
+            let _ = service
+                .put_raw_upstream(Ecosystem::Hex, &name, bytes::Bytes::from(raw))
+                .await;
+        }
+
+        upstream_package
+    };
 
     // Build response with URLs rewritten to point through depot
     let response = models::build_package_response_from_cached(&name, &package);

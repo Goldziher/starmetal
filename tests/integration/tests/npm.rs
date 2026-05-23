@@ -305,3 +305,51 @@ async fn npm_install_package_with_deps() {
 
     server.shutdown();
 }
+
+#[tokio::test]
+#[ignore] // requires network + npm
+async fn npm_install_express_full_tree() {
+    let npm = require_npm().await;
+    let server = TestServer::start().await;
+    let registry_url = format!("{}/npm", server.base_url());
+
+    let tmp = tempfile::tempdir().expect("failed to create tempdir");
+
+    // express has ~65 transitive dependencies — tests real-world dep resolution
+    let output = Command::new(&npm)
+        .args([
+            "install",
+            "--registry",
+            &registry_url,
+            "--prefix",
+            &tmp.path().to_string_lossy(),
+            "--no-audit",
+            "--no-fund",
+            "--no-package-lock",
+            "express",
+        ])
+        .output()
+        .await
+        .expect("failed to run npm");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        output.status.success(),
+        "npm install express failed.\nstdout: {stdout}\nstderr: {stderr}"
+    );
+
+    // Verify express and key transitive deps were installed
+    assert!(tmp.path().join("node_modules/express").exists());
+    assert!(tmp.path().join("node_modules/body-parser").exists());
+    assert!(tmp.path().join("node_modules/debug").exists());
+
+    // Should have installed 50+ packages
+    let pkg_count = std::fs::read_dir(tmp.path().join("node_modules"))
+        .map(|d| d.count())
+        .unwrap_or(0);
+    assert!(pkg_count >= 50, "expected 50+ packages, got {pkg_count}");
+
+    server.shutdown();
+}

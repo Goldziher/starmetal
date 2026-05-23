@@ -1,0 +1,16 @@
+{
+	"name": "requests",
+	"version": "0.7.1",
+	"artifacts": [
+		{
+			"filename": "requests-0.7.1.tar.gz",
+			"blake3": "",
+			"size": 31804,
+			"upstream_hashes": {
+				"sha256": "6795818f5f46d7ecf53965d96e2ceae66bf652c79703292973b7c56afb88b946"
+			}
+		}
+	],
+	"license": null,
+	"yanked": false
+}

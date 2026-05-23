@@ -1,0 +1,24 @@
+{
+	"name": "requests",
+	"version": "2.16.5",
+	"artifacts": [
+		{
+			"filename": "requests-2.16.5-py2.py3-none-any.whl",
+			"blake3": "",
+			"size": 87597,
+			"upstream_hashes": {
+				"sha256": "3a27020d547958f5270fd5e9d62250119ee7db7454644599b65fda20cb542ded"
+			}
+		},
+		{
+			"filename": "requests-2.16.5.tar.gz",
+			"blake3": "",
+			"size": 122929,
+			"upstream_hashes": {
+				"sha256": "f717303ebff661099cc5b73ce723ae1246f19ac39faa4c8005be56744d1a1006"
+			}
+		}
+	],
+	"license": null,
+	"yanked": false
+}

@@ -95,25 +95,43 @@ async fn simple_project<S: HasPypiState>(
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let name = PackageName::new(project);
     let name = PackageName::new(name.normalized(Ecosystem::PyPI).into_owned());
+    let service = state.package_service();
 
-    // Trigger caching lifecycle through PackageService
-    let _versions = state
-        .package_service()
-        .list_versions(Ecosystem::PyPI, &name)
+    // Storage is the source of truth — check there first
+    let mut project: depot_core::registry::pypi::PypiProject = if let Some(raw) = service
+        .get_raw_upstream(Ecosystem::PyPI, &name)
         .await
-        .map_err(|err| map_error(&err))?;
+        .map_err(|err| map_error(&err))?
+    {
+        serde_json::from_slice(&raw)
+            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?
+    } else {
+        // Cache miss — fetch from upstream
+        let _versions = service
+            .list_versions(Ecosystem::PyPI, &name)
+            .await
+            .map_err(|err| map_error(&err))?;
 
-    // Get full project from upstream cache (has all file data already)
-    let mut project = state
-        .pypi_upstream()
-        .get_cached_project(&name)
-        .await
-        .ok_or_else(|| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "project not cached after list_versions".to_string(),
-            )
-        })?;
+        let upstream_project = state
+            .pypi_upstream()
+            .get_cached_project(&name)
+            .await
+            .ok_or_else(|| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "project not cached after upstream fetch".to_string(),
+                )
+            })?;
+
+        // Persist to storage — this is now depot's data
+        if let Ok(raw) = serde_json::to_vec(&upstream_project) {
+            let _ = service
+                .put_raw_upstream(Ecosystem::PyPI, &name, bytes::Bytes::from(raw))
+                .await;
+        }
+
+        upstream_project
+    };
 
     // Rewrite file URLs to point through depot
     models::rewrite_project_file_urls(&mut project);

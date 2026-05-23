@@ -98,27 +98,48 @@ async fn serve_index<S: HasCargoState>(
     name: String,
 ) -> Result<Response, (StatusCode, String)> {
     let package_name = PackageName::new(&name);
+    let service = state.package_service();
 
-    // Trigger caching lifecycle through PackageService
-    let _versions = state
-        .package_service()
-        .list_versions(Ecosystem::Cargo, &package_name)
+    // Storage is the source of truth
+    let body = if let Some(raw) = service
+        .get_raw_upstream(Ecosystem::Cargo, &package_name)
         .await
-        .map_err(|err| map_error(&err))?;
+        .map_err(|err| map_error(&err))?
+    {
+        String::from_utf8(raw.to_vec())
+            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?
+    } else {
+        // Cache miss — fetch from upstream
+        let _versions = service
+            .list_versions(Ecosystem::Cargo, &package_name)
+            .await
+            .map_err(|err| map_error(&err))?;
 
-    // Get raw entries from upstream cache for full ndjson response
-    let entries = state
-        .cargo_upstream()
-        .get_cached_entries(&package_name)
-        .await
-        .ok_or_else(|| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "index entries not cached after list_versions".to_string(),
+        let entries = state
+            .cargo_upstream()
+            .get_cached_entries(&package_name)
+            .await
+            .ok_or_else(|| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "index entries not cached after upstream fetch".to_string(),
+                )
+            })?;
+
+        let ndjson = models::entries_to_ndjson(&entries);
+
+        // Persist to storage
+        let _ = service
+            .put_raw_upstream(
+                Ecosystem::Cargo,
+                &package_name,
+                bytes::Bytes::from(ndjson.clone()),
             )
-        })?;
+            .await;
 
-    let body = models::entries_to_ndjson(&entries);
+        ndjson
+    };
+
     Ok(([(axum::http::header::CONTENT_TYPE, "text/plain")], body).into_response())
 }
 

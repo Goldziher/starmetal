@@ -1,9 +1,28 @@
 /target
 
-# AI Rules generated files
-.claude/
+# BEGIN ai-rulez (DO NOT EDIT - managed by ai-rulez)
+.claude/agents/cli-engineer.md
+.claude/agents/code-reviewer.md
+.claude/agents/core-architect.md
+.claude/agents/docs-writer.md
+.claude/agents/infra-engineer.md
+.claude/agents/protocol-engineer.md
+.claude/agents/qa-engineer.md
+.claude/agents/security-auditor.md
+.claude/agents/test-writer.md
+.claude/skills/iterate/SKILL.md
+.claude/skills/parallelize/SKILL.md
+.codex/agents/cli-engineer.toml
+.codex/agents/code-reviewer.toml
+.codex/agents/core-architect.toml
+.codex/agents/docs-writer.toml
+.codex/agents/infra-engineer.toml
+.codex/agents/protocol-engineer.toml
+.codex/agents/qa-engineer.toml
+.codex/agents/security-auditor.toml
+.codex/agents/test-writer.toml
+.codex/commands/iterate.md
+.codex/commands/parallelize.md
 AGENTS.md
 CLAUDE.md
-.codex/
-depot-data/
-erl_crash.dump
+# END ai-rulez

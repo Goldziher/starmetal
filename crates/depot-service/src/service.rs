@@ -60,6 +60,10 @@ impl CachingPackageService {
     fn metadata_key(ecosystem: Ecosystem, name: &PackageName, version: &str) -> String {
         format!("{ecosystem}/{name}/{version}/_metadata.json")
     }
+
+    fn raw_upstream_key(ecosystem: Ecosystem, name: &PackageName) -> String {
+        format!("{ecosystem}/{name}/_raw_upstream")
+    }
 }
 
 #[async_trait]
@@ -163,6 +167,25 @@ impl PackageService for CachingPackageService {
         }
 
         Ok(packages)
+    }
+
+    async fn get_raw_upstream(
+        &self,
+        ecosystem: Ecosystem,
+        name: &PackageName,
+    ) -> Result<Option<Bytes>> {
+        let key = Self::raw_upstream_key(ecosystem, name);
+        self.storage.get(&key).await
+    }
+
+    async fn put_raw_upstream(
+        &self,
+        ecosystem: Ecosystem,
+        name: &PackageName,
+        data: Bytes,
+    ) -> Result<()> {
+        let key = Self::raw_upstream_key(ecosystem, name);
+        self.storage.put(&key, data).await
     }
 }
 

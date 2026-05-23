@@ -1,0 +1,24 @@
+{
+	"name": "requests",
+	"version": "2.0.0",
+	"artifacts": [
+		{
+			"filename": "requests-2.0.0-py2.py3-none-any.whl",
+			"blake3": "",
+			"size": 391141,
+			"upstream_hashes": {
+				"sha256": "2ef65639cb9600443f85451df487818c31f993ab288f313d29cc9db4f3cbe6ed"
+			}
+		},
+		{
+			"filename": "requests-2.0.0.tar.gz",
+			"blake3": "",
+			"size": 362994,
+			"upstream_hashes": {
+				"sha256": "78536038f54cff6ade3be6863403146665b5a3923dd61108c98d8b64141f9d70"
+			}
+		}
+	],
+	"license": null,
+	"yanked": false
+}

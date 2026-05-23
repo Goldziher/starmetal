@@ -6,7 +6,7 @@ exclude: vendor/|target/
 repos:
   # AI-Rulez: auto-generate AI assistant configuration files
   - repo: https://github.com/Goldziher/ai-rulez
-    rev: v3.13.0
+    rev: v4.2.1
     hooks:
       - id: ai-rulez-generate
 
@@ -33,13 +33,6 @@ repos:
       - id: check-toml
       - id: check-case-conflict
 
-  # TOML formatting
-  - repo: https://github.com/ComPWA/taplo-pre-commit
-    rev: v0.9.3
-    hooks:
-      - id: taplo-format
-        exclude: "Cargo.toml"
-
   # Rust: formatting, linting, and unused deps
   - repo: https://github.com/AndrejOrsula/pre-commit-cargo
     rev: 0.5.0
@@ -48,8 +41,16 @@ repos:
         args: ["--all"]
         types: [rust]
       - id: cargo-clippy
-        args: ["--fix", "--allow-dirty", "--allow-staged",
-               "--all-targets", "--", "-D", "warnings"]
+        args:
+          [
+            "--fix",
+            "--allow-dirty",
+            "--allow-staged",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings",
+          ]
         types_or: [rust, toml]
 
   - repo: https://github.com/bnjbvr/cargo-machete
@@ -58,16 +59,10 @@ repos:
       - id: cargo-machete
 
   - repo: https://github.com/DevinR528/cargo-sort
-    rev: "v2.1.3"
+    rev: "v2.1.4"
     hooks:
       - id: cargo-sort
         args: [-w]
-
-  # JSON/YAML formatting
-  - repo: https://github.com/biomejs/pre-commit
-    rev: v2.4.12
-    hooks:
-      - id: biome-format
 
   # Shell scripts: formatting and linting
   - repo: https://github.com/scop/pre-commit-shfmt
@@ -80,17 +75,17 @@ repos:
     rev: v0.11.0
     hooks:
       - id: shellcheck
-        args: ['-x']
+        args: ["-x"]
 
   # Markdown: linting
   - repo: https://github.com/rvben/rumdl-pre-commit
-    rev: "v0.1.75"
+    rev: "v0.2.0"
     hooks:
       - id: rumdl-fmt
 
   # Spelling
   - repo: https://github.com/crate-ci/typos
-    rev: v1.45.1
+    rev: v1.46.2
     hooks:
       - id: typos
         args: [--force-exclude]
@@ -100,3 +95,8 @@ repos:
     rev: v1.7.12
     hooks:
       - id: actionlint
+
+  - repo: https://github.com/Goldziher/gh-actions-updater
+    rev: v0.1.3
+    hooks:
+      - id: gh-actions-updater

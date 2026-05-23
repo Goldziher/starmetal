@@ -75,38 +75,51 @@ fn extract_host(headers: &HeaderMap) -> String {
 
 /// Shared logic for serving packument responses.
 ///
-/// Triggers the caching lifecycle through `PackageService`, then serves
-/// the full upstream packument (preserving dependencies, scripts, etc.)
-/// with tarball URLs rewritten to point through this depot instance.
-///
-/// Also pre-fetches all transitive dependencies so they are warm in cache
-/// when the client requests them.
+/// Checks depot's storage first. On miss, fetches from upstream, stores the
+/// raw packument in storage, then serves it. The upstream client's memory
+/// cache is an optimization — storage is the source of truth.
 async fn serve_packument<S: HasNpmState>(
     state: S,
     name: &PackageName,
     host: &str,
 ) -> Result<axum::response::Response, (StatusCode, String)> {
-    // Trigger caching lifecycle through PackageService
-    let _versions = state
-        .package_service()
-        .list_versions(Ecosystem::Npm, name)
-        .await
-        .map_err(|err| map_error(&err))?;
+    let service = state.package_service();
 
-    // Get full packument from upstream cache (preserves deps, scripts, etc.)
-    let mut packument = state
-        .npm_upstream()
-        .get_cached_packument(name)
+    // Try storage first — depot owns this data once fetched
+    let mut packument: serde_json::Value = if let Some(raw) = service
+        .get_raw_upstream(Ecosystem::Npm, name)
         .await
-        .ok_or_else(|| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "packument not cached after list_versions".to_string(),
-            )
-        })?;
+        .map_err(|err| map_error(&err))?
+    {
+        serde_json::from_slice(&raw)
+            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?
+    } else {
+        // Cache miss — fetch from upstream
+        let _versions = service
+            .list_versions(Ecosystem::Npm, name)
+            .await
+            .map_err(|err| map_error(&err))?;
 
-    // Pre-fetch all dependencies concurrently so they're warm when the client asks
-    prefetch_dependencies(&state, &packument).await;
+        let upstream_packument = state
+            .npm_upstream()
+            .get_cached_packument(name)
+            .await
+            .ok_or_else(|| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "packument not cached after upstream fetch".to_string(),
+                )
+            })?;
+
+        // Persist to storage — this is now depot's data
+        let raw = serde_json::to_vec(&upstream_packument)
+            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+        let _ = service
+            .put_raw_upstream(Ecosystem::Npm, name, bytes::Bytes::from(raw))
+            .await;
+
+        upstream_packument
+    };
 
     // Rewrite tarball URLs to point through depot
     let base_url = format!("http://{host}");
@@ -115,87 +128,6 @@ async fn serve_packument<S: HasNpmState>(
     let body = serde_json::to_string(&packument)
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
     Ok(([(header::CONTENT_TYPE, "application/json")], body).into_response())
-}
-
-/// Pre-fetch the full transitive dependency tree using BFS.
-///
-/// Discovers dependency names from each packument's `dependencies` field,
-/// fetches them through `PackageService` (which triggers caching), and
-/// continues until all reachable deps are fetched or max depth is reached.
-async fn prefetch_dependencies<S: HasNpmState>(state: &S, packument: &serde_json::Value) {
-    use ahash::AHashSet;
-
-    const MAX_DEPTH: usize = 10;
-
-    let initial_deps = models::extract_dependency_names(packument);
-    if initial_deps.is_empty() {
-        return;
-    }
-
-    let pkg_name = packument["name"].as_str().unwrap_or("unknown");
-    tracing::debug!(
-        package = %pkg_name,
-        dep_count = initial_deps.len(),
-        "pre-fetching npm dependency tree"
-    );
-
-    let mut visited: AHashSet<String> = AHashSet::new();
-    // Add the root package itself to visited
-    visited.insert(pkg_name.to_string());
-
-    let mut current_level: Vec<String> = initial_deps.into_iter().collect();
-
-    for depth in 0..MAX_DEPTH {
-        if current_level.is_empty() {
-            break;
-        }
-
-        // Filter out already-visited deps
-        let to_fetch: Vec<String> = current_level
-            .into_iter()
-            .filter(|name| visited.insert(name.clone()))
-            .collect();
-
-        if to_fetch.is_empty() {
-            break;
-        }
-
-        tracing::debug!(depth, count = to_fetch.len(), "fetching dependency level");
-
-        // Fetch all deps at this level concurrently
-        let mut tasks = tokio::task::JoinSet::new();
-        for dep_name in to_fetch {
-            let service = state.package_service().clone();
-            let upstream = state.npm_upstream().clone();
-            tasks.spawn(async move {
-                let pkg_name = PackageName::new(&dep_name);
-                if let Err(err) = service.list_versions(Ecosystem::Npm, &pkg_name).await {
-                    tracing::warn!(dep = %dep_name, %err, "failed to pre-fetch npm dependency");
-                    return (dep_name, Vec::new());
-                }
-                // Extract this dep's own dependencies for the next level
-                let next_deps =
-                    if let Some(dep_packument) = upstream.get_cached_packument(&pkg_name).await {
-                        models::extract_dependency_names(&dep_packument)
-                            .into_iter()
-                            .collect()
-                    } else {
-                        Vec::new()
-                    };
-                (dep_name, next_deps)
-            });
-        }
-
-        // Collect next level's deps from all results
-        let mut next_level = Vec::new();
-        while let Some(result) = tasks.join_next().await {
-            if let Ok((_dep_name, child_deps)) = result {
-                next_level.extend(child_deps);
-            }
-        }
-
-        current_level = next_level;
-    }
 }
 
 /// GET /{package}/-/{filename} -- download an unscoped package tarball.
