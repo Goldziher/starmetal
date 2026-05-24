@@ -398,6 +398,8 @@ fn map_error(err: &DepotError) -> (StatusCode, String) {
         | DepotError::VersionNotFound { .. }
         | DepotError::ArtifactNotFound(_) => (StatusCode::NOT_FOUND, err.to_string()),
         DepotError::PolicyViolation(_) => (StatusCode::FORBIDDEN, err.to_string()),
+        DepotError::Adapter(_) => (StatusCode::BAD_REQUEST, err.to_string()),
+        DepotError::Publish(_) => (StatusCode::CONFLICT, err.to_string()),
         DepotError::Upstream(_) => (StatusCode::BAD_GATEWAY, err.to_string()),
         _ => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
     }

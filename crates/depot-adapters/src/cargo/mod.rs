@@ -94,7 +94,7 @@ async fn publish_crate<S: HasCargoState>(
         .ok_or_else(|| (StatusCode::BAD_REQUEST, "missing crate version".to_string()))?;
     let package_name = PackageName::new(name.to_ascii_lowercase());
     authorize_publish(&state, &headers, &package_name)?;
-    let sha256 = format!("{:x}", sha2::Sha256::digest(&crate_bytes));
+    let sha256 = hex::encode(sha2::Sha256::digest(&crate_bytes));
     let filename = format!("{}-{version}.crate", package_name.as_str());
     let mut upstream_hashes = ahash::AHashMap::new();
     upstream_hashes.insert("sha256".to_string(), sha256.clone());
@@ -375,6 +375,8 @@ fn map_error(err: &DepotError) -> (StatusCode, String) {
         | DepotError::VersionNotFound { .. }
         | DepotError::ArtifactNotFound(_) => (StatusCode::NOT_FOUND, err.to_string()),
         DepotError::PolicyViolation(_) => (StatusCode::FORBIDDEN, err.to_string()),
+        DepotError::Adapter(_) => (StatusCode::BAD_REQUEST, err.to_string()),
+        DepotError::Publish(_) => (StatusCode::CONFLICT, err.to_string()),
         DepotError::Upstream(_) => (StatusCode::BAD_GATEWAY, err.to_string()),
         _ => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
     }

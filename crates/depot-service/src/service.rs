@@ -64,12 +64,12 @@ impl CachingPackageService {
         }
 
         if let Some(expected) = digest.upstream_hashes.get("sha256") {
-            let actual = format!("{:x}", sha2::Sha256::digest(data));
+            let actual = hex::encode(sha2::Sha256::digest(data));
             return verify_hex_digest("sha256", expected, &actual);
         }
 
         if let Some(expected) = digest.upstream_hashes.get("sha1") {
-            let actual = format!("{:x}", sha1::Sha1::digest(data));
+            let actual = hex::encode(sha1::Sha1::digest(data));
             return verify_hex_digest("sha1", expected, &actual);
         }
 
@@ -1280,7 +1280,7 @@ mod tests {
     async fn upstream_sha256_verified_before_cache_store() {
         let storage = Arc::new(MockStorage::new());
         let artifact_data = Bytes::from_static(b"upstream content");
-        let sha256 = format!("{:x}", sha2::Sha256::digest(&artifact_data));
+        let sha256 = hex::encode(sha2::Sha256::digest(&artifact_data));
         let mut upstream_hashes = AHashMap::new();
         upstream_hashes.insert("sha256".to_string(), sha256);
 

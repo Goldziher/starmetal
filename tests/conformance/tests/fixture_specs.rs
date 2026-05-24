@@ -165,8 +165,16 @@ impl cargo::HasCargoState for RouteState {
 }
 
 impl hex::HasHexState for RouteState {
+    fn config(&self) -> &Arc<Config> {
+        &self.config
+    }
+
     fn package_service(&self) -> &Arc<dyn PackageService> {
         &self.service
+    }
+
+    fn publishing_service(&self) -> &Arc<dyn PublishingService> {
+        &self.publishing_service
     }
 
     fn hex_upstream(&self) -> &Arc<HexUpstreamClient> {
@@ -193,8 +201,16 @@ impl maven::HasMavenState for RouteState {
 }
 
 impl rubygems::HasRubyGemsState for RouteState {
+    fn config(&self) -> &Arc<Config> {
+        &self.config
+    }
+
     fn package_service(&self) -> &Arc<dyn PackageService> {
         &self.service
+    }
+
+    fn publishing_service(&self) -> &Arc<dyn PublishingService> {
+        &self.publishing_service
     }
 
     fn rubygems_upstream(&self) -> &Arc<RubyGemsUpstreamClient> {
@@ -203,8 +219,16 @@ impl rubygems::HasRubyGemsState for RouteState {
 }
 
 impl nuget::HasNuGetState for RouteState {
+    fn config(&self) -> &Arc<Config> {
+        &self.config
+    }
+
     fn package_service(&self) -> &Arc<dyn PackageService> {
         &self.service
+    }
+
+    fn publishing_service(&self) -> &Arc<dyn PublishingService> {
+        &self.publishing_service
     }
 
     fn nuget_upstream(&self) -> &Arc<NuGetUpstreamClient> {
@@ -213,8 +237,16 @@ impl nuget::HasNuGetState for RouteState {
 }
 
 impl pubdev::HasPubState for RouteState {
+    fn config(&self) -> &Arc<Config> {
+        &self.config
+    }
+
     fn package_service(&self) -> &Arc<dyn PackageService> {
         &self.service
+    }
+
+    fn publishing_service(&self) -> &Arc<dyn PublishingService> {
+        &self.publishing_service
     }
 
     fn pub_upstream(&self) -> &Arc<PubUpstreamClient> {

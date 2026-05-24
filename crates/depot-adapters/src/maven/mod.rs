@@ -112,8 +112,8 @@ async fn serve_path<S: HasMavenState>(
     if let Some((artifact_path, algorithm)) = checksum_request(&path) {
         let data = artifact_bytes(state, artifact_path).await?;
         let digest = match algorithm {
-            "sha1" => format!("{:x}", sha1::Sha1::digest(&data)),
-            "sha256" => format!("{:x}", sha2::Sha256::digest(&data)),
+            "sha1" => hex::encode(sha1::Sha1::digest(&data)),
+            "sha256" => hex::encode(sha2::Sha256::digest(&data)),
             _ => unreachable!("checksum_request only returns supported algorithms"),
         };
         return Ok(text_response(method, digest));
@@ -289,6 +289,8 @@ fn map_error(err: &DepotError) -> (StatusCode, String) {
         | DepotError::VersionNotFound { .. }
         | DepotError::ArtifactNotFound(_) => (StatusCode::NOT_FOUND, err.to_string()),
         DepotError::PolicyViolation(_) => (StatusCode::FORBIDDEN, err.to_string()),
+        DepotError::Adapter(_) => (StatusCode::BAD_REQUEST, err.to_string()),
+        DepotError::Publish(_) => (StatusCode::CONFLICT, err.to_string()),
         DepotError::Upstream(_) => (StatusCode::BAD_GATEWAY, err.to_string()),
         _ => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
     }

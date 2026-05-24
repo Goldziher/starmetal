@@ -24,7 +24,10 @@ depot-adapters = { path = "../../crates/depot-adapters", default-features = fals
 depot-core.workspace = true
 depot-service.workspace = true
 depot-storage = { workspace = true, features = ["backend-memory"] }
+flate2.workspace = true
 roxmltree = "0.21"
 serde_json.workspace = true
+tar.workspace = true
 tokio.workspace = true
 tower.workspace = true
+zip.workspace = true

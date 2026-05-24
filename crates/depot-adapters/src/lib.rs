@@ -4,6 +4,8 @@ pub mod pypi;
 #[cfg(feature = "npm")]
 pub mod npm;
 
+mod archive;
+
 #[cfg(feature = "cargo-registry")]
 pub mod cargo;
 

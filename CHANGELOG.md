@@ -39,6 +39,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Publishing domain types and `PublishingService` port for local hosted package uploads, yank state updates, duplicate-version checks, shadowing protection, and published metadata manifests.
 - Scoped publishing token config with `read`, `publish`, `yank`, and `admin` scopes plus optional ecosystem and package allowlists.
 - Native publish-route conformance coverage for PyPI legacy upload, npm packument publish, Cargo Registry Web API publish, and Maven repository `PUT` uploads.
+- Native local hosted publishing routes for Hex tarball uploads, RubyGems gem uploads, NuGet V2 package uploads, and hosted pub.dev archive uploads.
+- Archive metadata extraction for RubyGems `.gem`, NuGet `.nupkg`/`.nuspec`, pub.dev `.tar.gz`, and Hex tarball publish payloads.
+- Publish-route conformance coverage for Hex, RubyGems, NuGet, and pub.dev, including metadata/index readback, artifact downloads, and checksum sidecars where applicable.
 
 ### Changed
 
@@ -64,8 +67,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Documentation and ADRs now describe MVP reality for auth, rate limiting, encryption, lock/sync workflows, schema provenance, adapter acceptance criteria, OpenDAL storage, and deferred production hardening.
 - `.agents/` is ignored by git.
 - PyPI, npm, Cargo, and Maven adapters now have initial local hosted publishing routes that write through `PublishingService` and serve the published artifacts through existing native read paths.
+- Hex, RubyGems, NuGet, and pub.dev adapters now write local hosted publishes through `PublishingService` and serve those packages through their native read/index routes.
 - Cargo `config.json` advertises an API endpoint and `auth-required` when publishing is enabled.
 - npm and PyPI read adapters can synthesize local metadata responses from Depot-published versions when no raw upstream response exists.
+- Cargo dependencies were refreshed with `cargo upgrade --incompatible`; `zip` moved to the latest incompatible major release and the workspace lockfile was regenerated with `cargo update`.
 
 ### Fixed
 
@@ -76,3 +81,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Hex checksum parsing now decodes the signed, gzipped protobuf wrapper used by live `repo.hex.pm`.
 - Bundler E2E uses `bundle config set path` for modern Bundler versions.
 - `depot-server` no longer enables `depot-storage` default features implicitly.
+- Digest formatting after the `sha1`/`sha2` incompatible updates now uses explicit hex encoding instead of formatter traits removed from the upgraded digest output types.

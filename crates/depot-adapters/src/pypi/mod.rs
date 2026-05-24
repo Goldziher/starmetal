@@ -120,7 +120,7 @@ async fn legacy_upload<S: HasPypiState>(
             "missing upload content".to_string(),
         )
     })?;
-    let sha256 = format!("{:x}", sha2::Sha256::digest(&data));
+    let sha256 = hex::encode(sha2::Sha256::digest(&data));
     let mut upstream_hashes = ahash::AHashMap::new();
     upstream_hashes.insert("sha256".to_string(), sha256);
 
@@ -367,6 +367,8 @@ fn map_error(err: &DepotError) -> (StatusCode, String) {
         | DepotError::VersionNotFound { .. }
         | DepotError::ArtifactNotFound(_) => (StatusCode::NOT_FOUND, err.to_string()),
         DepotError::PolicyViolation(_) => (StatusCode::FORBIDDEN, err.to_string()),
+        DepotError::Adapter(_) => (StatusCode::BAD_REQUEST, err.to_string()),
+        DepotError::Publish(_) => (StatusCode::CONFLICT, err.to_string()),
         DepotError::Upstream(_) => (StatusCode::BAD_GATEWAY, err.to_string()),
         _ => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
     }

@@ -108,8 +108,16 @@ impl depot_adapters::cargo::HasCargoState for AppState {
 
 #[cfg(feature = "hex")]
 impl depot_adapters::hex::HasHexState for AppState {
+    fn config(&self) -> &Arc<Config> {
+        &self.config
+    }
+
     fn package_service(&self) -> &Arc<dyn PackageService> {
         &self.package_service
+    }
+
+    fn publishing_service(&self) -> &Arc<dyn PublishingService> {
+        &self.publishing_service
     }
 
     fn hex_upstream(&self) -> &Arc<depot_adapters::hex::upstream::HexUpstreamClient> {
@@ -138,8 +146,16 @@ impl depot_adapters::maven::HasMavenState for AppState {
 
 #[cfg(feature = "rubygems")]
 impl depot_adapters::rubygems::HasRubyGemsState for AppState {
+    fn config(&self) -> &Arc<Config> {
+        &self.config
+    }
+
     fn package_service(&self) -> &Arc<dyn PackageService> {
         &self.package_service
+    }
+
+    fn publishing_service(&self) -> &Arc<dyn PublishingService> {
+        &self.publishing_service
     }
 
     fn rubygems_upstream(
@@ -151,8 +167,16 @@ impl depot_adapters::rubygems::HasRubyGemsState for AppState {
 
 #[cfg(feature = "nuget")]
 impl depot_adapters::nuget::HasNuGetState for AppState {
+    fn config(&self) -> &Arc<Config> {
+        &self.config
+    }
+
     fn package_service(&self) -> &Arc<dyn PackageService> {
         &self.package_service
+    }
+
+    fn publishing_service(&self) -> &Arc<dyn PublishingService> {
+        &self.publishing_service
     }
 
     fn nuget_upstream(&self) -> &Arc<depot_adapters::nuget::upstream::NuGetUpstreamClient> {
@@ -162,8 +186,16 @@ impl depot_adapters::nuget::HasNuGetState for AppState {
 
 #[cfg(feature = "pub")]
 impl depot_adapters::pubdev::HasPubState for AppState {
+    fn config(&self) -> &Arc<Config> {
+        &self.config
+    }
+
     fn package_service(&self) -> &Arc<dyn PackageService> {
         &self.package_service
+    }
+
+    fn publishing_service(&self) -> &Arc<dyn PublishingService> {
+        &self.publishing_service
     }
 
     fn pub_upstream(&self) -> &Arc<depot_adapters::pubdev::upstream::PubUpstreamClient> {
