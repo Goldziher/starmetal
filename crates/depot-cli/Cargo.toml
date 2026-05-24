@@ -21,30 +21,34 @@ full = [
     "pub",
     "backend-fs",
 ]
-pypi = ["depot-adapters/pypi", "depot-server/pypi"]
-npm = ["depot-adapters/npm", "depot-server/npm"]
-cargo-registry = ["depot-adapters/cargo-registry", "depot-server/cargo-registry"]
-hex = ["depot-adapters/hex", "depot-server/hex"]
-maven = ["depot-adapters/maven", "depot-server/maven"]
-rubygems = ["depot-adapters/rubygems", "depot-server/rubygems"]
-nuget = ["depot-adapters/nuget", "depot-server/nuget"]
-pub = ["depot-adapters/pub", "depot-server/pub"]
-backend-fs = ["depot-storage/backend-fs"]
-backend-memory = ["depot-storage/backend-memory"]
-backend-s3 = ["depot-storage/backend-s3"]
-backend-gcs = ["depot-storage/backend-gcs"]
+pypi = ["depot-adapters/pypi", "depot-ops/pypi", "depot-server/pypi"]
+npm = ["depot-adapters/npm", "depot-ops/npm", "depot-server/npm"]
+cargo-registry = [
+    "depot-adapters/cargo-registry",
+    "depot-ops/cargo-registry",
+    "depot-server/cargo-registry",
+]
+hex = ["depot-adapters/hex", "depot-ops/hex", "depot-server/hex"]
+maven = ["depot-adapters/maven", "depot-ops/maven", "depot-server/maven"]
+rubygems = ["depot-adapters/rubygems", "depot-ops/rubygems", "depot-server/rubygems"]
+nuget = ["depot-adapters/nuget", "depot-ops/nuget", "depot-server/nuget"]
+pub = ["depot-adapters/pub", "depot-ops/pub", "depot-server/pub"]
+backend-fs = ["depot-ops/backend-fs", "depot-storage/backend-fs"]
+backend-memory = ["depot-ops/backend-memory", "depot-storage/backend-memory"]
+backend-s3 = ["depot-ops/backend-s3", "depot-storage/backend-s3"]
+backend-gcs = ["depot-ops/backend-gcs", "depot-storage/backend-gcs"]
 
 [dependencies]
-ahash.workspace = true
 axum.workspace = true
 clap.workspace = true
 depot-adapters = { workspace = true, default-features = false }
 depot-core.workspace = true
+depot-ops = { workspace = true, default-features = false }
 depot-server = { workspace = true, default-features = false }
-depot-service.workspace = true
 depot-storage = { workspace = true, default-features = false }
+rmcp.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 tokio.workspace = true
-toml.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true

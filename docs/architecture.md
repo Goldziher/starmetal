@@ -157,10 +157,13 @@ sequenceDiagram
 
 ```mermaid
 graph LR
-    cli[depot-cli] --> server[depot-server]
+    cli[depot-cli] --> ops[depot-ops]
+    ops --> server[depot-server]
+    ops --> service[depot-service]
+    ops --> storage[depot-storage]
+    ops --> adapters[depot-adapters]
     server --> adapters[depot-adapters]
     server --> service[depot-service]
-    server --> storage[depot-storage]
     adapters --> core[depot-core]
     service --> core
     storage --> core
@@ -170,10 +173,11 @@ graph LR
 |-------|---------|
 | `depot-core` | Domain types, port traits (`PackageService`, `StoragePort`, `UpstreamClient`), policy engine, lock file, config |
 | `depot-service` | Application service layer. `CachingPackageService`: pull-through caching, blake3 integrity (sidecar `.blake3` files), policy enforcement |
+| `depot-ops` | Shared local operator layer for config resolution, runtime construction, CLI commands, and MCP tools |
 | `depot-storage` | `StoragePort` via OpenDAL — feature-gated backends (fs, S3, GCS, memory) |
 | `depot-adapters` | Protocol adapters (axum routers) + upstream clients — feature-gated per ecosystem. Each adapter defines a state trait (`HasPypiState`, etc.) for accessing `PackageService` + upstream client |
 | `depot-server` | Axum app assembly, Tower middleware stack, shared `AppState` |
-| `depot-cli` | Binary crate, clap CLI: `serve`, `sync`, `lock`, `config` |
+| `depot-cli` | Binary crate, clap CLI and stdio MCP server backed by `depot-ops` |
 | `tests/integration` | Integration test crate with 31 tests covering pip, npm, cargo, and mix client workflows |
 
 ## Storage Key Scheme

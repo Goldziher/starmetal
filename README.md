@@ -34,6 +34,12 @@ cargo build --workspace
 # Run the server
 cargo run -p depot-cli -- serve
 
+# Run without a config file and inspect registries
+cargo run -p depot-cli -- --no-config --storage-backend memory registry status
+
+# Start the stdio MCP server for agent integrations
+cargo run -p depot-cli -- --no-config --storage-backend memory mcp serve
+
 # Run unit tests
 cargo test --workspace
 
@@ -52,6 +58,7 @@ Depot uses a hexagonal architecture with Tower middleware. The crate structure i
 |-------|------|
 | `depot-core` | Domain types, port traits, policy engine, lock file, config |
 | `depot-service` | Application service layer (`CachingPackageService`): pull-through caching, blake3 integrity, policy enforcement |
+| `depot-ops` | Shared local operator API used by CLI and MCP |
 | `depot-storage` | OpenDAL-backed `StoragePort` (feature-gated: fs, S3, GCS, memory) |
 | `depot-adapters` | Protocol adapters (axum routers) + upstream clients (feature-gated per ecosystem) |
 | `depot-server` | Axum app assembly, Tower middleware, shared `AppState` |
@@ -68,6 +75,9 @@ See the [Architecture Overview](docs/architecture.md) for Mermaid diagrams and d
 - [0005 — Protocol Adapters](docs/adr/0005-protocol-adapters.md)
 - [0006 — Feature Flags](docs/adr/0006-feature-flags.md)
 - [0007 — JSON Schema Validation](docs/adr/0007-json-schema-validation.md)
+- [0008 — Registry Expansion](docs/adr/0008-registry-expansion.md)
+- [0009 — Publishing and Upload Workflows](docs/adr/0009-publishing-upload-workflows.md)
+- [0010 — CLI and MCP Operations](docs/adr/0010-cli-mcp-operations.md)
 
 ### Schemas
 

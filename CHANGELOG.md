@@ -42,6 +42,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Native local hosted publishing routes for Hex tarball uploads, RubyGems gem uploads, NuGet V2 package uploads, and hosted pub.dev archive uploads.
 - Archive metadata extraction for RubyGems `.gem`, NuGet `.nupkg`/`.nuspec`, pub.dev `.tar.gz`, and Hex tarball publish payloads.
 - Publish-route conformance coverage for Hex, RubyGems, NuGet, and pub.dev, including metadata/index readback, artifact downloads, and checksum sidecars where applicable.
+- `depot-ops` crate as the shared local operator API for CLI and MCP frontends.
+- Fuller CLI command tree for config, registry, package, cache, server, and MCP operations with no-config execution support.
+- stdio MCP server backed by the same operations layer as the CLI, with mutating tools gated by `--allow-writes`.
+- Explicit artifact publish operation in both CLI and MCP for locally hosted package metadata.
+- ADR-0010 documenting the local-first CLI/MCP operations model and parity boundary.
 
 ### Changed
 
@@ -71,6 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Cargo `config.json` advertises an API endpoint and `auth-required` when publishing is enabled.
 - npm and PyPI read adapters can synthesize local metadata responses from Depot-published versions when no raw upstream response exists.
 - Cargo dependencies were refreshed with `cargo upgrade --incompatible`; `zip` moved to the latest incompatible major release and the workspace lockfile was regenerated with `cargo update`.
+- `depot serve` now builds its runtime through the shared operations layer used by CLI and MCP commands.
 
 ### Fixed
 

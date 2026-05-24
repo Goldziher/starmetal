@@ -4,6 +4,12 @@ pub mod pypi;
 #[cfg(feature = "npm")]
 pub mod npm;
 
+#[cfg(any(
+    feature = "hex",
+    feature = "rubygems",
+    feature = "nuget",
+    feature = "pub"
+))]
 mod archive;
 
 #[cfg(feature = "cargo-registry")]

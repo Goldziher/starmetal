@@ -4,6 +4,7 @@ members = [
     "crates/depot-adapters",
     "crates/depot-cli",
     "crates/depot-core",
+    "crates/depot-ops",
     "crates/depot-server",
     "crates/depot-service",
     "crates/depot-storage",
@@ -47,6 +48,7 @@ depot-adapters = { path = "crates/depot-adapters", default-features = false }
 
 # Workspace crates
 depot-core = { path = "crates/depot-core" }
+depot-ops = { path = "crates/depot-ops", default-features = false }
 depot-server = { path = "crates/depot-server", default-features = false }
 depot-service = { path = "crates/depot-service" }
 depot-storage = { path = "crates/depot-storage", default-features = false }
@@ -72,6 +74,13 @@ reqwest = { version = "0.13", default-features = false, features = [
     "rustls",
     "json",
     "stream",
+] }
+
+# MCP
+rmcp = { version = "1.7.0", default-features = false, features = [
+    "macros",
+    "server",
+    "transport-io",
 ] }
 
 # JSON schema generation

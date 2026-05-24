@@ -2,6 +2,7 @@ use std::io::{Cursor, Read};
 
 use bytes::Bytes;
 use depot_core::error::{DepotError, Result};
+#[cfg(any(feature = "rubygems", feature = "pub"))]
 use flate2::read::GzDecoder;
 
 const MAX_METADATA_BYTES: usize = 256 * 1024;
@@ -14,6 +15,7 @@ pub(crate) struct ArchiveMetadata {
     pub nuspec: Option<Bytes>,
 }
 
+#[cfg(feature = "rubygems")]
 pub(crate) fn parse_rubygem(data: &[u8]) -> Result<ArchiveMetadata> {
     let mut archive = tar::Archive::new(Cursor::new(data));
     let metadata = read_tar_entry(&mut archive, "metadata.gz")?;
@@ -30,6 +32,7 @@ pub(crate) fn parse_rubygem(data: &[u8]) -> Result<ArchiveMetadata> {
     })
 }
 
+#[cfg(feature = "nuget")]
 pub(crate) fn parse_nuget(data: &[u8]) -> Result<ArchiveMetadata> {
     let mut archive = zip::ZipArchive::new(Cursor::new(data))
         .map_err(|err| DepotError::Adapter(format!("invalid NuGet package: {err}")))?;
@@ -63,6 +66,7 @@ pub(crate) fn parse_nuget(data: &[u8]) -> Result<ArchiveMetadata> {
     ))
 }
 
+#[cfg(feature = "pub")]
 pub(crate) fn parse_pub_archive(data: &[u8]) -> Result<ArchiveMetadata> {
     let decoded = gunzip(data)?;
     let mut archive = tar::Archive::new(Cursor::new(decoded));
@@ -129,6 +133,7 @@ fn read_tar_entry<R: Read>(archive: &mut tar::Archive<R>, expected_name: &str) -
     )))
 }
 
+#[cfg(any(feature = "rubygems", feature = "pub"))]
 fn gunzip(data: &[u8]) -> Result<Vec<u8>> {
     let decoder = GzDecoder::new(data);
     let mut buffer = Vec::new();
@@ -164,6 +169,7 @@ fn yaml_scalar(text: &str, key: &str) -> Option<String> {
     None
 }
 
+#[cfg(feature = "pub")]
 fn yaml_value(value: &serde_yaml::Value, key: &str) -> Option<String> {
     value
         .get(key)
@@ -171,6 +177,7 @@ fn yaml_value(value: &serde_yaml::Value, key: &str) -> Option<String> {
         .map(str::to_string)
 }
 
+#[cfg(feature = "rubygems")]
 fn yaml_version(text: &str) -> Option<String> {
     yaml_scalar(text, "version").or_else(|| {
         let mut in_version = false;
@@ -220,6 +227,7 @@ fn erlang_binary(text: &str, key: &str) -> Option<String> {
     Some(text[start..end].to_string())
 }
 
+#[cfg(feature = "nuget")]
 fn xml_text(text: &str, tag: &str) -> Option<String> {
     let open_start = text.find(&format!("<{tag}"))?;
     let open_end = text[open_start..].find('>')? + open_start + 1;
