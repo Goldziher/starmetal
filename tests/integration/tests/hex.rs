@@ -2,6 +2,36 @@ use tokio::process::Command;
 
 use depot_integration_tests::TestServer;
 
+async fn ensure_mix_hex_package(hex_home: &std::path::Path, mix_home: &std::path::Path) {
+    let install = Command::new("mix")
+        .args(["local.hex", "--force"])
+        .env("HEX_HOME", hex_home)
+        .env("MIX_HOME", mix_home)
+        .output()
+        .await
+        .expect("failed to run mix local.hex");
+    assert!(
+        install.status.success(),
+        "failed to install Hex into temporary MIX_HOME with `mix local.hex --force`.\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&install.stdout),
+        String::from_utf8_lossy(&install.stderr)
+    );
+
+    let output = Command::new("mix")
+        .args(["help", "hex.package"])
+        .env("HEX_HOME", hex_home)
+        .env("MIX_HOME", mix_home)
+        .output()
+        .await
+        .expect("failed to run mix");
+    assert!(
+        output.status.success(),
+        "mix hex.package task not found — install Hex with `mix local.hex --force` before running Hex E2E tests.\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 #[tokio::test]
 #[ignore] // requires network
 async fn hex_package_metadata_returns_json() {
@@ -45,9 +75,15 @@ async fn hex_tarball_download() {
         .await
         .expect("request failed");
 
-    assert_eq!(response.status(), 200);
-
+    let status = response.status();
     let bytes = response.bytes().await.expect("failed to read body");
+
+    assert_eq!(
+        status,
+        200,
+        "expected 200 for tarball download, body: {}",
+        String::from_utf8_lossy(&bytes)
+    );
     assert!(!bytes.is_empty(), "expected non-empty tarball body");
 
     server.shutdown();
@@ -132,6 +168,9 @@ async fn mix_hex_package_fetch() {
     let hex_mirror = format!("{}/hex", server.base_url());
 
     let tmp = tempfile::tempdir().expect("tempdir");
+    let hex_home = tempfile::tempdir().expect("hex home tempdir");
+    let mix_home = tempfile::tempdir().expect("mix home tempdir");
+    ensure_mix_hex_package(hex_home.path(), mix_home.path()).await;
     let output_path = tmp.path().join("jason-1.4.1.tar");
 
     let output = Command::new("mix")
@@ -144,6 +183,8 @@ async fn mix_hex_package_fetch() {
             &output_path.to_string_lossy(),
         ])
         .env("HEX_MIRROR", &hex_mirror)
+        .env("HEX_HOME", hex_home.path())
+        .env("MIX_HOME", mix_home.path())
         .output()
         .await
         .expect("failed to run mix");
@@ -174,6 +215,12 @@ async fn mix_hex_package_fetch_cached() {
 
     let tmp1 = tempfile::tempdir().expect("tempdir");
     let tmp2 = tempfile::tempdir().expect("tempdir");
+    let hex_home1 = tempfile::tempdir().expect("hex home tempdir");
+    let hex_home2 = tempfile::tempdir().expect("hex home tempdir");
+    let mix_home1 = tempfile::tempdir().expect("mix home tempdir");
+    let mix_home2 = tempfile::tempdir().expect("mix home tempdir");
+    ensure_mix_hex_package(hex_home1.path(), mix_home1.path()).await;
+    ensure_mix_hex_package(hex_home2.path(), mix_home2.path()).await;
 
     // First fetch
     let out1 = Command::new("mix")
@@ -186,6 +233,8 @@ async fn mix_hex_package_fetch_cached() {
             &tmp1.path().join("jason.tar").to_string_lossy(),
         ])
         .env("HEX_MIRROR", &hex_mirror)
+        .env("HEX_HOME", hex_home1.path())
+        .env("MIX_HOME", mix_home1.path())
         .output()
         .await
         .expect("failed to run mix");
@@ -202,6 +251,8 @@ async fn mix_hex_package_fetch_cached() {
             &tmp2.path().join("jason.tar").to_string_lossy(),
         ])
         .env("HEX_MIRROR", &hex_mirror)
+        .env("HEX_HOME", hex_home2.path())
+        .env("MIX_HOME", mix_home2.path())
         .output()
         .await
         .expect("failed to run mix");
@@ -219,6 +270,9 @@ async fn mix_hex_package_fetch_nonexistent_fails() {
     let hex_mirror = format!("{}/hex", server.base_url());
 
     let tmp = tempfile::tempdir().expect("tempdir");
+    let hex_home = tempfile::tempdir().expect("hex home tempdir");
+    let mix_home = tempfile::tempdir().expect("mix home tempdir");
+    ensure_mix_hex_package(hex_home.path(), mix_home.path()).await;
 
     let output = Command::new("mix")
         .args([
@@ -230,6 +284,8 @@ async fn mix_hex_package_fetch_nonexistent_fails() {
             &tmp.path().join("out.tar").to_string_lossy(),
         ])
         .env("HEX_MIRROR", &hex_mirror)
+        .env("HEX_HOME", hex_home.path())
+        .env("MIX_HOME", mix_home.path())
         .output()
         .await
         .expect("failed to run mix");

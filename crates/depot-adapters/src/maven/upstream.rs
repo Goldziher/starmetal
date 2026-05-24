@@ -71,7 +71,7 @@ impl UpstreamClient for MavenUpstreamClient {
     }
 
     async fn fetch_versions(&self, name: &PackageName) -> Result<Vec<VersionInfo>> {
-        let metadata_path = format!("{}/maven-metadata.xml", name.as_str().replace(':', "/"));
+        let metadata_path = format!("{}/maven-metadata.xml", maven_path(name)?);
         let metadata = self.fetch_path(&metadata_path).await?;
         let text = String::from_utf8_lossy(&metadata);
         Ok(extract_versions(&text)
@@ -96,12 +96,12 @@ impl UpstreamClient for MavenUpstreamClient {
             format!("{artifact}-{version}.pom"),
             format!("{artifact}-{version}.jar"),
         ] {
-            let path = format!("{}/{version}/{filename}", name.as_str().replace(':', "/"));
+            let path = format!("{}/{version}/{filename}", maven_path(name)?);
             let mut upstream_hashes = ahash::AHashMap::new();
             if let Some(sha256) = self.fetch_optional_text(&format!("{path}.sha256")).await? {
-                upstream_hashes.insert("sha256".to_string(), sha256.trim().to_string());
+                upstream_hashes.insert("sha256".to_string(), checksum_token(&sha256).to_string());
             } else if let Some(sha1) = self.fetch_optional_text(&format!("{path}.sha1")).await? {
-                upstream_hashes.insert("sha1".to_string(), sha1.trim().to_string());
+                upstream_hashes.insert("sha1".to_string(), checksum_token(&sha1).to_string());
             }
             artifacts.push(ArtifactDigest {
                 filename,
@@ -122,12 +122,23 @@ impl UpstreamClient for MavenUpstreamClient {
     async fn fetch_artifact(&self, artifact_id: &ArtifactId) -> Result<Bytes> {
         let path = format!(
             "{}/{}/{}",
-            artifact_id.name.as_str().replace(':', "/"),
+            maven_path(&artifact_id.name)?,
             artifact_id.version,
             artifact_id.filename
         );
         self.fetch_path(&path).await
     }
+}
+
+fn maven_path(name: &PackageName) -> Result<String> {
+    let (group, artifact) =
+        name.as_str()
+            .rsplit_once(':')
+            .ok_or_else(|| DepotError::PackageNotFound {
+                ecosystem: "maven".to_string(),
+                name: name.as_str().to_string(),
+            })?;
+    Ok(format!("{}/{}", group.replace('.', "/"), artifact))
 }
 
 fn extract_versions(metadata: &str) -> Vec<String> {
@@ -142,4 +153,8 @@ fn extract_versions(metadata: &str) -> Vec<String> {
         rest = &rest[end + "</version>".len()..];
     }
     versions
+}
+
+fn checksum_token(sidecar_body: &str) -> &str {
+    sidecar_body.split_whitespace().next().unwrap_or("").trim()
 }

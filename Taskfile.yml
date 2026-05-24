@@ -71,6 +71,51 @@ tasks:
     cmds:
       - cargo test -p depot-conformance-tests
 
+  test:e2e:
+    desc: Run live native-client E2E tests for all registries
+    cmds:
+      - cargo test -p depot-integration-tests -- --ignored --test-threads=1
+
+  test:e2e:pypi:
+    desc: Run live PyPI/pip E2E tests
+    cmds:
+      - cargo test -p depot-integration-tests --test pypi_pip -- --ignored --test-threads=1
+
+  test:e2e:npm:
+    desc: Run live npm E2E tests
+    cmds:
+      - cargo test -p depot-integration-tests --test npm -- --ignored --test-threads=1
+
+  test:e2e:cargo:
+    desc: Run live Cargo E2E tests
+    cmds:
+      - cargo test -p depot-integration-tests --test cargo_registry -- --ignored --test-threads=1
+
+  test:e2e:hex:
+    desc: Run live Hex/mix E2E tests
+    cmds:
+      - cargo test -p depot-integration-tests --test hex -- --ignored --test-threads=1
+
+  test:e2e:maven:
+    desc: Run live Maven E2E tests
+    cmds:
+      - cargo test -p depot-integration-tests --test maven -- --ignored --test-threads=1
+
+  test:e2e:rubygems:
+    desc: Run live RubyGems/Bundler E2E tests
+    cmds:
+      - cargo test -p depot-integration-tests --test rubygems -- --ignored --test-threads=1
+
+  test:e2e:nuget:
+    desc: Run live NuGet/dotnet E2E tests
+    cmds:
+      - cargo test -p depot-integration-tests --test nuget -- --ignored --test-threads=1
+
+  test:e2e:pub:
+    desc: Run live pub.dev/dart E2E tests
+    cmds:
+      - cargo test -p depot-integration-tests --test pubdev -- --ignored --test-threads=1
+
   generate:
     desc: Regenerate committed artifacts
     cmds:
@@ -83,6 +128,7 @@ tasks:
       - task: schema:check
       - task: conformance
       - task: test:all
+      - task: test:e2e
 
   test:all:
     desc: Run all tests

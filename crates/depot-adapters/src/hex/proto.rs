@@ -1,4 +1,12 @@
 #[derive(Clone, PartialEq, prost::Message)]
+pub struct Signed {
+    #[prost(bytes = "vec", required, tag = "1")]
+    pub payload: Vec<u8>,
+    #[prost(bytes = "vec", optional, tag = "2")]
+    pub signature: Option<Vec<u8>>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
 pub struct Package {
     #[prost(message, repeated, tag = "1")]
     pub releases: Vec<Release>,

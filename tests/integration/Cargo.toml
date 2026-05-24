@@ -9,9 +9,27 @@ publish = false
 [dependencies]
 ahash.workspace = true
 axum.workspace = true
-depot-adapters.workspace = true
+depot-adapters = { workspace = true, features = [
+    "cargo-registry",
+    "hex",
+    "maven",
+    "npm",
+    "nuget",
+    "pypi",
+    "pub",
+    "rubygems",
+] }
 depot-core.workspace = true
-depot-server.workspace = true
+depot-server = { workspace = true, features = [
+    "cargo-registry",
+    "hex",
+    "maven",
+    "npm",
+    "nuget",
+    "pypi",
+    "pub",
+    "rubygems",
+] }
 depot-service.workspace = true
 depot-storage = { workspace = true, features = ["backend-memory"] }
 tokio.workspace = true

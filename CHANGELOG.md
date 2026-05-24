@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 5-minute TTL cache for all upstream client responses using `(Instant, T)` tuples.
 - Integration test crate (`tests/integration/`) with 31 tests covering pip, npm, cargo, and mix client workflows.
 - All four registries now pass client-level integration tests.
+- Required live native-client E2E coverage for PyPI, npm, Cargo, Hex, Maven, RubyGems, NuGet, and pub.dev via `task test:e2e`.
+- Focused `task test:e2e:<registry>` commands for per-registry live validation.
+- Service-backed conformance tests using `CachingPackageService` with in-memory OpenDAL storage.
 
 ### Changed
 
@@ -25,3 +28,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - npm adapter uses raw `serde_json::Value` instead of typed `NpmPackument` struct to handle the variety of npm field shapes.
 - Upstream hashes preserved in `ArtifactDigest.upstream_hashes`.
 - Dependency flow updated: `depot-server -> depot-service -> depot-core` added alongside existing paths.
+- `task check` now includes live native-client E2E, so it requires network access and installed package-manager CLIs.
+- Hex registry checksum parsing now handles signed, gzipped protobuf registry entries.
+- Maven path conversion now maps `group.id:artifact` to Maven repository paths and parses checksum sidecar tokens correctly.

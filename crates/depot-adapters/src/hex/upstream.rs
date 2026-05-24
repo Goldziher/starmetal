@@ -10,7 +10,9 @@ use depot_core::error::{DepotError, Result};
 use depot_core::package::{ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata};
 use depot_core::ports::UpstreamClient;
 use depot_core::registry::hex::HexPackage;
+use flate2::read::GzDecoder;
 use prost::Message;
+use std::io::Read;
 use tokio::sync::RwLock;
 use tracing::{debug, instrument};
 
@@ -244,7 +246,11 @@ impl UpstreamClient for HexUpstreamClient {
 impl HexUpstreamClient {
     async fn outer_checksum(&self, name: &str, version: &str) -> Result<Option<String>> {
         let bytes = self.fetch_registry_entry(name).await?;
-        let package = proto::Package::decode(bytes.as_ref())
+        let registry_bytes = decode_registry_entry(bytes.as_ref())?;
+        let signed = proto::Signed::decode(registry_bytes.as_slice()).map_err(|err| {
+            DepotError::Upstream(format!("invalid signed Hex package protobuf: {err}"))
+        })?;
+        let package = proto::Package::decode(signed.payload.as_slice())
             .map_err(|err| DepotError::Upstream(format!("invalid Hex package protobuf: {err}")))?;
         Ok(package
             .releases
@@ -252,6 +258,19 @@ impl HexUpstreamClient {
             .find(|release| release.version == version)
             .and_then(|release| release.outer_checksum.or(Some(release.inner_checksum)))
             .map(hex_encode))
+    }
+}
+
+fn decode_registry_entry(bytes: &[u8]) -> Result<Vec<u8>> {
+    if bytes.starts_with(&[0x1f, 0x8b]) {
+        let mut decoder = GzDecoder::new(bytes);
+        let mut decoded = Vec::new();
+        decoder.read_to_end(&mut decoded).map_err(|err| {
+            DepotError::Upstream(format!("invalid gzipped Hex package protobuf: {err}"))
+        })?;
+        Ok(decoded)
+    } else {
+        Ok(bytes.to_vec())
     }
 }
 

@@ -639,6 +639,7 @@ dependencies = [
  "base64",
  "bytes",
  "depot-core",
+ "flate2",
  "prost",
  "reqwest 0.13.2",
  "serde",
@@ -673,11 +674,14 @@ dependencies = [
 name = "depot-conformance-tests"
 version = "0.1.0"
 dependencies = [
+ "ahash",
  "async-trait",
  "axum",
  "bytes",
  "depot-adapters",
  "depot-core",
+ "depot-service",
+ "depot-storage",
  "roxmltree",
  "serde_json",
  "tokio",

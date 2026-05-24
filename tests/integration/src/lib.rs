@@ -34,7 +34,20 @@ impl TestServer {
     /// - `DEPOT_TEST_UPSTREAM_CARGO_DL_URL`: override Cargo download (default: https://static.crates.io/crates)
     /// - `DEPOT_TEST_UPSTREAM_HEX_URL`: override Hex upstream (default: https://hex.pm)
     /// - `DEPOT_TEST_UPSTREAM_HEX_REPO_URL`: override Hex repo (default: https://repo.hex.pm)
+    /// - `DEPOT_TEST_UPSTREAM_MAVEN_URL`: override Maven upstream (default: https://repo1.maven.org/maven2)
+    /// - `DEPOT_TEST_UPSTREAM_RUBYGEMS_URL`: override RubyGems upstream (default: https://rubygems.org)
+    /// - `DEPOT_TEST_UPSTREAM_NUGET_URL`: override NuGet upstream (default: https://api.nuget.org/v3/index.json)
+    /// - `DEPOT_TEST_UPSTREAM_PUB_URL`: override pub.dev upstream (default: https://pub.dev)
     pub async fn start() -> Self {
+        Self::start_with_all_enabled(false).await
+    }
+
+    /// Start a depot server with all configured registry routes enabled.
+    pub async fn start_all_enabled() -> Self {
+        Self::start_with_all_enabled(true).await
+    }
+
+    async fn start_with_all_enabled(enable_all: bool) -> Self {
         let storage = OpenDalStorage::memory().expect("failed to create memory storage");
         let mut upstream_clients: AHashMap<Ecosystem, Arc<dyn UpstreamClient>> = AHashMap::new();
 
@@ -66,14 +79,25 @@ impl TestServer {
         let hex_client = Arc::new(HexUpstreamClient::new(hex_url, hex_repo_url));
         upstream_clients.insert(Ecosystem::Hex, hex_client.clone());
 
-        let maven_client = Arc::new(MavenUpstreamClient::new(
-            "https://repo1.maven.org/maven2".into(),
-        ));
-        let rubygems_client = Arc::new(RubyGemsUpstreamClient::new("https://rubygems.org".into()));
-        let nuget_client = Arc::new(NuGetUpstreamClient::new(
-            "https://api.nuget.org/v3/index.json".into(),
-        ));
-        let pub_client = Arc::new(PubUpstreamClient::new("https://pub.dev".into()));
+        let maven_url = std::env::var("DEPOT_TEST_UPSTREAM_MAVEN_URL")
+            .unwrap_or_else(|_| "https://repo1.maven.org/maven2".into());
+        let maven_client = Arc::new(MavenUpstreamClient::new(maven_url));
+        upstream_clients.insert(Ecosystem::Maven, maven_client.clone());
+
+        let rubygems_url = std::env::var("DEPOT_TEST_UPSTREAM_RUBYGEMS_URL")
+            .unwrap_or_else(|_| "https://rubygems.org".into());
+        let rubygems_client = Arc::new(RubyGemsUpstreamClient::new(rubygems_url));
+        upstream_clients.insert(Ecosystem::RubyGems, rubygems_client.clone());
+
+        let nuget_url = std::env::var("DEPOT_TEST_UPSTREAM_NUGET_URL")
+            .unwrap_or_else(|_| "https://api.nuget.org/v3/index.json".into());
+        let nuget_client = Arc::new(NuGetUpstreamClient::new(nuget_url));
+        upstream_clients.insert(Ecosystem::NuGet, nuget_client.clone());
+
+        let pub_url = std::env::var("DEPOT_TEST_UPSTREAM_PUB_URL")
+            .unwrap_or_else(|_| "https://pub.dev".into());
+        let pub_client = Arc::new(PubUpstreamClient::new(pub_url));
+        upstream_clients.insert(Ecosystem::Pub, pub_client.clone());
 
         let service = CachingPackageService::new(
             Arc::new(storage),
@@ -81,7 +105,18 @@ impl TestServer {
             PolicyConfig::default(),
         );
 
-        let config = Config::default();
+        let mut config = Config::default();
+        if enable_all {
+            for name in [
+                "pypi", "npm", "cargo", "hex", "maven", "rubygems", "nuget", "pub",
+            ] {
+                config
+                    .upstream
+                    .get_mut(name)
+                    .unwrap_or_else(|| panic!("default upstream missing: {name}"))
+                    .enabled = true;
+            }
+        }
         let upstreams = UpstreamClients {
             pypi_upstream: pypi_client,
             cargo_upstream: cargo_client,
@@ -125,6 +160,41 @@ impl TestServer {
     /// PyPI simple index URL for pip --index-url
     pub fn pypi_index_url(&self) -> String {
         format!("{}/pypi/simple/", self.base_url())
+    }
+
+    /// npm registry URL for npm --registry.
+    pub fn npm_registry_url(&self) -> String {
+        format!("{}/npm", self.base_url())
+    }
+
+    /// Cargo sparse registry URL for .cargo/config.toml.
+    pub fn cargo_sparse_url(&self) -> String {
+        format!("{}/cargo/", self.base_url())
+    }
+
+    /// Hex mirror URL for HEX_MIRROR.
+    pub fn hex_mirror_url(&self) -> String {
+        format!("{}/hex", self.base_url())
+    }
+
+    /// Maven repository URL for settings.xml mirrors.
+    pub fn maven_url(&self) -> String {
+        format!("{}/maven", self.base_url())
+    }
+
+    /// RubyGems source URL for Gemfile source.
+    pub fn rubygems_url(&self) -> String {
+        format!("{}/rubygems", self.base_url())
+    }
+
+    /// NuGet V3 service index URL for nuget.config.
+    pub fn nuget_index_url(&self) -> String {
+        format!("{}/nuget/v3/index.json", self.base_url())
+    }
+
+    /// Hosted pub repository base URL for PUB_HOSTED_URL.
+    pub fn pub_hosted_url(&self) -> String {
+        format!("{}/pub", self.base_url())
     }
 
     /// Shutdown the server.

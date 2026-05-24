@@ -51,6 +51,9 @@ depot-server = { path = "crates/depot-server", default-features = false }
 depot-service = { path = "crates/depot-service" }
 depot-storage = { path = "crates/depot-storage", default-features = false }
 
+# Compression
+flate2 = "1"
+
 # JSON schema validation
 jsonschema = "0.46"
 

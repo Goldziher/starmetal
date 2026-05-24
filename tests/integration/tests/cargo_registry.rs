@@ -147,6 +147,7 @@ async fn cargo_fetch_from_depot(
     version: &str,
 ) -> (std::process::Output, tempfile::TempDir) {
     let tmp = tempfile::tempdir().expect("tempdir");
+    let cargo_home = tempfile::tempdir().expect("cargo home tempdir");
 
     // Write a minimal Cargo.toml pointing to our depot as a registry
     let cargo_toml = format!(
@@ -176,6 +177,7 @@ index = "sparse+{base_url}/cargo/"
     let output = Command::new("cargo")
         .args(["fetch"])
         .current_dir(tmp.path())
+        .env("CARGO_HOME", cargo_home.path())
         .env("CARGO_HTTP_TIMEOUT", "60")
         .output()
         .await

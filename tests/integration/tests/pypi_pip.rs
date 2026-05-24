@@ -23,6 +23,7 @@ async fn pip_install(
     index_url: &str,
     package: &str,
     target: &std::path::Path,
+    cache_dir: &std::path::Path,
 ) -> std::process::Output {
     Command::new(pip)
         .args([
@@ -39,6 +40,7 @@ async fn pip_install(
             "120",
             package,
         ])
+        .env("PIP_CACHE_DIR", cache_dir)
         .output()
         .await
         .expect("failed to run pip")
@@ -52,16 +54,21 @@ async fn pip_install_small_package() {
     let index_url = server.pypi_index_url();
 
     let tmp = tempfile::tempdir().expect("failed to create tempdir");
+    let cache = tempfile::tempdir().expect("failed to create cache tempdir");
 
     // Install `six` — small, pure-python, no native deps
-    let output = pip_install(&pip, &index_url, "six", tmp.path()).await;
+    let output = pip_install(&pip, &index_url, "six==1.16.0", tmp.path(), cache.path()).await;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
+    let command = format!(
+        "{pip} install --index-url {index_url} --trusted-host 127.0.0.1 --target {} --no-cache-dir --no-deps --timeout 120 six==1.16.0",
+        tmp.path().display()
+    );
 
     assert!(
         output.status.success(),
-        "pip install failed.\nstdout: {stdout}\nstderr: {stderr}"
+        "pip install failed: {command}\nstdout: {stdout}\nstderr: {stderr}"
     );
 
     // Verify the package was actually installed
@@ -85,15 +92,17 @@ async fn pip_install_cached_on_second_request() {
 
     let tmp1 = tempfile::tempdir().expect("tempdir");
     let tmp2 = tempfile::tempdir().expect("tempdir");
+    let cache1 = tempfile::tempdir().expect("cache tempdir");
+    let cache2 = tempfile::tempdir().expect("cache tempdir");
 
     // First install — fetches from upstream
-    let out1 = pip_install(&pip, &index_url, "six", tmp1.path()).await;
+    let out1 = pip_install(&pip, &index_url, "six==1.16.0", tmp1.path(), cache1.path()).await;
     assert!(out1.status.success(), "first pip install failed");
 
     // Second install — should hit depot's cache (we can't easily prove this
     // from pip's output alone, but we verify it still works, which confirms
     // the cached data is valid and serveable)
-    let out2 = pip_install(&pip, &index_url, "six", tmp2.path()).await;
+    let out2 = pip_install(&pip, &index_url, "six==1.16.0", tmp2.path(), cache2.path()).await;
     assert!(out2.status.success(), "second pip install (cached) failed");
 
     assert!(tmp2.path().join("six.py").exists());
@@ -109,12 +118,14 @@ async fn pip_install_nonexistent_package_fails() {
     let index_url = server.pypi_index_url();
 
     let tmp = tempfile::tempdir().expect("tempdir");
+    let cache = tempfile::tempdir().expect("cache tempdir");
 
     let output = pip_install(
         &pip,
         &index_url,
         "this-package-does-not-exist-depot-test",
         tmp.path(),
+        cache.path(),
     )
     .await;
 
