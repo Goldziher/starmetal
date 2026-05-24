@@ -11,7 +11,8 @@ use depot_core::package::{
     ArtifactDigest, ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata,
 };
 use depot_core::policy::PolicyConfig;
-use depot_core::ports::{PackageService, StoragePort, UpstreamClient};
+use depot_core::ports::{PackageService, PublishingService, StoragePort, UpstreamClient};
+use depot_core::publishing::{PublishMode, PublishRequest, PublishResult, YankRequest};
 use sha2::Digest;
 
 /// Pull-through caching implementation of `PackageService`.
@@ -90,6 +91,39 @@ impl CachingPackageService {
 
     fn raw_upstream_key(ecosystem: Ecosystem, name: &PackageName) -> String {
         format!("{ecosystem}/{name}/_raw_upstream")
+    }
+
+    fn published_manifest_key(ecosystem: Ecosystem, name: &PackageName, version: &str) -> String {
+        format!("_depot/published/{ecosystem}/{name}/{version}.json")
+    }
+
+    async fn load_versions_for_publish(
+        &self,
+        ecosystem: Ecosystem,
+        name: &PackageName,
+    ) -> Result<Vec<VersionInfo>> {
+        let key = Self::versions_key(ecosystem, name);
+        if let Some(cached) = self.storage.get(&key).await? {
+            return Ok(serde_json::from_slice(&cached)?);
+        }
+
+        if let Some(upstream) = self.upstream_clients.get(&ecosystem) {
+            return upstream.fetch_versions(name).await;
+        }
+
+        Ok(Vec::new())
+    }
+
+    async fn store_versions(
+        &self,
+        ecosystem: Ecosystem,
+        name: &PackageName,
+        versions: &[VersionInfo],
+    ) -> Result<()> {
+        let key = Self::versions_key(ecosystem, name);
+        self.storage
+            .put(&key, Bytes::from(serde_json::to_vec(versions)?))
+            .await
     }
 }
 
@@ -242,6 +276,165 @@ impl PackageService for CachingPackageService {
     }
 }
 
+#[async_trait]
+impl PublishingService for CachingPackageService {
+    async fn publish_package(&self, request: PublishRequest) -> Result<PublishResult> {
+        self.check_package_allowed(&request.name)?;
+        if request.artifacts.is_empty() {
+            return Err(DepotError::Publish(
+                "publish requires at least one artifact".to_string(),
+            ));
+        }
+
+        let metadata_key = Self::metadata_key(request.ecosystem, &request.name, &request.version);
+        if !request.allow_overwrite && self.storage.exists(&metadata_key).await? {
+            return Err(DepotError::Publish(format!(
+                "version already exists: {}/{}@{}",
+                request.ecosystem, request.name, request.version
+            )));
+        }
+
+        if !request.allow_shadowing
+            && let Some(upstream) = self.upstream_clients.get(&request.ecosystem)
+            && upstream
+                .fetch_metadata(&request.name, &request.version)
+                .await
+                .is_ok()
+        {
+            return Err(DepotError::Publish(format!(
+                "refusing to shadow upstream version: {}/{}@{}",
+                request.ecosystem, request.name, request.version
+            )));
+        }
+
+        let mut digests = Vec::with_capacity(request.artifacts.len());
+        for artifact in &request.artifacts {
+            if artifact.filename.trim().is_empty() {
+                return Err(DepotError::Publish(
+                    "artifact filename must not be empty".to_string(),
+                ));
+            }
+            let blake3 = integrity::blake3_hex(&artifact.data);
+            digests.push(artifact.digest(blake3));
+        }
+
+        let mut metadata = request.metadata(digests.clone());
+        if request.allow_overwrite
+            && let Some(existing) = self.storage.get(&metadata_key).await?
+        {
+            let mut existing_metadata: VersionMetadata = serde_json::from_slice(&existing)?;
+            for digest in digests {
+                existing_metadata
+                    .artifacts
+                    .retain(|artifact| artifact.filename != digest.filename);
+                existing_metadata.artifacts.push(digest);
+            }
+            existing_metadata.license = metadata.license.clone().or(existing_metadata.license);
+            existing_metadata.yanked = metadata.yanked;
+            metadata = existing_metadata;
+        }
+        self.policy.check(&metadata)?;
+
+        for artifact in &request.artifacts {
+            let artifact_id = ArtifactId {
+                ecosystem: request.ecosystem,
+                name: request.name.clone(),
+                version: request.version.clone(),
+                filename: artifact.filename.clone(),
+            };
+            let key = artifact_id.storage_key();
+            let blake3 = integrity::blake3_hex(&artifact.data);
+            self.storage
+                .put(&format!("{key}.blake3"), Bytes::from(blake3))
+                .await?;
+            self.storage.put(&key, artifact.data.clone()).await?;
+        }
+
+        let metadata_bytes = Bytes::from(serde_json::to_vec(&metadata)?);
+        self.storage
+            .put(&metadata_key, metadata_bytes.clone())
+            .await?;
+        self.storage
+            .put(
+                &Self::published_manifest_key(request.ecosystem, &request.name, &request.version),
+                metadata_bytes,
+            )
+            .await?;
+
+        let mut versions = self
+            .load_versions_for_publish(request.ecosystem, &request.name)
+            .await?;
+        if let Some(version) = versions
+            .iter_mut()
+            .find(|version| version.version == request.version)
+        {
+            version.yanked = request.yanked;
+        } else {
+            versions.push(VersionInfo {
+                version: request.version.clone(),
+                yanked: request.yanked,
+            });
+        }
+        self.store_versions(request.ecosystem, &request.name, &versions)
+            .await?;
+
+        Ok(PublishResult {
+            ecosystem: request.ecosystem,
+            name: request.name,
+            version: request.version,
+            artifacts: metadata.artifacts,
+            mode: PublishMode::Local,
+        })
+    }
+
+    async fn set_yanked(&self, request: YankRequest) -> Result<VersionMetadata> {
+        self.check_package_allowed(&request.name)?;
+        let metadata_key = Self::metadata_key(request.ecosystem, &request.name, &request.version);
+        let cached =
+            self.storage
+                .get(&metadata_key)
+                .await?
+                .ok_or_else(|| DepotError::VersionNotFound {
+                    ecosystem: request.ecosystem.to_string(),
+                    name: request.name.to_string(),
+                    version: request.version.clone(),
+                })?;
+        let mut metadata: VersionMetadata = serde_json::from_slice(&cached)?;
+        metadata.yanked = request.yanked;
+        self.policy.check(&metadata)?;
+
+        let metadata_bytes = Bytes::from(serde_json::to_vec(&metadata)?);
+        self.storage
+            .put(&metadata_key, metadata_bytes.clone())
+            .await?;
+        self.storage
+            .put(
+                &Self::published_manifest_key(request.ecosystem, &request.name, &request.version),
+                metadata_bytes,
+            )
+            .await?;
+
+        let mut versions = self
+            .load_versions_for_publish(request.ecosystem, &request.name)
+            .await?;
+        if let Some(version) = versions
+            .iter_mut()
+            .find(|version| version.version == request.version)
+        {
+            version.yanked = request.yanked;
+        } else {
+            versions.push(VersionInfo {
+                version: request.version.clone(),
+                yanked: request.yanked,
+            });
+        }
+        self.store_versions(request.ecosystem, &request.name, &versions)
+            .await?;
+
+        Ok(metadata)
+    }
+}
+
 fn verify_hex_digest(algorithm: &str, expected: &str, actual: &str) -> Result<()> {
     if expected.trim().eq_ignore_ascii_case(actual.trim()) {
         Ok(())
@@ -295,6 +488,7 @@ mod tests {
 
     use super::*;
     use depot_core::package::ArtifactDigest;
+    use depot_core::publishing::PublishedArtifact;
 
     struct MockStorage {
         data: Mutex<AHashMap<String, Bytes>>,
@@ -619,6 +813,219 @@ mod tests {
             err.contains("no upstream configured for hex"),
             "error should mention missing upstream, got: {err}"
         );
+    }
+
+    #[tokio::test]
+    async fn publish_package_stores_metadata_artifact_and_versions() {
+        let storage = Arc::new(MockStorage::new());
+        let service =
+            CachingPackageService::new(storage.clone(), AHashMap::new(), PolicyConfig::default());
+        let artifact_data = Bytes::from_static(b"published artifact");
+        let request = PublishRequest {
+            ecosystem: Ecosystem::PyPI,
+            name: PackageName::new("sample"),
+            version: "1.0.0".to_string(),
+            license: Some("MIT".to_string()),
+            yanked: false,
+            artifacts: vec![PublishedArtifact {
+                filename: "sample-1.0.0.tar.gz".to_string(),
+                data: artifact_data.clone(),
+                upstream_hashes: AHashMap::new(),
+            }],
+            allow_overwrite: false,
+            allow_shadowing: false,
+        };
+
+        let result = service.publish_package(request).await.unwrap();
+
+        assert_eq!(result.version, "1.0.0");
+        assert_eq!(
+            result.artifacts[0].blake3,
+            integrity::blake3_hex(&artifact_data)
+        );
+
+        let name = PackageName::new("sample");
+        let metadata = service
+            .get_version_metadata(Ecosystem::PyPI, &name, "1.0.0")
+            .await
+            .unwrap();
+        assert_eq!(metadata.license.as_deref(), Some("MIT"));
+
+        let artifact = service
+            .get_artifact(&ArtifactId {
+                ecosystem: Ecosystem::PyPI,
+                name: name.clone(),
+                version: "1.0.0".to_string(),
+                filename: "sample-1.0.0.tar.gz".to_string(),
+            })
+            .await
+            .unwrap();
+        assert_eq!(artifact, artifact_data);
+
+        let versions = service.list_versions(Ecosystem::PyPI, &name).await.unwrap();
+        assert_eq!(versions.len(), 1);
+        assert_eq!(versions[0].version, "1.0.0");
+
+        let manifest = storage
+            .get("_depot/published/pypi/sample/1.0.0.json")
+            .await
+            .unwrap();
+        assert!(manifest.is_some(), "published manifest should be stored");
+    }
+
+    #[tokio::test]
+    async fn publish_package_rejects_duplicate_version_by_default() {
+        let storage = Arc::new(MockStorage::new());
+        let service = CachingPackageService::new(storage, AHashMap::new(), PolicyConfig::default());
+        let request = PublishRequest {
+            ecosystem: Ecosystem::Npm,
+            name: PackageName::new("sample"),
+            version: "1.0.0".to_string(),
+            license: Some("MIT".to_string()),
+            yanked: false,
+            artifacts: vec![PublishedArtifact {
+                filename: "sample-1.0.0.tgz".to_string(),
+                data: Bytes::from_static(b"published artifact"),
+                upstream_hashes: AHashMap::new(),
+            }],
+            allow_overwrite: false,
+            allow_shadowing: false,
+        };
+
+        service.publish_package(request.clone()).await.unwrap();
+        let err = service.publish_package(request).await.unwrap_err();
+
+        assert!(matches!(err, DepotError::Publish(_)));
+        assert!(err.to_string().contains("version already exists"));
+    }
+
+    #[tokio::test]
+    async fn publish_package_overwrite_merges_artifacts_for_existing_version() {
+        let storage = Arc::new(MockStorage::new());
+        let service = CachingPackageService::new(storage, AHashMap::new(), PolicyConfig::default());
+        let base = PublishRequest {
+            ecosystem: Ecosystem::Maven,
+            name: PackageName::new("com.example:sample"),
+            version: "1.0.0".to_string(),
+            license: Some("MIT".to_string()),
+            yanked: false,
+            artifacts: vec![PublishedArtifact {
+                filename: "sample-1.0.0.pom".to_string(),
+                data: Bytes::from_static(b"pom"),
+                upstream_hashes: AHashMap::new(),
+            }],
+            allow_overwrite: false,
+            allow_shadowing: false,
+        };
+        service.publish_package(base).await.unwrap();
+
+        service
+            .publish_package(PublishRequest {
+                artifacts: vec![PublishedArtifact {
+                    filename: "sample-1.0.0.jar".to_string(),
+                    data: Bytes::from_static(b"jar"),
+                    upstream_hashes: AHashMap::new(),
+                }],
+                allow_overwrite: true,
+                allow_shadowing: false,
+                ecosystem: Ecosystem::Maven,
+                name: PackageName::new("com.example:sample"),
+                version: "1.0.0".to_string(),
+                license: None,
+                yanked: false,
+            })
+            .await
+            .unwrap();
+
+        let metadata = service
+            .get_version_metadata(
+                Ecosystem::Maven,
+                &PackageName::new("com.example:sample"),
+                "1.0.0",
+            )
+            .await
+            .unwrap();
+        let filenames = metadata
+            .artifacts
+            .iter()
+            .map(|artifact| artifact.filename.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(filenames, vec!["sample-1.0.0.pom", "sample-1.0.0.jar"]);
+        assert_eq!(metadata.license.as_deref(), Some("MIT"));
+    }
+
+    #[tokio::test]
+    async fn publish_package_rejects_upstream_shadowing_by_default() {
+        let storage = Arc::new(MockStorage::new());
+        let mut metadata = AHashMap::new();
+        metadata.insert("1.0.0".to_string(), test_metadata("sample", "1.0.0"));
+        let upstream = MockUpstream {
+            eco: Ecosystem::Cargo,
+            versions: vec![],
+            metadata,
+            artifacts: AHashMap::new(),
+        };
+        let service = build_service(storage, upstream, PolicyConfig::default());
+        let request = PublishRequest {
+            ecosystem: Ecosystem::Cargo,
+            name: PackageName::new("sample"),
+            version: "1.0.0".to_string(),
+            license: Some("MIT".to_string()),
+            yanked: false,
+            artifacts: vec![PublishedArtifact {
+                filename: "sample-1.0.0.crate".to_string(),
+                data: Bytes::from_static(b"published artifact"),
+                upstream_hashes: AHashMap::new(),
+            }],
+            allow_overwrite: false,
+            allow_shadowing: false,
+        };
+
+        let err = service.publish_package(request).await.unwrap_err();
+
+        assert!(matches!(err, DepotError::Publish(_)));
+        assert!(err.to_string().contains("refusing to shadow upstream"));
+    }
+
+    #[tokio::test]
+    async fn set_yanked_updates_metadata_and_version_listing() {
+        let storage = Arc::new(MockStorage::new());
+        let service = CachingPackageService::new(storage, AHashMap::new(), PolicyConfig::default());
+        let name = PackageName::new("sample");
+        service
+            .publish_package(PublishRequest {
+                ecosystem: Ecosystem::RubyGems,
+                name: name.clone(),
+                version: "1.0.0".to_string(),
+                license: Some("MIT".to_string()),
+                yanked: false,
+                artifacts: vec![PublishedArtifact {
+                    filename: "sample-1.0.0.gem".to_string(),
+                    data: Bytes::from_static(b"published artifact"),
+                    upstream_hashes: AHashMap::new(),
+                }],
+                allow_overwrite: false,
+                allow_shadowing: false,
+            })
+            .await
+            .unwrap();
+
+        let metadata = service
+            .set_yanked(YankRequest {
+                ecosystem: Ecosystem::RubyGems,
+                name: name.clone(),
+                version: "1.0.0".to_string(),
+                yanked: true,
+            })
+            .await
+            .unwrap();
+
+        assert!(metadata.yanked);
+        let versions = service
+            .list_versions(Ecosystem::RubyGems, &name)
+            .await
+            .unwrap();
+        assert!(versions[0].yanked);
     }
 
     #[tokio::test]

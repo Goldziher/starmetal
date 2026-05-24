@@ -5,4 +5,5 @@ pub mod lockfile;
 pub mod package;
 pub mod policy;
 pub mod ports;
+pub mod publishing;
 pub mod registry;

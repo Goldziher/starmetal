@@ -19,9 +19,11 @@ use depot_adapters::pypi::models::{pypi_files_to_metadata, pypi_project_to_versi
 use depot_adapters::pypi::upstream::PypiUpstreamClient;
 use depot_adapters::rubygems::upstream::RubyGemsUpstreamClient;
 use depot_adapters::{cargo, hex, maven, npm, nuget, pubdev, pypi, rubygems};
+use depot_core::config::Config;
 use depot_core::error::{DepotError, Result};
 use depot_core::package::{ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata};
-use depot_core::ports::PackageService;
+use depot_core::ports::{PackageService, PublishingService};
+use depot_core::publishing::{PublishRequest, PublishResult, YankRequest};
 use depot_core::registry::cargo::{CargoConfig, CargoIndexEntry, sparse_index_path};
 use depot_core::registry::hex::HexPackage;
 use depot_core::registry::npm::NpmPackument;
@@ -66,7 +68,9 @@ fn compact_index_body_lines(fixture: &str) -> Vec<&str> {
 
 #[derive(Clone)]
 struct RouteState {
+    config: Arc<Config>,
     service: Arc<dyn PackageService>,
+    publishing_service: Arc<dyn PublishingService>,
     pypi_upstream: Arc<PypiUpstreamClient>,
     npm_upstream: Arc<NpmUpstreamClient>,
     cargo_upstream: Arc<CargoUpstreamClient>,
@@ -81,8 +85,11 @@ impl RouteState {
     fn with_raw(
         fixtures: impl IntoIterator<Item = (Ecosystem, &'static str, &'static str)>,
     ) -> Self {
+        let service = Arc::new(FixtureService::new(fixtures));
         Self {
-            service: Arc::new(FixtureService::new(fixtures)),
+            config: Arc::new(Config::default()),
+            service: service.clone(),
+            publishing_service: service,
             pypi_upstream: Arc::new(PypiUpstreamClient::new("http://127.0.0.1".into())),
             npm_upstream: Arc::new(NpmUpstreamClient::new("http://127.0.0.1".into())),
             cargo_upstream: Arc::new(CargoUpstreamClient::new(
@@ -104,8 +111,16 @@ impl RouteState {
 }
 
 impl pypi::HasPypiState for RouteState {
+    fn config(&self) -> &Arc<Config> {
+        &self.config
+    }
+
     fn package_service(&self) -> &Arc<dyn PackageService> {
         &self.service
+    }
+
+    fn publishing_service(&self) -> &Arc<dyn PublishingService> {
+        &self.publishing_service
     }
 
     fn pypi_upstream(&self) -> &Arc<PypiUpstreamClient> {
@@ -114,8 +129,16 @@ impl pypi::HasPypiState for RouteState {
 }
 
 impl npm::HasNpmState for RouteState {
+    fn config(&self) -> &Arc<Config> {
+        &self.config
+    }
+
     fn package_service(&self) -> &Arc<dyn PackageService> {
         &self.service
+    }
+
+    fn publishing_service(&self) -> &Arc<dyn PublishingService> {
+        &self.publishing_service
     }
 
     fn npm_upstream(&self) -> &Arc<NpmUpstreamClient> {
@@ -124,8 +147,16 @@ impl npm::HasNpmState for RouteState {
 }
 
 impl cargo::HasCargoState for RouteState {
+    fn config(&self) -> &Arc<Config> {
+        &self.config
+    }
+
     fn package_service(&self) -> &Arc<dyn PackageService> {
         &self.service
+    }
+
+    fn publishing_service(&self) -> &Arc<dyn PublishingService> {
+        &self.publishing_service
     }
 
     fn cargo_upstream(&self) -> &Arc<CargoUpstreamClient> {
@@ -144,8 +175,16 @@ impl hex::HasHexState for RouteState {
 }
 
 impl maven::HasMavenState for RouteState {
+    fn config(&self) -> &Arc<Config> {
+        &self.config
+    }
+
     fn package_service(&self) -> &Arc<dyn PackageService> {
         &self.service
+    }
+
+    fn publishing_service(&self) -> &Arc<dyn PublishingService> {
+        &self.publishing_service
     }
 
     fn maven_upstream(&self) -> &Arc<MavenUpstreamClient> {
@@ -272,6 +311,23 @@ impl PackageService for FixtureService {
         _data: Bytes,
     ) -> Result<()> {
         Ok(())
+    }
+}
+
+#[async_trait]
+impl PublishingService for FixtureService {
+    async fn publish_package(&self, _request: PublishRequest) -> Result<PublishResult> {
+        Err(DepotError::Publish(
+            "fixture service does not support publishing".to_string(),
+        ))
+    }
+
+    async fn set_yanked(&self, request: YankRequest) -> Result<VersionMetadata> {
+        Err(DepotError::VersionNotFound {
+            ecosystem: request.ecosystem.to_string(),
+            name: request.name.to_string(),
+            version: request.version,
+        })
     }
 }
 

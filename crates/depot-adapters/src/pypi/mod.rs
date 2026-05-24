@@ -10,13 +10,18 @@ pub mod upstream;
 use std::sync::Arc;
 
 use axum::Router;
-use axum::extract::{Path, State};
+use axum::extract::{Multipart, Path, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::IntoResponse;
-use axum::routing::get;
+use axum::routing::{get, post};
+use base64::Engine;
+use base64::prelude::BASE64_STANDARD;
+use depot_core::config::Config;
 use depot_core::error::DepotError;
-use depot_core::package::{ArtifactId, Ecosystem, PackageName};
-use depot_core::ports::PackageService;
+use depot_core::package::{ArtifactId, Ecosystem, PackageName, VersionMetadata};
+use depot_core::ports::{PackageService, PublishingService};
+use depot_core::publishing::{PublishRequest, PublishedArtifact, TokenScope};
+use sha2::Digest;
 
 use self::upstream::PypiUpstreamClient;
 
@@ -25,7 +30,9 @@ use self::upstream::PypiUpstreamClient;
 /// The server crate implements this on its `AppState` to bridge the adapter
 /// to the service layer and upstream client without creating a circular dependency.
 pub trait HasPypiState: Clone + Send + Sync + 'static {
+    fn config(&self) -> &Arc<Config>;
     fn package_service(&self) -> &Arc<dyn PackageService>;
+    fn publishing_service(&self) -> &Arc<dyn PublishingService>;
     fn pypi_upstream(&self) -> &Arc<PypiUpstreamClient>;
 }
 
@@ -37,10 +44,109 @@ pub fn router<S: HasPypiState>() -> Router<S> {
         .route("/simple/", get(simple_index::<S>))
         .route("/simple/{project}/", get(simple_project::<S>))
         .route("/simple/{project}", get(redirect_with_slash))
+        .route("/legacy/", post(legacy_upload::<S>))
         .route(
             "/packages/{name}/{version}/{filename}",
             get(download_artifact::<S>),
         )
+}
+
+async fn legacy_upload<S: HasPypiState>(
+    State(state): State<S>,
+    headers: HeaderMap,
+    mut multipart: Multipart,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let token = extract_write_token(&headers).ok_or_else(|| {
+        (
+            StatusCode::UNAUTHORIZED,
+            "missing publishing token".to_string(),
+        )
+    })?;
+    let mut name = None;
+    let mut version = None;
+    let mut license = None;
+    let mut file = None;
+
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?
+    {
+        let field_name = field.name().unwrap_or_default().to_string();
+        if field_name == "content" {
+            let filename = field
+                .file_name()
+                .ok_or_else(|| {
+                    (
+                        StatusCode::BAD_REQUEST,
+                        "missing upload filename".to_string(),
+                    )
+                })?
+                .to_string();
+            let data = field
+                .bytes()
+                .await
+                .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?;
+            file = Some((filename, data));
+            continue;
+        }
+
+        let value = field
+            .text()
+            .await
+            .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?;
+        match field_name.as_str() {
+            "name" => name = Some(value),
+            "version" => version = Some(value),
+            "license" => license = Some(value),
+            _ => {}
+        }
+    }
+
+    let name = PackageName::new(
+        name.ok_or_else(|| (StatusCode::BAD_REQUEST, "missing package name".to_string()))?,
+    );
+    let name = PackageName::new(name.normalized(Ecosystem::PyPI).into_owned());
+    authorize_publish(&state, &token, &name)?;
+    let version = version.ok_or_else(|| {
+        (
+            StatusCode::BAD_REQUEST,
+            "missing package version".to_string(),
+        )
+    })?;
+    let (filename, data) = file.ok_or_else(|| {
+        (
+            StatusCode::BAD_REQUEST,
+            "missing upload content".to_string(),
+        )
+    })?;
+    let sha256 = format!("{:x}", sha2::Sha256::digest(&data));
+    let mut upstream_hashes = ahash::AHashMap::new();
+    upstream_hashes.insert("sha256".to_string(), sha256);
+
+    state
+        .publishing_service()
+        .publish_package(PublishRequest {
+            ecosystem: Ecosystem::PyPI,
+            name: name.clone(),
+            version: version.clone(),
+            license,
+            yanked: false,
+            artifacts: vec![PublishedArtifact {
+                filename,
+                data,
+                upstream_hashes,
+            }],
+            allow_overwrite: state.config().publishing.allow_overwrite,
+            allow_shadowing: state.config().publishing.allow_shadowing,
+        })
+        .await
+        .map_err(|err| map_error(&err))?;
+
+    Ok((
+        StatusCode::OK,
+        format!("uploaded {} {version}", name.as_str()),
+    ))
 }
 
 /// GET /simple/{project} (without trailing slash) -- redirect to canonical URL.
@@ -116,12 +222,7 @@ async fn simple_project<S: HasPypiState>(
             .pypi_upstream()
             .get_cached_project(&name)
             .await
-            .ok_or_else(|| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "project not cached after upstream fetch".to_string(),
-                )
-            })?;
+            .unwrap_or(build_local_project(service.as_ref(), &name).await?);
 
         // Persist to storage — this is now depot's data
         if let Ok(raw) = serde_json::to_vec(&upstream_project) {
@@ -157,6 +258,60 @@ async fn simple_project<S: HasPypiState>(
                 .into_response())
         }
     }
+}
+
+async fn build_local_project(
+    service: &dyn PackageService,
+    name: &PackageName,
+) -> Result<depot_core::registry::pypi::PypiProject, (StatusCode, String)> {
+    let versions = service
+        .list_versions(Ecosystem::PyPI, name)
+        .await
+        .map_err(|err| map_error(&err))?;
+    let mut files = Vec::new();
+    for version in &versions {
+        let metadata = service
+            .get_version_metadata(Ecosystem::PyPI, name, &version.version)
+            .await
+            .map_err(|err| map_error(&err))?;
+        files.extend(pypi_files_from_metadata(&metadata));
+    }
+    Ok(depot_core::registry::pypi::PypiProject {
+        meta: depot_core::registry::pypi::PypiMeta {
+            api_version: "1.0".to_string(),
+        },
+        name: name.as_str().to_string(),
+        versions: versions
+            .into_iter()
+            .map(|version| version.version)
+            .collect(),
+        files,
+    })
+}
+
+fn pypi_files_from_metadata(
+    metadata: &VersionMetadata,
+) -> Vec<depot_core::registry::pypi::PypiFile> {
+    metadata
+        .artifacts
+        .iter()
+        .map(|artifact| depot_core::registry::pypi::PypiFile {
+            filename: artifact.filename.clone(),
+            url: format!(
+                "/pypi/packages/{}/{}/{}",
+                metadata.name.as_str(),
+                metadata.version,
+                artifact.filename
+            ),
+            hashes: artifact.upstream_hashes.clone().into_iter().collect(),
+            requires_python: None,
+            yanked: depot_core::registry::pypi::PypiYanked::Bool(metadata.yanked),
+            size: Some(artifact.size),
+            upload_time: None,
+            dist_info_metadata: None,
+            gpg_sig: None,
+        })
+        .collect()
 }
 
 async fn validate_project_metadata(
@@ -215,4 +370,42 @@ fn map_error(err: &DepotError) -> (StatusCode, String) {
         DepotError::Upstream(_) => (StatusCode::BAD_GATEWAY, err.to_string()),
         _ => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
     }
+}
+
+fn authorize_publish<S: HasPypiState>(
+    state: &S,
+    token: &str,
+    name: &PackageName,
+) -> Result<(), (StatusCode, String)> {
+    if !state.config().publishing.enabled {
+        return Err((
+            StatusCode::NOT_FOUND,
+            "publishing is not enabled".to_string(),
+        ));
+    }
+    if state
+        .config()
+        .authorize_publish_token(token, TokenScope::Publish, Ecosystem::PyPI, name)
+    {
+        Ok(())
+    } else {
+        Err((
+            StatusCode::FORBIDDEN,
+            "publishing token is not authorized for this package".to_string(),
+        ))
+    }
+}
+
+fn extract_write_token(headers: &HeaderMap) -> Option<String> {
+    let authorization = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())?;
+    if let Some(token) = authorization.strip_prefix("Bearer ") {
+        return Some(token.to_string());
+    }
+    let encoded = authorization.strip_prefix("Basic ")?;
+    let decoded = BASE64_STANDARD.decode(encoded).ok()?;
+    let decoded = String::from_utf8(decoded).ok()?;
+    let (_username, password) = decoded.split_once(':')?;
+    Some(password.to_string())
 }

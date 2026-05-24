@@ -99,11 +99,11 @@ impl TestServer {
         let pub_client = Arc::new(PubUpstreamClient::new(pub_url));
         upstream_clients.insert(Ecosystem::Pub, pub_client.clone());
 
-        let service = CachingPackageService::new(
+        let service = Arc::new(CachingPackageService::new(
             Arc::new(storage),
             upstream_clients,
             PolicyConfig::default(),
-        );
+        ));
 
         let mut config = Config::default();
         if enable_all {
@@ -127,7 +127,7 @@ impl TestServer {
             nuget_upstream: nuget_client,
             pub_upstream: pub_client,
         };
-        let state = AppState::new(config, Arc::new(service), upstreams);
+        let state = AppState::new(config, service.clone(), service, upstreams);
         let app = depot_server::app::build_app(state);
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")

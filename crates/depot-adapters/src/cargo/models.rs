@@ -60,6 +60,14 @@ pub fn build_config_json(dl_base: &str) -> CargoConfig {
     }
 }
 
+pub fn build_config_json_with_api(dl_base: &str, api_base: Option<String>) -> CargoConfig {
+    CargoConfig {
+        dl: dl_base.to_string(),
+        api: api_base,
+        auth_required: true,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

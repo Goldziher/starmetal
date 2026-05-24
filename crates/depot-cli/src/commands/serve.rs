@@ -37,8 +37,11 @@ pub fn run(config: Config) {
         #[cfg(feature = "pub")]
         let pub_upstream = register_pub_upstream(&config, &mut clients);
 
-        let service =
-            CachingPackageService::new(Arc::new(storage), clients, config.policies.clone());
+        let service = Arc::new(CachingPackageService::new(
+            Arc::new(storage),
+            clients,
+            config.policies.clone(),
+        ));
 
         let upstreams = UpstreamClients {
             #[cfg(feature = "pypi")]
@@ -58,7 +61,7 @@ pub fn run(config: Config) {
             #[cfg(feature = "pub")]
             pub_upstream,
         };
-        let state = AppState::new(config.clone(), Arc::new(service), upstreams);
+        let state = AppState::new(config.clone(), service.clone(), service, upstreams);
         let app = build_app(state);
 
         let listener = tokio::net::TcpListener::bind(&config.server.bind)

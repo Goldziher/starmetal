@@ -5,7 +5,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{DepotError, Result};
+use crate::package::{Ecosystem, PackageName};
 use crate::policy::PolicyConfig;
+use crate::publishing::{PublishMode, PublishTokenConfig, TokenScope};
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Config {
@@ -19,6 +21,8 @@ pub struct Config {
     pub policies: PolicyConfig,
     #[serde(default)]
     pub auth: AuthConfig,
+    #[serde(default)]
+    pub publishing: PublishingConfig,
     #[serde(default)]
     pub encryption: EncryptionConfig,
 }
@@ -172,6 +176,44 @@ pub struct EncryptionConfig {
     pub key_file: Option<PathBuf>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct PublishingConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub mode: PublishMode,
+    #[serde(default)]
+    pub allow_shadowing: bool,
+    #[serde(default)]
+    pub allow_overwrite: bool,
+    #[serde(default)]
+    pub tokens: Vec<PublishTokenConfig>,
+    #[serde(default)]
+    pub upstream: HashMap<String, PublishingUpstreamConfig>,
+}
+
+impl Default for PublishingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            mode: PublishMode::Local,
+            allow_shadowing: false,
+            allow_overwrite: false,
+            tokens: Vec::new(),
+            upstream: HashMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct PublishingUpstreamConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    pub token_env: Option<String>,
+    pub username_env: Option<String>,
+    pub password_env: Option<String>,
+}
+
 impl Config {
     /// Load config from a specific path.
     pub fn load_from(path: &Path) -> Result<Self> {
@@ -218,6 +260,20 @@ impl Config {
             ));
         }
 
+        if self.publishing.enabled {
+            let has_write_token = self.publishing.tokens.iter().any(|token| {
+                token.scopes.contains(&TokenScope::Admin)
+                    || token.scopes.contains(&TokenScope::Publish)
+                    || token.scopes.contains(&TokenScope::Yank)
+            });
+            if !has_write_token {
+                return Err(DepotError::Config(
+                    "publishing.enabled requires at least one scoped publish, yank, or admin token"
+                        .to_string(),
+                ));
+            }
+        }
+
         Ok(())
     }
 
@@ -244,7 +300,34 @@ impl Config {
                 *token = toml::Value::String("<redacted>".to_string());
             }
         }
+        if let Some(publishing) = value
+            .get_mut("publishing")
+            .and_then(toml::Value::as_table_mut)
+            && let Some(tokens) = publishing
+                .get_mut("tokens")
+                .and_then(toml::Value::as_array_mut)
+        {
+            for token in tokens {
+                if let Some(table) = token.as_table_mut()
+                    && let Some(secret) = table.get_mut("token")
+                {
+                    *secret = toml::Value::String("<redacted>".to_string());
+                }
+            }
+        }
         value
+    }
+
+    pub fn authorize_publish_token(
+        &self,
+        token: &str,
+        scope: TokenScope,
+        ecosystem: Ecosystem,
+        package: &PackageName,
+    ) -> bool {
+        self.publishing.tokens.iter().any(|candidate| {
+            candidate.token == token && candidate.allows(scope, ecosystem, package)
+        })
     }
 }
 
@@ -256,6 +339,7 @@ impl Default for Config {
             upstream: default_upstreams(),
             policies: PolicyConfig::default(),
             auth: AuthConfig::default(),
+            publishing: PublishingConfig::default(),
             encryption: EncryptionConfig::default(),
         }
     }
@@ -462,6 +546,68 @@ mod tests {
             toml::from_str("[auth]\nenabled = true\ntokens = [\"secret-token\"]\n").unwrap();
         let output = toml::to_string_pretty(&config.redacted_value()).unwrap();
         assert!(!output.contains("secret-token"));
+        assert!(output.contains("<redacted>"));
+    }
+
+    #[test]
+    fn startup_validation_rejects_publishing_without_write_tokens() {
+        let config: Config = toml::from_str("[publishing]\nenabled = true\n").unwrap();
+        let err = config.validate_mvp().unwrap_err().to_string();
+        assert!(err.contains("publishing.enabled requires"));
+    }
+
+    #[test]
+    fn scoped_publish_token_authorizes_matching_package() {
+        let config: Config = toml::from_str(
+            r#"
+[publishing]
+enabled = true
+
+[[publishing.tokens]]
+token = "publish-secret"
+scopes = ["publish"]
+ecosystems = ["pypi"]
+packages = ["sample"]
+"#,
+        )
+        .unwrap();
+
+        assert!(config.authorize_publish_token(
+            "publish-secret",
+            TokenScope::Publish,
+            Ecosystem::PyPI,
+            &PackageName::new("sample"),
+        ));
+        assert!(!config.authorize_publish_token(
+            "publish-secret",
+            TokenScope::Yank,
+            Ecosystem::PyPI,
+            &PackageName::new("sample"),
+        ));
+        assert!(!config.authorize_publish_token(
+            "publish-secret",
+            TokenScope::Publish,
+            Ecosystem::Npm,
+            &PackageName::new("sample"),
+        ));
+    }
+
+    #[test]
+    fn redacted_value_hides_publishing_tokens() {
+        let config: Config = toml::from_str(
+            r#"
+[publishing]
+enabled = true
+
+[[publishing.tokens]]
+token = "publish-secret"
+scopes = ["publish"]
+"#,
+        )
+        .unwrap();
+
+        let output = toml::to_string_pretty(&config.redacted_value()).unwrap();
+        assert!(!output.contains("publish-secret"));
         assert!(output.contains("<redacted>"));
     }
 }

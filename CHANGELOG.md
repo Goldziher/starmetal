@@ -35,6 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `Ecosystem` variants and normalization behavior for Maven, RubyGems, NuGet, and pub.dev.
 - `UpstreamConfig.artifact_url` for registries that separate metadata/index and artifact bases.
 - `PackageService::validate_metadata` for adapter-side policy checks before serving raw protocol metadata.
+- ADR-0009 defining publishing/upload workflow scope, safety defaults, scoped-token authorization, OpenDAL persistence boundaries, and opt-in upstream forwarding.
+- Publishing domain types and `PublishingService` port for local hosted package uploads, yank state updates, duplicate-version checks, shadowing protection, and published metadata manifests.
+- Scoped publishing token config with `read`, `publish`, `yank`, and `admin` scopes plus optional ecosystem and package allowlists.
+- Native publish-route conformance coverage for PyPI legacy upload, npm packument publish, Cargo Registry Web API publish, and Maven repository `PUT` uploads.
 
 ### Changed
 
@@ -59,6 +63,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Integration tests isolate package-manager homes and caches with temporary directories.
 - Documentation and ADRs now describe MVP reality for auth, rate limiting, encryption, lock/sync workflows, schema provenance, adapter acceptance criteria, OpenDAL storage, and deferred production hardening.
 - `.agents/` is ignored by git.
+- PyPI, npm, Cargo, and Maven adapters now have initial local hosted publishing routes that write through `PublishingService` and serve the published artifacts through existing native read paths.
+- Cargo `config.json` advertises an API endpoint and `auth-required` when publishing is enabled.
+- npm and PyPI read adapters can synthesize local metadata responses from Depot-published versions when no raw upstream response exists.
 
 ### Fixed
 

@@ -9,14 +9,18 @@ pub mod upstream;
 
 use std::sync::Arc;
 
-use axum::Router;
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::IntoResponse;
 use axum::routing::get;
+use axum::{Json, Router};
+use base64::Engine;
+use base64::prelude::BASE64_STANDARD;
+use depot_core::config::Config;
 use depot_core::error::DepotError;
 use depot_core::package::{ArtifactId, Ecosystem, PackageName};
-use depot_core::ports::PackageService;
+use depot_core::ports::{PackageService, PublishingService};
+use depot_core::publishing::{PublishRequest, PublishedArtifact, TokenScope};
 
 use self::upstream::NpmUpstreamClient;
 
@@ -25,7 +29,9 @@ use self::upstream::NpmUpstreamClient;
 /// The server crate implements this on its `AppState` to bridge the adapter
 /// to the service layer and upstream client without creating a circular dependency.
 pub trait HasNpmState: Clone + Send + Sync + 'static {
+    fn config(&self) -> &Arc<Config>;
     fn package_service(&self) -> &Arc<dyn PackageService>;
+    fn publishing_service(&self) -> &Arc<dyn PublishingService>;
     fn npm_upstream(&self) -> &Arc<NpmUpstreamClient>;
 }
 
@@ -34,13 +40,100 @@ pub trait HasNpmState: Clone + Send + Sync + 'static {
 /// Mount this under `/npm` in the top-level application router.
 pub fn router<S: HasNpmState>() -> Router<S> {
     Router::new()
-        .route("/{package}", get(package_metadata::<S>))
-        .route("/@{scope}/{name}", get(scoped_package_metadata::<S>))
+        .route(
+            "/{package}",
+            get(package_metadata::<S>).put(publish_package::<S>),
+        )
+        .route(
+            "/@{scope}/{name}",
+            get(scoped_package_metadata::<S>).put(publish_scoped_package::<S>),
+        )
         .route("/{package}/-/{filename}", get(download_tarball::<S>))
         .route(
             "/@{scope}/{name}/-/{filename}",
             get(download_scoped_tarball::<S>),
         )
+}
+
+async fn publish_package<S: HasNpmState>(
+    State(state): State<S>,
+    headers: HeaderMap,
+    Path(package): Path<String>,
+    Json(payload): Json<serde_json::Value>,
+) -> Result<axum::response::Response, (StatusCode, String)> {
+    let name = PackageName::new(package);
+    publish_packument(state, &headers, name, payload).await
+}
+
+async fn publish_scoped_package<S: HasNpmState>(
+    State(state): State<S>,
+    headers: HeaderMap,
+    Path((scope, name)): Path<(String, String)>,
+    Json(payload): Json<serde_json::Value>,
+) -> Result<axum::response::Response, (StatusCode, String)> {
+    let full_name = PackageName::new(format!("@{scope}/{name}"));
+    publish_packument(state, &headers, full_name, payload).await
+}
+
+async fn publish_packument<S: HasNpmState>(
+    state: S,
+    headers: &HeaderMap,
+    name: PackageName,
+    payload: serde_json::Value,
+) -> Result<axum::response::Response, (StatusCode, String)> {
+    authorize_publish(&state, headers, &name)?;
+    let version = payload["dist-tags"]["latest"]
+        .as_str()
+        .map(str::to_string)
+        .or_else(|| {
+            payload["versions"]
+                .as_object()
+                .and_then(|versions| versions.keys().next().cloned())
+        })
+        .ok_or_else(|| (StatusCode::BAD_REQUEST, "missing npm version".to_string()))?;
+    let version_payload = payload["versions"].get(&version).ok_or_else(|| {
+        (
+            StatusCode::BAD_REQUEST,
+            "missing npm version metadata".to_string(),
+        )
+    })?;
+    let (filename, data) = attachment(&payload).ok_or_else(|| {
+        (
+            StatusCode::BAD_REQUEST,
+            "missing npm tarball attachment".to_string(),
+        )
+    })?;
+
+    state
+        .publishing_service()
+        .publish_package(PublishRequest {
+            ecosystem: Ecosystem::Npm,
+            name: name.clone(),
+            version: version.clone(),
+            license: version_payload["license"].as_str().map(str::to_string),
+            yanked: false,
+            artifacts: vec![PublishedArtifact {
+                filename,
+                data,
+                upstream_hashes: Default::default(),
+            }],
+            allow_overwrite: state.config().publishing.allow_overwrite,
+            allow_shadowing: state.config().publishing.allow_shadowing,
+        })
+        .await
+        .map_err(|err| map_error(&err))?;
+
+    Ok((
+        StatusCode::CREATED,
+        [(header::CONTENT_TYPE, "application/json")],
+        serde_json::to_string(&serde_json::json!({
+            "ok": true,
+            "id": name.as_str(),
+            "rev": format!("depot-{version}")
+        }))
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?,
+    )
+        .into_response())
 }
 
 /// GET /{package} -- return packument JSON for an unscoped package.
@@ -104,12 +197,7 @@ async fn serve_packument<S: HasNpmState>(
             .npm_upstream()
             .get_cached_packument(name)
             .await
-            .ok_or_else(|| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "packument not cached after upstream fetch".to_string(),
-                )
-            })?;
+            .unwrap_or(build_local_packument(service.as_ref(), name, host).await?);
 
         // Persist to storage — this is now depot's data
         let raw = serde_json::to_vec(&upstream_packument)
@@ -131,6 +219,45 @@ async fn serve_packument<S: HasNpmState>(
     let body = serde_json::to_string(&packument)
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
     Ok(([(header::CONTENT_TYPE, "application/json")], body).into_response())
+}
+
+async fn build_local_packument(
+    service: &dyn PackageService,
+    name: &PackageName,
+    host: &str,
+) -> Result<serde_json::Value, (StatusCode, String)> {
+    let versions = service
+        .list_versions(Ecosystem::Npm, name)
+        .await
+        .map_err(|err| map_error(&err))?;
+    let mut version_map = serde_json::Map::new();
+    for version in &versions {
+        let metadata = service
+            .get_version_metadata(Ecosystem::Npm, name, &version.version)
+            .await
+            .map_err(|err| map_error(&err))?;
+        let Some(artifact) = metadata.artifacts.first() else {
+            continue;
+        };
+        version_map.insert(
+            version.version.clone(),
+            serde_json::json!({
+                "name": name.as_str(),
+                "version": version.version,
+                "license": metadata.license,
+                "dist": {
+                    "tarball": format!("http://{host}/npm/{}/-/{}", name.as_str(), artifact.filename),
+                }
+            }),
+        );
+    }
+    let latest = versions.last().map(|version| version.version.clone());
+    Ok(serde_json::json!({
+        "_id": name.as_str(),
+        "name": name.as_str(),
+        "dist-tags": latest.map(|version| serde_json::json!({ "latest": version })).unwrap_or_else(|| serde_json::json!({})),
+        "versions": version_map,
+    }))
 }
 
 async fn validate_packument_metadata(
@@ -215,6 +342,53 @@ fn extract_version_from_filename(name: &str, filename: &str) -> Option<String> {
         return None;
     }
     Some(version.to_string())
+}
+
+fn attachment(payload: &serde_json::Value) -> Option<(String, bytes::Bytes)> {
+    let (filename, attachment) = payload["_attachments"].as_object()?.iter().next()?;
+    let encoded = attachment["data"].as_str()?;
+    let decoded = BASE64_STANDARD.decode(encoded).ok()?;
+    Some((filename.clone(), bytes::Bytes::from(decoded)))
+}
+
+fn authorize_publish<S: HasNpmState>(
+    state: &S,
+    headers: &HeaderMap,
+    name: &PackageName,
+) -> Result<(), (StatusCode, String)> {
+    if !state.config().publishing.enabled {
+        return Err((
+            StatusCode::NOT_FOUND,
+            "publishing is not enabled".to_string(),
+        ));
+    }
+    let token = extract_write_token(headers).ok_or_else(|| {
+        (
+            StatusCode::UNAUTHORIZED,
+            "missing publishing token".to_string(),
+        )
+    })?;
+    if state
+        .config()
+        .authorize_publish_token(&token, TokenScope::Publish, Ecosystem::Npm, name)
+    {
+        Ok(())
+    } else {
+        Err((
+            StatusCode::FORBIDDEN,
+            "publishing token is not authorized for this package".to_string(),
+        ))
+    }
+}
+
+fn extract_write_token(headers: &HeaderMap) -> Option<String> {
+    let authorization = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())?;
+    if let Some(token) = authorization.strip_prefix("Bearer ") {
+        return Some(token.to_string());
+    }
+    authorization.strip_prefix("npm ").map(str::to_string)
 }
 
 /// Map `DepotError` variants to appropriate HTTP status codes.

@@ -27,6 +27,9 @@ pub enum DepotError {
     #[error("policy violation: {0}")]
     PolicyViolation(String),
 
+    #[error("publish error: {0}")]
+    Publish(String),
+
     #[error("upstream error: {0}")]
     Upstream(String),
 

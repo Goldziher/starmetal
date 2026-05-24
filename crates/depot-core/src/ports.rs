@@ -3,6 +3,7 @@ use bytes::Bytes;
 
 use crate::error::Result;
 use crate::package::{ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata};
+use crate::publishing::{PublishRequest, PublishResult, YankRequest};
 
 // ---------------------------------------------------------------------------
 // Inbound port: the core service that protocol adapters call into
@@ -52,6 +53,13 @@ pub trait PackageService: Send + Sync {
         name: &PackageName,
         data: Bytes,
     ) -> Result<()>;
+}
+
+#[async_trait]
+pub trait PublishingService: Send + Sync {
+    async fn publish_package(&self, request: PublishRequest) -> Result<PublishResult>;
+
+    async fn set_yanked(&self, request: YankRequest) -> Result<VersionMetadata>;
 }
 
 // ---------------------------------------------------------------------------

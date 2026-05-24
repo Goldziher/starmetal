@@ -6,7 +6,10 @@ Accepted
 
 ## Context
 
-Depot must serve packages using each ecosystem's native protocol so that existing tools (pip, npm, cargo, mix) work without modification. Each protocol has different URL schemes, response formats, and behaviors.
+Depot must serve packages using each ecosystem's native protocol so that existing tools (pip, npm,
+cargo, mix, mvn, bundle, dotnet, and dart pub) work without modification. Each protocol has
+different URL schemes, response formats, authentication conventions, upload formats, and mutation
+semantics.
 
 ## Decision
 
@@ -14,7 +17,9 @@ Each protocol adapter is implemented as an axum `Router` that:
 
 1. Handles incoming requests in the native protocol format
 2. Translates them into `PackageService` trait calls
-3. Formats the response back into the native protocol format
+3. Translates native upload and mutation requests into publishing service calls when publishing is
+   supported for that ecosystem
+4. Formats the response back into the native protocol format
 
 Adapters are mounted under path prefixes:
 
@@ -24,6 +29,10 @@ Adapters are mounted under path prefixes:
 | `/npm` | npm registry API | JSON metadata + tarball downloads |
 | `/cargo` | Cargo sparse index | JSON config + version metadata |
 | `/hex` | Hex.pm API | JSON/protobuf metadata + tarball downloads |
+| `/maven` | Maven repository layout | XML metadata + artifact files |
+| `/rubygems` | RubyGems Compact Index/API | Text index + gem downloads |
+| `/nuget` | NuGet V3 | Service index + flat container + registration |
+| `/pub` | Hosted Pub Repository | JSON metadata + archive downloads |
 
 Each adapter also provides an `UpstreamClient` implementation for fetching from the corresponding public registry.
 
@@ -68,6 +77,23 @@ continue to match the linked source.
 
 All upstream client caches use 5-minute TTL via `(Instant, T)` tuples. Cached data is served directly until the TTL expires, then re-fetched from upstream.
 
+### Publishing Responsibilities
+
+Write support is adapter-specific at the protocol edge and shared below that edge:
+
+- Adapters parse native upload, yank, unyank, unlist, relist, and revert requests.
+- Adapters translate successful native parsing into publish-domain requests.
+- `PublishingService` performs shared validation, integrity computation, duplicate and shadowing
+  checks, policy checks, storage writes, metadata/index updates, and optional upstream forwarding.
+- Adapters format ecosystem-native success and failure responses, including client-visible warning
+  payloads where the protocol supports them.
+
+Adapters must not write artifacts, indexes, or forwarding status directly to storage.
+
+Publishing support for a registry cannot be documented as supported until it has official source
+linkage, route-level conformance tests, native-client publish/install E2E tests, and documented
+failure semantics.
+
 ## Consequences
 
 - Each adapter is self-contained: protocol-specific types, handlers, and upstream client in one module.
@@ -76,4 +102,7 @@ All upstream client caches use 5-minute TTL via `(Instant, T)` tuples. Cached da
 - Adapters share no protocol-specific logic with each other; all shared behavior goes through `PackageService`.
 - Adapter-owned schemas remain traceable to official registry sources and covered by conformance
   tests.
-- All four registries pass client-level integration tests (pip install, npm install, cargo fetch, mix hex.package fetch).
+- Read compatibility and write compatibility are separate claims. Pull-through support does not imply
+  publishing support.
+- Supported read adapters pass client-level integration tests. Supported publishing adapters must
+  additionally pass native publish then install/restore/fetch tests.

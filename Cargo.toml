@@ -27,7 +27,7 @@ ahash = { version = "0.8", features = ["serde"] }
 async-trait = "0.1"
 
 # Web framework & middleware
-axum = "0.8"
+axum = { version = "0.8", features = ["multipart"] }
 
 # Encoding / digests
 base64 = "0.22"

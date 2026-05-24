@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
 use depot_core::config::Config;
-use depot_core::ports::PackageService;
+use depot_core::ports::{PackageService, PublishingService};
 
 /// Shared application state, passed to all handlers via axum's State extractor.
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<Config>,
     pub package_service: Arc<dyn PackageService>,
+    pub publishing_service: Arc<dyn PublishingService>,
     pub upstreams: UpstreamClients,
 }
 
@@ -36,11 +37,13 @@ impl AppState {
     pub fn new(
         config: Config,
         package_service: Arc<dyn PackageService>,
+        publishing_service: Arc<dyn PublishingService>,
         upstreams: UpstreamClients,
     ) -> Self {
         Self {
             config: Arc::new(config),
             package_service,
+            publishing_service,
             upstreams,
         }
     }
@@ -48,8 +51,16 @@ impl AppState {
 
 #[cfg(feature = "pypi")]
 impl depot_adapters::pypi::HasPypiState for AppState {
+    fn config(&self) -> &Arc<Config> {
+        &self.config
+    }
+
     fn package_service(&self) -> &Arc<dyn PackageService> {
         &self.package_service
+    }
+
+    fn publishing_service(&self) -> &Arc<dyn PublishingService> {
+        &self.publishing_service
     }
 
     fn pypi_upstream(&self) -> &Arc<depot_adapters::pypi::upstream::PypiUpstreamClient> {
@@ -59,8 +70,16 @@ impl depot_adapters::pypi::HasPypiState for AppState {
 
 #[cfg(feature = "npm")]
 impl depot_adapters::npm::HasNpmState for AppState {
+    fn config(&self) -> &Arc<Config> {
+        &self.config
+    }
+
     fn package_service(&self) -> &Arc<dyn PackageService> {
         &self.package_service
+    }
+
+    fn publishing_service(&self) -> &Arc<dyn PublishingService> {
+        &self.publishing_service
     }
 
     fn npm_upstream(&self) -> &Arc<depot_adapters::npm::upstream::NpmUpstreamClient> {
@@ -70,8 +89,16 @@ impl depot_adapters::npm::HasNpmState for AppState {
 
 #[cfg(feature = "cargo-registry")]
 impl depot_adapters::cargo::HasCargoState for AppState {
+    fn config(&self) -> &Arc<Config> {
+        &self.config
+    }
+
     fn package_service(&self) -> &Arc<dyn PackageService> {
         &self.package_service
+    }
+
+    fn publishing_service(&self) -> &Arc<dyn PublishingService> {
+        &self.publishing_service
     }
 
     fn cargo_upstream(&self) -> &Arc<depot_adapters::cargo::upstream::CargoUpstreamClient> {
@@ -92,8 +119,16 @@ impl depot_adapters::hex::HasHexState for AppState {
 
 #[cfg(feature = "maven")]
 impl depot_adapters::maven::HasMavenState for AppState {
+    fn config(&self) -> &Arc<Config> {
+        &self.config
+    }
+
     fn package_service(&self) -> &Arc<dyn PackageService> {
         &self.package_service
+    }
+
+    fn publishing_service(&self) -> &Arc<dyn PublishingService> {
+        &self.publishing_service
     }
 
     fn maven_upstream(&self) -> &Arc<depot_adapters::maven::upstream::MavenUpstreamClient> {
