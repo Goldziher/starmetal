@@ -1,0 +1,25 @@
+{
+  "name": "sample",
+  "latest": {
+    "version": "1.0.0",
+    "pubspec": {
+      "name": "sample",
+      "version": "1.0.0",
+      "description": "Sample package"
+    },
+    "archive_url": "https://pub.dev/api/archives/sample-1.0.0.tar.gz",
+    "archive_sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+  },
+  "versions": [
+    {
+      "version": "1.0.0",
+      "pubspec": {
+        "name": "sample",
+        "version": "1.0.0",
+        "description": "Sample package"
+      },
+      "archive_url": "https://pub.dev/api/archives/sample-1.0.0.tar.gz",
+      "archive_sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+    }
+  ]
+}

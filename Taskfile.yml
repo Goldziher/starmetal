@@ -56,6 +56,11 @@ tasks:
       - cargo run -p depot-schema-manager -- fetch --check
       - cargo run -p depot-schema-manager -- generate --check
 
+  schema:check-live:
+    desc: Compare fetched schema/spec artifacts with current upstream sources
+    cmds:
+      - cargo run -p depot-schema-manager -- fetch --check --live
+
   schema:validate:
     desc: Validate schema files against representative fixtures
     cmds:

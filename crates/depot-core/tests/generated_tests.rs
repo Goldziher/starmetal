@@ -458,15 +458,35 @@ fn package_03_ecosystem_parsing_hex_uppercase() {
 }
 
 #[test]
-fn package_03_ecosystem_parsing_unknown_ecosystem() {
-    // Fixture: package/03_ecosystem_parsing.json | Case: "unknown ecosystem"
+fn package_03_ecosystem_parsing_maven_lowercase() {
+    // Fixture: package/03_ecosystem_parsing.json | Case: "maven lowercase"
     let result: Result<depot_core::package::Ecosystem, _> = "maven".parse();
-    let err = result.expect_err("fixture 'unknown ecosystem' should produce an error");
-    assert!(
-        err.to_string().contains("unknown ecosystem"),
-        "fixture 'unknown ecosystem': error '{}' should contain 'unknown ecosystem'",
-        err
-    );
+    let eco = result.expect("fixture 'maven lowercase' should parse successfully");
+    assert_eq!(eco.to_string(), "maven", "fixture: maven lowercase");
+}
+
+#[test]
+fn package_03_ecosystem_parsing_rubygems_lowercase() {
+    // Fixture: package/03_ecosystem_parsing.json | Case: "rubygems lowercase"
+    let result: Result<depot_core::package::Ecosystem, _> = "rubygems".parse();
+    let eco = result.expect("fixture 'rubygems lowercase' should parse successfully");
+    assert_eq!(eco.to_string(), "rubygems", "fixture: rubygems lowercase");
+}
+
+#[test]
+fn package_03_ecosystem_parsing_nuget_lowercase() {
+    // Fixture: package/03_ecosystem_parsing.json | Case: "nuget lowercase"
+    let result: Result<depot_core::package::Ecosystem, _> = "nuget".parse();
+    let eco = result.expect("fixture 'nuget lowercase' should parse successfully");
+    assert_eq!(eco.to_string(), "nuget", "fixture: nuget lowercase");
+}
+
+#[test]
+fn package_03_ecosystem_parsing_pub_lowercase() {
+    // Fixture: package/03_ecosystem_parsing.json | Case: "pub lowercase"
+    let result: Result<depot_core::package::Ecosystem, _> = "pub".parse();
+    let eco = result.expect("fixture 'pub lowercase' should parse successfully");
+    assert_eq!(eco.to_string(), "pub", "fixture: pub lowercase");
 }
 
 #[test]

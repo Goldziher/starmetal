@@ -72,6 +72,11 @@ impl CachingPackageService {
             return verify_hex_digest("sha1", expected, &actual);
         }
 
+        if let Some(expected) = digest.upstream_hashes.get("sha512") {
+            let actual = base64::Engine::encode(&BASE64_STANDARD, sha2::Sha512::digest(data));
+            return verify_hex_digest("sha512", expected, &actual);
+        }
+
         Ok(())
     }
 
@@ -128,6 +133,7 @@ impl PackageService for CachingPackageService {
         if let Some(cached) = self.storage.get(&key).await? {
             tracing::debug!(ecosystem = %ecosystem, name = %name, version, "cache hit for metadata");
             let metadata: VersionMetadata = serde_json::from_slice(&cached)?;
+            self.policy.check(&metadata)?;
             return Ok(metadata);
         }
 
@@ -141,6 +147,11 @@ impl PackageService for CachingPackageService {
         self.storage.put(&key, Bytes::from(serialized)).await?;
 
         Ok(metadata)
+    }
+
+    async fn validate_metadata(&self, metadata: &VersionMetadata) -> Result<()> {
+        self.check_package_allowed(&metadata.name)?;
+        self.policy.check(metadata)
     }
 
     async fn get_artifact(&self, artifact_id: &ArtifactId) -> Result<Bytes> {
@@ -232,7 +243,7 @@ impl PackageService for CachingPackageService {
 }
 
 fn verify_hex_digest(algorithm: &str, expected: &str, actual: &str) -> Result<()> {
-    if expected.eq_ignore_ascii_case(actual) {
+    if expected.trim().eq_ignore_ascii_case(actual.trim()) {
         Ok(())
     } else {
         Err(DepotError::IntegrityError {
@@ -608,6 +619,37 @@ mod tests {
             err.contains("no upstream configured for hex"),
             "error should mention missing upstream, got: {err}"
         );
+    }
+
+    #[tokio::test]
+    async fn cached_metadata_is_rechecked_against_current_policy() {
+        let name = PackageName::new("cached-pkg");
+        let cached_metadata = VersionMetadata {
+            license: Some("GPL-3.0".to_string()),
+            ..test_metadata("cached-pkg", "1.0.0")
+        };
+        let key = CachingPackageService::metadata_key(Ecosystem::Npm, &name, "1.0.0");
+        let storage = Arc::new(MockStorage::with_data(vec![(
+            &key,
+            Bytes::from(serde_json::to_vec(&cached_metadata).unwrap()),
+        )]));
+        let upstream = MockUpstream {
+            eco: Ecosystem::Npm,
+            versions: vec![],
+            metadata: AHashMap::new(),
+            artifacts: AHashMap::new(),
+        };
+        let policy = PolicyConfig {
+            allowed_licenses: vec!["MIT".to_string()],
+            ..Default::default()
+        };
+        let service = build_service(storage, upstream, policy);
+
+        let result = service
+            .get_version_metadata(Ecosystem::Npm, &name, "1.0.0")
+            .await;
+
+        assert!(matches!(result, Err(DepotError::PolicyViolation(_))));
     }
 
     #[tokio::test]

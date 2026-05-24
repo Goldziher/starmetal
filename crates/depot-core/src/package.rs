@@ -15,6 +15,10 @@ pub enum Ecosystem {
     Npm,
     Cargo,
     Hex,
+    Maven,
+    RubyGems,
+    NuGet,
+    Pub,
 }
 
 impl std::fmt::Display for Ecosystem {
@@ -24,6 +28,10 @@ impl std::fmt::Display for Ecosystem {
             Self::Npm => write!(f, "npm"),
             Self::Cargo => write!(f, "cargo"),
             Self::Hex => write!(f, "hex"),
+            Self::Maven => write!(f, "maven"),
+            Self::RubyGems => write!(f, "rubygems"),
+            Self::NuGet => write!(f, "nuget"),
+            Self::Pub => write!(f, "pub"),
         }
     }
 }
@@ -37,6 +45,10 @@ impl FromStr for Ecosystem {
             "npm" => Ok(Self::Npm),
             "cargo" | "crates" => Ok(Self::Cargo),
             "hex" => Ok(Self::Hex),
+            "maven" => Ok(Self::Maven),
+            "rubygems" | "gem" | "gems" => Ok(Self::RubyGems),
+            "nuget" => Ok(Self::NuGet),
+            "pub" | "pubdev" | "pub.dev" => Ok(Self::Pub),
             _ => Err(DepotError::Config(format!("unknown ecosystem: {s}"))),
         }
     }
@@ -47,8 +59,8 @@ impl FromStr for Ecosystem {
 /// Canonicalizes names across ecosystems:
 /// - PyPI: PEP 503 — lowercase, replace runs of `.`/`-`/`_` with single `-`
 /// - npm: lowercase (preserving scope `@scope/name`)
-/// - Cargo: lowercase
-/// - Hex: lowercase
+/// - Cargo/Hex/RubyGems/NuGet/pub.dev: lowercase
+/// - Maven: preserve `group_id:artifact_id`
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub struct PackageName(String);
 
@@ -75,7 +87,12 @@ impl PackageName {
                 }
             }
             Ecosystem::Npm => normalize_npm(&self.0),
-            Ecosystem::Cargo | Ecosystem::Hex => {
+            Ecosystem::Maven => Cow::Borrowed(&self.0),
+            Ecosystem::Cargo
+            | Ecosystem::Hex
+            | Ecosystem::RubyGems
+            | Ecosystem::NuGet
+            | Ecosystem::Pub => {
                 if self
                     .0
                     .bytes()

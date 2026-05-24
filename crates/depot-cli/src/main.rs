@@ -86,7 +86,7 @@ fn main() {
             LockAction::Update => commands::lock::update(config),
         },
         Commands::Config => {
-            let output = toml::to_string_pretty(&config).unwrap_or_else(|e| {
+            let output = toml::to_string_pretty(&config.redacted_value()).unwrap_or_else(|e| {
                 eprintln!("error: failed to serialize config: {e}");
                 std::process::exit(1);
             });

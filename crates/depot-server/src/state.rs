@@ -8,6 +8,12 @@ use depot_core::ports::PackageService;
 pub struct AppState {
     pub config: Arc<Config>,
     pub package_service: Arc<dyn PackageService>,
+    pub upstreams: UpstreamClients,
+}
+
+/// Feature-gated upstream clients used by protocol adapters.
+#[derive(Clone)]
+pub struct UpstreamClients {
     #[cfg(feature = "pypi")]
     pub pypi_upstream: Arc<depot_adapters::pypi::upstream::PypiUpstreamClient>,
     #[cfg(feature = "cargo-registry")]
@@ -16,32 +22,26 @@ pub struct AppState {
     pub npm_upstream: Arc<depot_adapters::npm::upstream::NpmUpstreamClient>,
     #[cfg(feature = "hex")]
     pub hex_upstream: Arc<depot_adapters::hex::upstream::HexUpstreamClient>,
+    #[cfg(feature = "maven")]
+    pub maven_upstream: Arc<depot_adapters::maven::upstream::MavenUpstreamClient>,
+    #[cfg(feature = "rubygems")]
+    pub rubygems_upstream: Arc<depot_adapters::rubygems::upstream::RubyGemsUpstreamClient>,
+    #[cfg(feature = "nuget")]
+    pub nuget_upstream: Arc<depot_adapters::nuget::upstream::NuGetUpstreamClient>,
+    #[cfg(feature = "pub")]
+    pub pub_upstream: Arc<depot_adapters::pubdev::upstream::PubUpstreamClient>,
 }
 
 impl AppState {
     pub fn new(
         config: Config,
         package_service: Arc<dyn PackageService>,
-        #[cfg(feature = "pypi")] pypi_upstream: Arc<
-            depot_adapters::pypi::upstream::PypiUpstreamClient,
-        >,
-        #[cfg(feature = "cargo-registry")] cargo_upstream: Arc<
-            depot_adapters::cargo::upstream::CargoUpstreamClient,
-        >,
-        #[cfg(feature = "npm")] npm_upstream: Arc<depot_adapters::npm::upstream::NpmUpstreamClient>,
-        #[cfg(feature = "hex")] hex_upstream: Arc<depot_adapters::hex::upstream::HexUpstreamClient>,
+        upstreams: UpstreamClients,
     ) -> Self {
         Self {
             config: Arc::new(config),
             package_service,
-            #[cfg(feature = "pypi")]
-            pypi_upstream,
-            #[cfg(feature = "cargo-registry")]
-            cargo_upstream,
-            #[cfg(feature = "npm")]
-            npm_upstream,
-            #[cfg(feature = "hex")]
-            hex_upstream,
+            upstreams,
         }
     }
 }
@@ -53,7 +53,7 @@ impl depot_adapters::pypi::HasPypiState for AppState {
     }
 
     fn pypi_upstream(&self) -> &Arc<depot_adapters::pypi::upstream::PypiUpstreamClient> {
-        &self.pypi_upstream
+        &self.upstreams.pypi_upstream
     }
 }
 
@@ -64,7 +64,7 @@ impl depot_adapters::npm::HasNpmState for AppState {
     }
 
     fn npm_upstream(&self) -> &Arc<depot_adapters::npm::upstream::NpmUpstreamClient> {
-        &self.npm_upstream
+        &self.upstreams.npm_upstream
     }
 }
 
@@ -75,7 +75,7 @@ impl depot_adapters::cargo::HasCargoState for AppState {
     }
 
     fn cargo_upstream(&self) -> &Arc<depot_adapters::cargo::upstream::CargoUpstreamClient> {
-        &self.cargo_upstream
+        &self.upstreams.cargo_upstream
     }
 }
 
@@ -86,6 +86,52 @@ impl depot_adapters::hex::HasHexState for AppState {
     }
 
     fn hex_upstream(&self) -> &Arc<depot_adapters::hex::upstream::HexUpstreamClient> {
-        &self.hex_upstream
+        &self.upstreams.hex_upstream
+    }
+}
+
+#[cfg(feature = "maven")]
+impl depot_adapters::maven::HasMavenState for AppState {
+    fn package_service(&self) -> &Arc<dyn PackageService> {
+        &self.package_service
+    }
+
+    fn maven_upstream(&self) -> &Arc<depot_adapters::maven::upstream::MavenUpstreamClient> {
+        &self.upstreams.maven_upstream
+    }
+}
+
+#[cfg(feature = "rubygems")]
+impl depot_adapters::rubygems::HasRubyGemsState for AppState {
+    fn package_service(&self) -> &Arc<dyn PackageService> {
+        &self.package_service
+    }
+
+    fn rubygems_upstream(
+        &self,
+    ) -> &Arc<depot_adapters::rubygems::upstream::RubyGemsUpstreamClient> {
+        &self.upstreams.rubygems_upstream
+    }
+}
+
+#[cfg(feature = "nuget")]
+impl depot_adapters::nuget::HasNuGetState for AppState {
+    fn package_service(&self) -> &Arc<dyn PackageService> {
+        &self.package_service
+    }
+
+    fn nuget_upstream(&self) -> &Arc<depot_adapters::nuget::upstream::NuGetUpstreamClient> {
+        &self.upstreams.nuget_upstream
+    }
+}
+
+#[cfg(feature = "pub")]
+impl depot_adapters::pubdev::HasPubState for AppState {
+    fn package_service(&self) -> &Arc<dyn PackageService> {
+        &self.package_service
+    }
+
+    fn pub_upstream(&self) -> &Arc<depot_adapters::pubdev::upstream::PubUpstreamClient> {
+        &self.upstreams.pub_upstream
     }
 }

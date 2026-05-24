@@ -122,12 +122,29 @@ async fn serve_packument<S: HasNpmState>(
     };
 
     // Rewrite tarball URLs to point through depot
+    validate_packument_metadata(service.as_ref(), name, &packument)
+        .await
+        .map_err(|err| map_error(&err))?;
     let base_url = format!("http://{host}");
     models::rewrite_packument_tarball_urls(&mut packument, &base_url);
 
     let body = serde_json::to_string(&packument)
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
     Ok(([(header::CONTENT_TYPE, "application/json")], body).into_response())
+}
+
+async fn validate_packument_metadata(
+    service: &dyn PackageService,
+    name: &PackageName,
+    packument: &serde_json::Value,
+) -> Result<(), DepotError> {
+    for version in models::extract_version_infos(packument) {
+        if let Some(metadata) = models::extract_version_metadata(name, &version.version, packument)
+        {
+            service.validate_metadata(&metadata).await?;
+        }
+    }
+    Ok(())
 }
 
 /// GET /{package}/-/{filename} -- download an unscoped package tarball.

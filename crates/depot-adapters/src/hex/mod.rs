@@ -5,6 +5,7 @@
 //! packages from hex.pm or any Hex-compatible registry.
 
 pub mod models;
+pub mod proto;
 pub mod upstream;
 
 use std::sync::Arc;
@@ -87,12 +88,28 @@ async fn package_metadata<S: HasHexState>(
     };
 
     // Build response with URLs rewritten to point through depot
+    validate_package_metadata(service.as_ref(), &name, &package)
+        .await
+        .map_err(|err| map_error(&err))?;
     let response = models::build_package_response_from_cached(&name, &package);
 
     let body = serde_json::to_string(&response)
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
 
     Ok(([(header::CONTENT_TYPE, "application/json")], body))
+}
+
+async fn validate_package_metadata(
+    service: &dyn PackageService,
+    name: &PackageName,
+    package: &depot_core::registry::hex::HexPackage,
+) -> Result<(), DepotError> {
+    for release in &package.releases {
+        if let Some(metadata) = models::hex_release_to_metadata(name, package, &release.version) {
+            service.validate_metadata(&metadata).await?;
+        }
+    }
+    Ok(())
 }
 
 /// GET /tarballs/{tarball} -- download a Hex tarball.
@@ -141,11 +158,33 @@ async fn registry_entry<S: HasHexState>(
     State(state): State<S>,
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let bytes = state
-        .hex_upstream()
-        .fetch_registry_entry(&name)
+    let package_name = PackageName::new(name.clone());
+    let service = state.package_service();
+    let bytes = if let Some(cached) = service
+        .get_raw_upstream(
+            Ecosystem::Hex,
+            &PackageName::new(format!("registry/{name}")),
+        )
         .await
-        .map_err(|err| map_error(&err))?;
+        .map_err(|err| map_error(&err))?
+    {
+        cached
+    } else {
+        let fetched = state
+            .hex_upstream()
+            .fetch_registry_entry(package_name.as_str())
+            .await
+            .map_err(|err| map_error(&err))?;
+        service
+            .put_raw_upstream(
+                Ecosystem::Hex,
+                &PackageName::new(format!("registry/{name}")),
+                fetched.clone(),
+            )
+            .await
+            .map_err(|err| map_error(&err))?;
+        fetched
+    };
 
     Ok(([(header::CONTENT_TYPE, "application/octet-stream")], bytes))
 }

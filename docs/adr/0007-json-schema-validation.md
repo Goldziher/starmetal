@@ -50,9 +50,13 @@ schemas/
 ├── upstream/       # Fetched official protobuf, XSD, OpenAPI, and type artifacts
 ├── registries/    # Official registry protocol schemas
 │   ├── pypi.schema.json
+│   ├── pypi-index.schema.json
 │   ├── npm.schema.json
 │   ├── cargo.schema.json
-│   └── hex.schema.json
+│   ├── cargo-config.schema.json
+│   ├── hex.schema.json
+│   ├── nuget-*.schema.json
+│   └── pub-package.schema.json
 └── depot/         # Depot's own formats
     ├── config.schema.json
     └── lockfile.schema.json
@@ -62,7 +66,10 @@ schemas/
 
 - `task schema:fetch` downloads pinned official machine-readable artifacts.
 - `task schema:generate` regenerates Depot JSON Schemas and `schemas/manifest.json`.
-- `task schema:check` fails when fetched artifacts, generated schemas, or manifest hashes are stale.
+- `task schema:check` fails when committed fetched artifacts, generated schemas, or manifest hashes
+  are stale; it does not compare against mutable live upstream sources.
+- `task schema:check-live` compares fetched artifacts with current upstream sources for explicit
+  maintainer refresh checks.
 - `task conformance` runs fixture-based adapter conformance tests.
 
 Registry types live in `depot-core/src/registry/` with one module per ecosystem. These types use

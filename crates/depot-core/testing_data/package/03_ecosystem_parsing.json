@@ -60,10 +60,28 @@
 		"error": null
 	},
 	{
-		"name": "unknown ecosystem",
+		"name": "maven lowercase",
 		"input": { "value": "maven" },
-		"expected": {},
-		"error": "unknown ecosystem"
+		"expected": { "ecosystem": "maven" },
+		"error": null
+	},
+	{
+		"name": "rubygems lowercase",
+		"input": { "value": "rubygems" },
+		"expected": { "ecosystem": "rubygems" },
+		"error": null
+	},
+	{
+		"name": "nuget lowercase",
+		"input": { "value": "nuget" },
+		"expected": { "ecosystem": "nuget" },
+		"error": null
+	},
+	{
+		"name": "pub lowercase",
+		"input": { "value": "pub" },
+		"expected": { "ecosystem": "pub" },
+		"error": null
 	},
 	{
 		"name": "empty string",

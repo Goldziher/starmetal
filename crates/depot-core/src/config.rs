@@ -13,7 +13,7 @@ pub struct Config {
     pub server: ServerConfig,
     #[serde(default)]
     pub storage: StorageConfig,
-    #[serde(default)]
+    #[serde(default = "default_upstreams")]
     pub upstream: HashMap<String, UpstreamConfig>,
     #[serde(default)]
     pub policies: PolicyConfig,
@@ -140,6 +140,8 @@ pub struct UpstreamConfig {
     #[serde(default = "default_true")]
     pub enabled: bool,
     pub url: String,
+    #[serde(default)]
+    pub artifact_url: Option<String>,
 }
 
 fn default_true() -> bool {
@@ -177,7 +179,8 @@ impl Config {
             return Err(DepotError::ConfigNotFound(path.to_path_buf()));
         }
         let contents = std::fs::read_to_string(path)?;
-        let config: Config = toml::from_str(&contents)?;
+        let mut config: Config = toml::from_str(&contents)?;
+        config.apply_default_upstreams();
         Ok(config)
     }
 
@@ -217,49 +220,114 @@ impl Config {
 
         Ok(())
     }
+
+    pub fn apply_default_upstreams(&mut self) {
+        for (name, config) in default_upstreams() {
+            self.upstream.entry(name).or_insert(config);
+        }
+    }
+
+    pub fn upstream_enabled(&self, name: &str) -> bool {
+        self.upstream
+            .get(name)
+            .map(|config| config.enabled)
+            .unwrap_or(true)
+    }
+
+    pub fn redacted_value(&self) -> toml::Value {
+        let mut value =
+            toml::Value::try_from(self).unwrap_or_else(|_| toml::Value::Table(Default::default()));
+        if let Some(auth) = value.get_mut("auth").and_then(toml::Value::as_table_mut)
+            && let Some(tokens) = auth.get_mut("tokens").and_then(toml::Value::as_array_mut)
+        {
+            for token in tokens {
+                *token = toml::Value::String("<redacted>".to_string());
+            }
+        }
+        value
+    }
 }
 
 impl Default for Config {
     fn default() -> Self {
-        let mut upstream = HashMap::new();
-        upstream.insert(
-            "pypi".into(),
-            UpstreamConfig {
-                enabled: true,
-                url: "https://pypi.org".into(),
-            },
-        );
-        upstream.insert(
-            "npm".into(),
-            UpstreamConfig {
-                enabled: true,
-                url: "https://registry.npmjs.org".into(),
-            },
-        );
-        upstream.insert(
-            "cargo".into(),
-            UpstreamConfig {
-                enabled: true,
-                url: "https://index.crates.io".into(),
-            },
-        );
-        upstream.insert(
-            "hex".into(),
-            UpstreamConfig {
-                enabled: true,
-                url: "https://hex.pm".into(),
-            },
-        );
-
         Self {
             server: ServerConfig::default(),
             storage: StorageConfig::default(),
-            upstream,
+            upstream: default_upstreams(),
             policies: PolicyConfig::default(),
             auth: AuthConfig::default(),
             encryption: EncryptionConfig::default(),
         }
     }
+}
+
+fn default_upstreams() -> HashMap<String, UpstreamConfig> {
+    let mut upstream = HashMap::new();
+    upstream.insert(
+        "pypi".into(),
+        UpstreamConfig {
+            enabled: true,
+            url: "https://pypi.org".into(),
+            artifact_url: None,
+        },
+    );
+    upstream.insert(
+        "npm".into(),
+        UpstreamConfig {
+            enabled: true,
+            url: "https://registry.npmjs.org".into(),
+            artifact_url: None,
+        },
+    );
+    upstream.insert(
+        "cargo".into(),
+        UpstreamConfig {
+            enabled: true,
+            url: "https://index.crates.io".into(),
+            artifact_url: Some("https://static.crates.io/crates".into()),
+        },
+    );
+    upstream.insert(
+        "hex".into(),
+        UpstreamConfig {
+            enabled: true,
+            url: "https://hex.pm".into(),
+            artifact_url: Some("https://repo.hex.pm".into()),
+        },
+    );
+    upstream.insert(
+        "maven".into(),
+        UpstreamConfig {
+            enabled: false,
+            url: "https://repo1.maven.org/maven2".into(),
+            artifact_url: None,
+        },
+    );
+    upstream.insert(
+        "rubygems".into(),
+        UpstreamConfig {
+            enabled: false,
+            url: "https://rubygems.org".into(),
+            artifact_url: Some("https://rubygems.org".into()),
+        },
+    );
+    upstream.insert(
+        "nuget".into(),
+        UpstreamConfig {
+            enabled: false,
+            url: "https://api.nuget.org/v3/index.json".into(),
+            artifact_url: None,
+        },
+    );
+    upstream.insert(
+        "pub".into(),
+        UpstreamConfig {
+            enabled: false,
+            url: "https://pub.dev".into(),
+            artifact_url: None,
+        },
+    );
+    upstream
 }
 
 #[cfg(test)]
@@ -343,6 +411,10 @@ mod tests {
         assert!(config.upstream.contains_key("npm"));
         assert!(config.upstream.contains_key("cargo"));
         assert!(config.upstream.contains_key("hex"));
+        assert!(config.upstream.contains_key("maven"));
+        assert!(config.upstream.contains_key("rubygems"));
+        assert!(config.upstream.contains_key("nuget"));
+        assert!(config.upstream.contains_key("pub"));
     }
 
     #[test]
@@ -382,5 +454,14 @@ mod tests {
         let config: Config = toml::from_str("[encryption]\nenabled = true\n").unwrap();
         let err = config.validate_mvp().unwrap_err().to_string();
         assert!(err.contains("encryption is not implemented"));
+    }
+
+    #[test]
+    fn redacted_value_hides_auth_tokens() {
+        let config: Config =
+            toml::from_str("[auth]\nenabled = true\ntokens = [\"secret-token\"]\n").unwrap();
+        let output = toml::to_string_pretty(&config.redacted_value()).unwrap();
+        assert!(!output.contains("secret-token"));
+        assert!(output.contains("<redacted>"));
     }
 }

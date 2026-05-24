@@ -10,13 +10,14 @@ use depot_core::error::{DepotError, Result};
 use depot_core::package::{ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata};
 use depot_core::ports::UpstreamClient;
 use depot_core::registry::hex::HexPackage;
+use prost::Message;
 use tokio::sync::RwLock;
 use tracing::{debug, instrument};
 
 /// Time-to-live for cached upstream metadata responses.
 const CACHE_TTL: Duration = Duration::from_secs(300);
 
-use super::models;
+use super::{models, proto};
 
 /// HTTP client for fetching packages from an upstream Hex-compatible registry.
 pub struct HexUpstreamClient {
@@ -192,13 +193,23 @@ impl UpstreamClient for HexUpstreamClient {
     #[instrument(skip(self), fields(ecosystem = "hex"))]
     async fn fetch_metadata(&self, name: &PackageName, version: &str) -> Result<VersionMetadata> {
         let pkg = self.fetch_package(name).await?;
-        models::hex_release_to_metadata(name, &pkg, version).ok_or_else(|| {
-            DepotError::VersionNotFound {
-                ecosystem: "hex".to_string(),
-                name: name.as_str().to_string(),
-                version: version.to_string(),
-            }
-        })
+        let mut metadata =
+            models::hex_release_to_metadata(name, &pkg, version).ok_or_else(|| {
+                DepotError::VersionNotFound {
+                    ecosystem: "hex".to_string(),
+                    name: name.as_str().to_string(),
+                    version: version.to_string(),
+                }
+            })?;
+
+        if let Some(checksum) = self.outer_checksum(name.as_str(), version).await?
+            && let Some(artifact) = metadata.artifacts.first_mut()
+        {
+            artifact
+                .upstream_hashes
+                .insert("sha256".to_string(), checksum);
+        }
+        Ok(metadata)
     }
 
     #[instrument(skip(self), fields(ecosystem = "hex"))]
@@ -228,4 +239,27 @@ impl UpstreamClient for HexUpstreamClient {
             .await
             .map_err(|err| DepotError::Upstream(err.to_string()))
     }
+}
+
+impl HexUpstreamClient {
+    async fn outer_checksum(&self, name: &str, version: &str) -> Result<Option<String>> {
+        let bytes = self.fetch_registry_entry(name).await?;
+        let package = proto::Package::decode(bytes.as_ref())
+            .map_err(|err| DepotError::Upstream(format!("invalid Hex package protobuf: {err}")))?;
+        Ok(package
+            .releases
+            .into_iter()
+            .find(|release| release.version == version)
+            .and_then(|release| release.outer_checksum.or(Some(release.inner_checksum)))
+            .map(hex_encode))
+    }
+}
+
+fn hex_encode(bytes: Vec<u8>) -> String {
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        use std::fmt::Write as _;
+        let _ = write!(&mut output, "{byte:02x}");
+    }
+    output
 }

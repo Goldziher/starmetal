@@ -4,13 +4,17 @@ use std::sync::Arc;
 use ahash::AHashMap;
 use depot_adapters::cargo::upstream::CargoUpstreamClient;
 use depot_adapters::hex::upstream::HexUpstreamClient;
+use depot_adapters::maven::upstream::MavenUpstreamClient;
 use depot_adapters::npm::upstream::NpmUpstreamClient;
+use depot_adapters::nuget::upstream::NuGetUpstreamClient;
+use depot_adapters::pubdev::upstream::PubUpstreamClient;
 use depot_adapters::pypi::upstream::PypiUpstreamClient;
+use depot_adapters::rubygems::upstream::RubyGemsUpstreamClient;
 use depot_core::config::Config;
 use depot_core::package::Ecosystem;
 use depot_core::policy::PolicyConfig;
 use depot_core::ports::UpstreamClient;
-use depot_server::state::AppState;
+use depot_server::state::{AppState, UpstreamClients};
 use depot_service::CachingPackageService;
 use depot_storage::OpenDalStorage;
 
@@ -62,6 +66,15 @@ impl TestServer {
         let hex_client = Arc::new(HexUpstreamClient::new(hex_url, hex_repo_url));
         upstream_clients.insert(Ecosystem::Hex, hex_client.clone());
 
+        let maven_client = Arc::new(MavenUpstreamClient::new(
+            "https://repo1.maven.org/maven2".into(),
+        ));
+        let rubygems_client = Arc::new(RubyGemsUpstreamClient::new("https://rubygems.org".into()));
+        let nuget_client = Arc::new(NuGetUpstreamClient::new(
+            "https://api.nuget.org/v3/index.json".into(),
+        ));
+        let pub_client = Arc::new(PubUpstreamClient::new("https://pub.dev".into()));
+
         let service = CachingPackageService::new(
             Arc::new(storage),
             upstream_clients,
@@ -69,14 +82,17 @@ impl TestServer {
         );
 
         let config = Config::default();
-        let state = AppState::new(
-            config,
-            Arc::new(service),
-            pypi_client,
-            cargo_client,
-            npm_client,
-            hex_client,
-        );
+        let upstreams = UpstreamClients {
+            pypi_upstream: pypi_client,
+            cargo_upstream: cargo_client,
+            npm_upstream: npm_client,
+            hex_upstream: hex_client,
+            maven_upstream: maven_client,
+            rubygems_upstream: rubygems_client,
+            nuget_upstream: nuget_client,
+            pub_upstream: pub_client,
+        };
+        let state = AppState::new(config, Arc::new(service), upstreams);
         let app = depot_server::app::build_app(state);
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")

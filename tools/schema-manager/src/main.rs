@@ -43,6 +43,8 @@ enum Command {
     Fetch {
         #[arg(long)]
         check: bool,
+        #[arg(long)]
+        live: bool,
     },
     Generate {
         #[arg(long)]
@@ -133,10 +135,12 @@ async fn main() -> Result<()> {
     let sources = load_sources(&cli.sources)?;
 
     match cli.command {
-        Command::Fetch { check } => fetch_sources(&sources, &cli.schema_root, check).await?,
+        Command::Fetch { check, live } => {
+            fetch_sources(&sources, &cli.schema_root, check, live).await?
+        }
         Command::Generate { check } => generate_schemas(&sources, &cli.schema_root, check)?,
         Command::Refresh => {
-            fetch_sources(&sources, &cli.schema_root, false).await?;
+            fetch_sources(&sources, &cli.schema_root, false, true).await?;
             generate_schemas(&sources, &cli.schema_root, false)?;
         }
     }
@@ -152,7 +156,12 @@ fn load_sources(path: &Path) -> Result<Vec<Source>> {
     Ok(parsed.source)
 }
 
-async fn fetch_sources(sources: &[Source], schema_root: &Path, check: bool) -> Result<()> {
+async fn fetch_sources(
+    sources: &[Source],
+    schema_root: &Path,
+    check: bool,
+    live: bool,
+) -> Result<()> {
     let client = reqwest::Client::builder()
         .user_agent("depot-schema-manager/0.1")
         .build()
@@ -165,6 +174,12 @@ async fn fetch_sources(sources: &[Source], schema_root: &Path, check: bool) -> R
             .as_ref()
             .ok_or_else(|| format!("source '{}' is fetched but has no path", source.id))?;
         let output_path = schema_root.join(relative_path);
+        if check && !live {
+            if !output_path.exists() {
+                failures.push(format!("{} is missing", output_path.display()));
+            }
+            continue;
+        }
         let bytes = client
             .get(&source.url)
             .send()
@@ -290,11 +305,7 @@ fn schema_specs() -> Vec<SchemaSpec> {
                 "pypi-source-distribution-format",
                 "pypi-json-api",
             ],
-            source_kinds: &[
-                "official-prose-index",
-                "official-prose",
-                "official-schema-index",
-            ],
+            source_kinds: &["official-prose-index", "official-prose"],
             validated_by: "crates/depot-core/tests/schema_validation.rs; tests/conformance",
             schema: serde_json::to_value(schema_for!(PypiProject)).expect("schema serializes"),
         },

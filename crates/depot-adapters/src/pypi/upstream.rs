@@ -9,7 +9,7 @@ use bytes::Bytes;
 use depot_core::error::{DepotError, Result};
 use depot_core::package::{ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata};
 use depot_core::ports::UpstreamClient;
-use depot_core::registry::pypi::PypiProject;
+use depot_core::registry::pypi::{PypiFile, PypiMeta, PypiProject, PypiYanked};
 use tokio::sync::RwLock;
 use tracing::{debug, instrument};
 
@@ -102,10 +102,26 @@ impl PypiUpstreamClient {
             )));
         }
 
-        let project: PypiProject = response
-            .json()
-            .await
-            .map_err(|err| DepotError::Upstream(err.to_string()))?;
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default()
+            .to_string();
+        let project: PypiProject = if content_type.contains("application/vnd.pypi.simple.v1+json")
+            || content_type.contains("application/json")
+        {
+            response
+                .json()
+                .await
+                .map_err(|err| DepotError::Upstream(err.to_string()))?
+        } else {
+            let html = response
+                .text()
+                .await
+                .map_err(|err| DepotError::Upstream(err.to_string()))?;
+            parse_pep503_html(&normalized, &url, &html)
+        };
 
         // Populate caches
         self.cache_file_urls(&project).await;
@@ -126,6 +142,95 @@ impl PypiUpstreamClient {
             cache.insert(file.filename.clone(), (now, file.url.clone()));
         }
     }
+}
+
+fn parse_pep503_html(name: &str, base_url: &str, html: &str) -> PypiProject {
+    let mut files = Vec::new();
+    let mut rest = html;
+    while let Some(anchor_start) = rest.find("<a ") {
+        rest = &rest[anchor_start + 3..];
+        let Some(anchor_end) = rest.find('>') else {
+            break;
+        };
+        let attrs = &rest[..anchor_end];
+        rest = &rest[anchor_end + 1..];
+        let Some(text_end) = rest.find("</a>") else {
+            break;
+        };
+        let filename = html_unescape(rest[..text_end].trim());
+        rest = &rest[text_end + 4..];
+        let Some(href) = attr(attrs, "href") else {
+            continue;
+        };
+        let (url, hashes) = split_hash_fragment(&absolute_url(base_url, &href));
+        files.push(PypiFile {
+            filename,
+            url,
+            hashes,
+            requires_python: attr(attrs, "data-requires-python").map(|value| html_unescape(&value)),
+            yanked: attr(attrs, "data-yanked")
+                .map(|value| {
+                    if value.is_empty() {
+                        PypiYanked::Bool(true)
+                    } else {
+                        PypiYanked::Reason(html_unescape(&value))
+                    }
+                })
+                .unwrap_or_default(),
+            size: None,
+            upload_time: None,
+            dist_info_metadata: None,
+            gpg_sig: None,
+        });
+    }
+    PypiProject {
+        meta: PypiMeta {
+            api_version: "1.0".to_string(),
+        },
+        name: name.to_string(),
+        versions: Vec::new(),
+        files,
+    }
+}
+
+fn attr(attrs: &str, name: &str) -> Option<String> {
+    let needle = format!("{name}=\"");
+    let start = attrs.find(&needle)? + needle.len();
+    let value = &attrs[start..];
+    let end = value.find('"')?;
+    Some(value[..end].to_string())
+}
+
+fn absolute_url(base_url: &str, href: &str) -> String {
+    if href.starts_with("http://") || href.starts_with("https://") {
+        href.to_string()
+    } else if href.starts_with('/') {
+        let Some((scheme_host, _)) = base_url.split_once("/simple/") else {
+            return href.to_string();
+        };
+        format!("{scheme_host}{href}")
+    } else {
+        format!("{base_url}{href}")
+    }
+}
+
+fn split_hash_fragment(url: &str) -> (String, std::collections::HashMap<String, String>) {
+    let Some((url, fragment)) = url.split_once('#') else {
+        return (url.to_string(), Default::default());
+    };
+    let mut hashes = std::collections::HashMap::new();
+    if let Some((algorithm, value)) = fragment.split_once('=') {
+        hashes.insert(algorithm.to_string(), value.to_string());
+    }
+    (url.to_string(), hashes)
+}
+
+fn html_unescape(input: &str) -> String {
+    input
+        .replace("&quot;", "\"")
+        .replace("&gt;", ">")
+        .replace("&lt;", "<")
+        .replace("&amp;", "&")
 }
 
 #[async_trait]

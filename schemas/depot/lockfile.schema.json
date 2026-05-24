@@ -6,7 +6,11 @@
         "pypi",
         "npm",
         "cargo",
-        "hex"
+        "hex",
+        "maven",
+        "rubygems",
+        "nuget",
+        "pub"
       ],
       "type": "string"
     },

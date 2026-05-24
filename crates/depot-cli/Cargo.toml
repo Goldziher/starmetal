@@ -10,11 +10,25 @@ ignored = ["depot-adapters", "depot-storage", "serde"]
 
 [features]
 default = ["full"]
-full = ["pypi", "npm", "cargo-registry", "hex", "backend-fs"]
+full = [
+    "pypi",
+    "npm",
+    "cargo-registry",
+    "hex",
+    "maven",
+    "rubygems",
+    "nuget",
+    "pub",
+    "backend-fs",
+]
 pypi = ["depot-adapters/pypi", "depot-server/pypi"]
 npm = ["depot-adapters/npm", "depot-server/npm"]
 cargo-registry = ["depot-adapters/cargo-registry", "depot-server/cargo-registry"]
 hex = ["depot-adapters/hex", "depot-server/hex"]
+maven = ["depot-adapters/maven", "depot-server/maven"]
+rubygems = ["depot-adapters/rubygems", "depot-server/rubygems"]
+nuget = ["depot-adapters/nuget", "depot-server/nuget"]
+pub = ["depot-adapters/pub", "depot-server/pub"]
 backend-fs = ["depot-storage/backend-fs"]
 backend-memory = ["depot-storage/backend-memory"]
 backend-s3 = ["depot-storage/backend-s3"]

@@ -59,6 +59,7 @@ memchr = "2"
 
 # Storage
 opendal = "0.55"
+prost = "0.14"
 
 # HTTP client
 reqwest = { version = "0.13", default-features = false, features = [

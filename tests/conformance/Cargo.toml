@@ -13,8 +13,12 @@ bytes.workspace = true
 depot-adapters = { path = "../../crates/depot-adapters", default-features = false, features = [
     "cargo-registry",
     "hex",
+    "maven",
     "npm",
+    "nuget",
     "pypi",
+    "pub",
+    "rubygems",
 ] }
 depot-core.workspace = true
 roxmltree = "0.21"

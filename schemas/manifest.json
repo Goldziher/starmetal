@@ -473,12 +473,11 @@
       ],
       "source_kinds": [
         "official-prose-index",
-        "official-prose",
-        "official-schema-index"
+        "official-prose"
       ],
       "generated_by": "depot-schema-manager",
       "validated_by": "crates/depot-core/tests/schema_validation.rs; tests/conformance",
-      "blake3": "ffd02e2ec06ffe5629ebcaa0cc473dd29895522e3e5e7c1de7a57054a2c68eb2"
+      "blake3": "8ae0d4d6916d45d3213ac8987c8d1d064db4fc7c22e31040fc1156419c1b5d74"
     },
     {
       "id": "pypi-simple-index",
@@ -588,7 +587,7 @@
       ],
       "generated_by": "depot-schema-manager",
       "validated_by": "crates/depot-core/tests/schema_validation.rs",
-      "blake3": "b8630523574e0b44201248775d672a27750654290e2408ab596653ba7ec42696"
+      "blake3": "fee3b74f9a314ae80c2cbcc800f10fb71774df15615a6df7cf73dc0fa6106c76"
     },
     {
       "id": "nuget-v3-service-index",
@@ -681,7 +680,7 @@
       ],
       "generated_by": "depot-schema-manager",
       "validated_by": "crates/depot-core/tests/schema_validation.rs",
-      "blake3": "08b4f0d8b834dc26f29a8a7aa6bc928e75813aad7ef92e27a98f34060220ead2"
+      "blake3": "7e8bfd8dfe310b615263b2827e749d3ef43d1e288aa402f9fdfd3085e550638e"
     }
   ]
 }

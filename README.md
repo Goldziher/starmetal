@@ -2,7 +2,7 @@
 
 Self-hosted, armored universal package registry.
 
-Depot speaks native registry protocols (PyPI, npm, Cargo, Hex) and acts as a pull-through cache between package manager clients and upstream registries. Artifacts are stored with blake3 integrity verification, policy enforcement, and optional at-rest encryption.
+Depot speaks native registry protocols and acts as a pull-through cache between package manager clients and upstream registries. Artifacts are stored with blake3 integrity verification and policy enforcement. At-rest encryption, rate limiting, full sync, and lockfile update workflows are deferred production-hardening work.
 
 ## Registry Support
 
@@ -12,6 +12,10 @@ Depot speaks native registry protocols (PyPI, npm, Cargo, Hex) and acts as a pul
 | npm | Registry API | Working (`npm install` verified) |
 | Cargo | Sparse Index (RFC 2789) | Working (`cargo fetch` verified) |
 | Hex | Repository API | Working (`mix hex.package fetch` verified) |
+| Maven | Maven Central-compatible artifact layout | MVP pull-through adapter |
+| RubyGems | Bundler Compact Index | MVP pull-through adapter |
+| NuGet | V3 restore API | MVP pull-through adapter |
+| pub.dev | Hosted Pub Repository v2 | MVP pull-through adapter |
 
 ## Requirements
 
@@ -69,7 +73,7 @@ See the [Architecture Overview](docs/architecture.md) for Mermaid diagrams and d
 
 Canonical JSON Schemas for all registry protocols and depot's own formats are in [`schemas/`](schemas/):
 
-- [`schemas/registries/`](schemas/registries/) — PyPI, npm, Cargo, Hex response schemas
+- [`schemas/registries/`](schemas/registries/) — derived registry schemas where the protocol is JSON-like
 - [`schemas/depot/`](schemas/depot/) — config and lockfile schemas
 
 ## License

@@ -14,12 +14,16 @@ pypi = ["depot-adapters/pypi"]
 npm = ["depot-adapters/npm"]
 cargo-registry = ["depot-adapters/cargo-registry"]
 hex = ["depot-adapters/hex"]
+maven = ["depot-adapters/maven"]
+rubygems = ["depot-adapters/rubygems"]
+nuget = ["depot-adapters/nuget"]
+pub = ["depot-adapters/pub"]
 
 [dependencies]
 axum.workspace = true
 depot-adapters = { workspace = true, default-features = false }
 depot-core.workspace = true
-depot-storage.workspace = true
+depot-storage = { workspace = true, default-features = false }
 tokio.workspace = true
 tower.workspace = true
 tower-http.workspace = true

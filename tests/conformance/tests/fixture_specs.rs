@@ -10,17 +10,23 @@ use depot_adapters::cargo::models::{cargo_entries_to_version_infos, cargo_entry_
 use depot_adapters::cargo::upstream::CargoUpstreamClient;
 use depot_adapters::hex::models::{hex_package_to_version_infos, hex_release_to_metadata};
 use depot_adapters::hex::upstream::HexUpstreamClient;
+use depot_adapters::maven::upstream::MavenUpstreamClient;
 use depot_adapters::npm::models::{extract_version_infos, extract_version_metadata};
 use depot_adapters::npm::upstream::NpmUpstreamClient;
+use depot_adapters::nuget::upstream::NuGetUpstreamClient;
+use depot_adapters::pubdev::upstream::PubUpstreamClient;
 use depot_adapters::pypi::models::{pypi_files_to_metadata, pypi_project_to_version_infos};
 use depot_adapters::pypi::upstream::PypiUpstreamClient;
-use depot_adapters::{cargo, hex, npm, pypi};
+use depot_adapters::rubygems::upstream::RubyGemsUpstreamClient;
+use depot_adapters::{cargo, hex, maven, npm, nuget, pubdev, pypi, rubygems};
 use depot_core::error::{DepotError, Result};
 use depot_core::package::{ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata};
 use depot_core::ports::PackageService;
 use depot_core::registry::cargo::{CargoConfig, CargoIndexEntry, sparse_index_path};
 use depot_core::registry::hex::HexPackage;
 use depot_core::registry::npm::NpmPackument;
+use depot_core::registry::nuget::{NugetPackageVersions, NugetServiceIndex};
+use depot_core::registry::pubdev::PubPackage;
 use depot_core::registry::pypi::PypiProject;
 use roxmltree::{Document, Node};
 use tower::ServiceExt;
@@ -33,6 +39,9 @@ fn fixture(path: &str) -> &'static str {
         "maven/maven-metadata.xml" => include_str!("../fixtures/maven/maven-metadata.xml"),
         "maven/sample-lib-1.2.0.pom" => include_str!("../fixtures/maven/sample-lib-1.2.0.pom"),
         "npm/sample-packument.json" => include_str!("../fixtures/npm/sample-packument.json"),
+        "nuget/service-index.json" => include_str!("../fixtures/nuget/service-index.json"),
+        "nuget/versions.json" => include_str!("../fixtures/nuget/versions.json"),
+        "pub/sample-package.json" => include_str!("../fixtures/pub/sample-package.json"),
         "pypi/sample-project.json" => include_str!("../fixtures/pypi/sample-project.json"),
         "rubygems/versions" => include_str!("../fixtures/rubygems/versions"),
         "rubygems/info-rack" => include_str!("../fixtures/rubygems/info-rack"),
@@ -62,6 +71,10 @@ struct RouteState {
     npm_upstream: Arc<NpmUpstreamClient>,
     cargo_upstream: Arc<CargoUpstreamClient>,
     hex_upstream: Arc<HexUpstreamClient>,
+    maven_upstream: Arc<MavenUpstreamClient>,
+    rubygems_upstream: Arc<RubyGemsUpstreamClient>,
+    nuget_upstream: Arc<NuGetUpstreamClient>,
+    pub_upstream: Arc<PubUpstreamClient>,
 }
 
 impl RouteState {
@@ -80,6 +93,12 @@ impl RouteState {
                 "http://127.0.0.1".into(),
                 "http://127.0.0.1/repo".into(),
             )),
+            maven_upstream: Arc::new(MavenUpstreamClient::new("http://127.0.0.1/maven2".into())),
+            rubygems_upstream: Arc::new(RubyGemsUpstreamClient::new("http://127.0.0.1".into())),
+            nuget_upstream: Arc::new(NuGetUpstreamClient::new(
+                "http://127.0.0.1/v3/index.json".into(),
+            )),
+            pub_upstream: Arc::new(PubUpstreamClient::new("http://127.0.0.1".into())),
         }
     }
 }
@@ -124,6 +143,46 @@ impl hex::HasHexState for RouteState {
     }
 }
 
+impl maven::HasMavenState for RouteState {
+    fn package_service(&self) -> &Arc<dyn PackageService> {
+        &self.service
+    }
+
+    fn maven_upstream(&self) -> &Arc<MavenUpstreamClient> {
+        &self.maven_upstream
+    }
+}
+
+impl rubygems::HasRubyGemsState for RouteState {
+    fn package_service(&self) -> &Arc<dyn PackageService> {
+        &self.service
+    }
+
+    fn rubygems_upstream(&self) -> &Arc<RubyGemsUpstreamClient> {
+        &self.rubygems_upstream
+    }
+}
+
+impl nuget::HasNuGetState for RouteState {
+    fn package_service(&self) -> &Arc<dyn PackageService> {
+        &self.service
+    }
+
+    fn nuget_upstream(&self) -> &Arc<NuGetUpstreamClient> {
+        &self.nuget_upstream
+    }
+}
+
+impl pubdev::HasPubState for RouteState {
+    fn package_service(&self) -> &Arc<dyn PackageService> {
+        &self.service
+    }
+
+    fn pub_upstream(&self) -> &Arc<PubUpstreamClient> {
+        &self.pub_upstream
+    }
+}
+
 struct FixtureService {
     raw: HashMap<(Ecosystem, String), Bytes>,
 }
@@ -150,6 +209,12 @@ impl PackageService for FixtureService {
         ecosystem: Ecosystem,
         name: &PackageName,
     ) -> Result<Vec<VersionInfo>> {
+        if ecosystem == Ecosystem::NuGet {
+            return Ok(vec![VersionInfo {
+                version: "1.0.0".to_string(),
+                yanked: false,
+            }]);
+        }
         match self.get_raw_upstream(ecosystem, name).await? {
             Some(_) => Ok(Vec::new()),
             None => Err(DepotError::PackageNotFound {
@@ -170,6 +235,10 @@ impl PackageService for FixtureService {
             name: name.as_str().to_string(),
             version: version.to_string(),
         })
+    }
+
+    async fn validate_metadata(&self, _metadata: &VersionMetadata) -> Result<()> {
+        Ok(())
     }
 
     async fn get_artifact(&self, artifact_id: &ArtifactId) -> Result<Bytes> {
@@ -324,6 +393,112 @@ async fn hex_route_serves_fixture_package_metadata() {
     );
 }
 
+#[tokio::test]
+async fn maven_route_serves_metadata_and_checksum_sidecar() {
+    let state = RouteState::with_raw([(
+        Ecosystem::Maven,
+        "com/example/sample-lib",
+        fixture("maven/maven-metadata.xml"),
+    )]);
+    let router = maven::router::<RouteState>().with_state(state);
+    let request = Request::builder()
+        .uri("/com/example/sample-lib/maven-metadata.xml")
+        .body(Body::empty())
+        .expect("request should build");
+
+    let (status, body) = response_body(router, request).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("<artifactId>sample-lib</artifactId>"));
+
+    let state = RouteState::with_raw([]);
+    let router = maven::router::<RouteState>().with_state(state);
+    let request = Request::builder()
+        .uri("/com/example/sample-lib/1.2.0/sample-lib-1.2.0.jar.sha1")
+        .body(Body::empty())
+        .expect("request should build");
+
+    let (status, body) = response_body(router, request).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(!body.trim().is_empty());
+}
+
+#[tokio::test]
+async fn rubygems_route_serves_compact_index_and_gem() {
+    let state = RouteState::with_raw([
+        (
+            Ecosystem::RubyGems,
+            "_versions",
+            fixture("rubygems/versions"),
+        ),
+        (
+            Ecosystem::RubyGems,
+            "info/rack",
+            fixture("rubygems/info-rack"),
+        ),
+    ]);
+    let router = rubygems::router::<RouteState>().with_state(state);
+    let request = Request::builder()
+        .uri("/versions")
+        .body(Body::empty())
+        .expect("request should build");
+    let (status, body) = response_body(router.clone(), request).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("rack 2.2.8"));
+
+    let request = Request::builder()
+        .uri("/gems/rack-2.2.8.gem")
+        .body(Body::empty())
+        .expect("request should build");
+    let (status, body) = response_body(router, request).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, "artifact:rack-2.2.8.gem");
+}
+
+#[tokio::test]
+async fn nuget_route_serves_service_index_versions_and_checksum() {
+    let state = RouteState::with_raw([]);
+    let router = nuget::router::<RouteState>().with_state(state);
+    let request = Request::builder()
+        .uri("/v3/index.json")
+        .header(header::HOST, "depot.local")
+        .body(Body::empty())
+        .expect("request should build");
+    let (status, body) = response_body(router.clone(), request).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("PackageBaseAddress/3.0.0"));
+
+    let request = Request::builder()
+        .uri("/v3-flatcontainer/sample/index.json")
+        .body(Body::empty())
+        .expect("request should build");
+    let (status, body) = response_body(router.clone(), request).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("1.0.0"));
+
+    let request = Request::builder()
+        .uri("/v3-flatcontainer/sample/1.0.0/sample.1.0.0.nupkg.sha512")
+        .body(Body::empty())
+        .expect("request should build");
+    let (status, body) = response_body(router, request).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(!body.trim().is_empty());
+}
+
+#[tokio::test]
+async fn pub_route_serves_fixture_package_with_rewritten_archive() {
+    let state =
+        RouteState::with_raw([(Ecosystem::Pub, "sample", fixture("pub/sample-package.json"))]);
+    let router = pubdev::router::<RouteState>().with_state(state);
+    let request = Request::builder()
+        .uri("/api/packages/sample")
+        .header(header::HOST, "depot.local")
+        .body(Body::empty())
+        .expect("request should build");
+    let (status, body) = response_body(router, request).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("http://depot.local/pub/api/archives/sample-1.0.0.tar.gz"));
+}
+
 #[test]
 fn pypi_fixture_conforms_to_pep_691_project_expectations() {
     let project: PypiProject = serde_json::from_str(fixture("pypi/sample-project.json"))
@@ -465,6 +640,23 @@ fn hex_fixture_conforms_to_package_api_expectations() {
         .expect("fixture contains Hex 1.0.0 release");
     assert_eq!(metadata.license.as_deref(), Some("Apache-2.0"));
     assert_eq!(metadata.artifacts[0].filename, "sample_hex-1.0.0.tar");
+}
+
+#[test]
+fn nuget_and_pub_fixtures_conform_to_generated_shapes() {
+    let service_index: NugetServiceIndex =
+        serde_json::from_str(fixture("nuget/service-index.json"))
+            .expect("NuGet service index fixture should deserialize");
+    assert_eq!(service_index.version, "3.0.0");
+
+    let versions: NugetPackageVersions = serde_json::from_str(fixture("nuget/versions.json"))
+        .expect("NuGet versions fixture should deserialize");
+    assert_eq!(versions.versions, ["1.0.0", "1.1.0"]);
+
+    let package: PubPackage = serde_json::from_str(fixture("pub/sample-package.json"))
+        .expect("pub.dev package fixture should deserialize");
+    assert_eq!(package.name, "sample");
+    assert_eq!(package.versions[0].version, "1.0.0");
 }
 
 #[test]

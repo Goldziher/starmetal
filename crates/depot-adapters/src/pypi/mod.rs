@@ -134,6 +134,9 @@ async fn simple_project<S: HasPypiState>(
     };
 
     // Rewrite file URLs to point through depot
+    validate_project_metadata(service.as_ref(), &name, &project)
+        .await
+        .map_err(|err| map_error(&err))?;
     models::rewrite_project_file_urls(&mut project);
 
     let format =
@@ -154,6 +157,21 @@ async fn simple_project<S: HasPypiState>(
                 .into_response())
         }
     }
+}
+
+async fn validate_project_metadata(
+    service: &dyn PackageService,
+    name: &PackageName,
+    project: &depot_core::registry::pypi::PypiProject,
+) -> Result<(), DepotError> {
+    for version in models::pypi_project_to_version_infos(project) {
+        if let Some(metadata) =
+            models::pypi_files_to_metadata(name, &version.version, &project.files)
+        {
+            service.validate_metadata(&metadata).await?;
+        }
+    }
+    Ok(())
 }
 
 /// GET /packages/{name}/{version}/{filename} -- download an artifact.

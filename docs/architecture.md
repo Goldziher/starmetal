@@ -13,6 +13,10 @@ graph TB
         npm_cli[npm]
         cargo_cli[cargo]
         mix[mix]
+        mvn[mvn]
+        bundle[bundle]
+        dotnet[dotnet]
+        dart_pub[dart pub]
     end
 
     subgraph "Tower Middleware"
@@ -27,13 +31,17 @@ graph TB
         npm_adapter[npm Adapter<br/>Registry API]
         cargo_adapter[Cargo Adapter<br/>Sparse Index]
         hex_adapter[Hex Adapter<br/>Repository API]
+        maven_adapter[Maven Adapter<br/>Artifact Layout]
+        rubygems_adapter[RubyGems Adapter<br/>Compact Index]
+        nuget_adapter[NuGet Adapter<br/>V3 Restore]
+        pub_adapter[pub.dev Adapter<br/>Hosted Repository v2]
     end
 
     subgraph "Application Service"
         caching_svc[CachingPackageService<br/>depot-service]
         policy[Policy Engine]
         integrity[Blake3 Integrity<br/>sidecar .blake3 files]
-        lockfile[Lock File]
+        lockfile[Lock File<br/>deferred CLI workflows]
     end
 
     subgraph "Core Domain"
@@ -46,6 +54,7 @@ graph TB
         upstream_npm[npm Upstream<br/>5min TTL cache]
         upstream_cargo[Cargo Upstream<br/>5min TTL cache]
         upstream_hex[Hex Upstream<br/>5min TTL cache]
+        upstream_more[Maven/RubyGems/NuGet/pub.dev Upstreams]
     end
 
     subgraph "Storage Backends"
@@ -58,6 +67,10 @@ graph TB
     npm_cli --> trace
     cargo_cli --> trace
     mix --> trace
+    mvn --> trace
+    bundle --> trace
+    dotnet --> trace
+    dart_pub --> trace
 
     trace --> cors --> auth --> compress
 
@@ -65,16 +78,28 @@ graph TB
     compress --> npm_adapter
     compress --> cargo_adapter
     compress --> hex_adapter
+    compress --> maven_adapter
+    compress --> rubygems_adapter
+    compress --> nuget_adapter
+    compress --> pub_adapter
 
     pypi_adapter --> caching_svc
     npm_adapter --> caching_svc
     cargo_adapter --> caching_svc
     hex_adapter --> caching_svc
+    maven_adapter --> caching_svc
+    rubygems_adapter --> caching_svc
+    nuget_adapter --> caching_svc
+    pub_adapter --> caching_svc
 
     pypi_adapter -.-> upstream_pypi
     npm_adapter -.-> upstream_npm
     cargo_adapter -.-> upstream_cargo
     hex_adapter -.-> upstream_hex
+    maven_adapter -.-> upstream_more
+    rubygems_adapter -.-> upstream_more
+    nuget_adapter -.-> upstream_more
+    pub_adapter -.-> upstream_more
 
     caching_svc --> svc
     caching_svc --> policy
@@ -203,8 +228,11 @@ expectations for each schema family. `schemas/sources.toml` is the reviewed sour
 metadata.
 
 Registry types derive `JsonSchema` via `schemars` where possible. Representative fixtures and schema
-files are validated with `jsonschema` in tests. `task schema:check` verifies fetched artifacts and
-generated schemas; `task conformance` verifies adapter behavior against local registry fixtures.
+files are validated with `jsonschema` in tests. `task schema:check` verifies committed fetched
+artifacts, generated schemas, and manifest hashes without live upstream network drift;
+`task schema:check-live` compares fetched artifacts with current upstream sources when maintainers
+intentionally want that signal. `task conformance` verifies adapter behavior against local registry
+fixtures.
 Runtime upstream-response validation is deferred until needed for production hardening.
 
 ## ADRs

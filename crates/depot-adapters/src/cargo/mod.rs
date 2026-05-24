@@ -140,7 +140,24 @@ async fn serve_index<S: HasCargoState>(
         ndjson
     };
 
+    validate_index_metadata(service.as_ref(), &package_name, &body)
+        .await
+        .map_err(|err| map_error(&err))?;
     Ok(([(axum::http::header::CONTENT_TYPE, "text/plain")], body).into_response())
+}
+
+async fn validate_index_metadata(
+    service: &dyn PackageService,
+    package_name: &PackageName,
+    body: &str,
+) -> Result<(), DepotError> {
+    for line in body.lines().filter(|line| !line.trim().is_empty()) {
+        let entry: depot_core::registry::cargo::CargoIndexEntry = serde_json::from_str(line)
+            .map_err(|err| DepotError::Storage(format!("invalid cached cargo index: {err}")))?;
+        let metadata = models::cargo_entry_to_metadata(package_name, &entry);
+        service.validate_metadata(&metadata).await?;
+    }
+    Ok(())
 }
 
 /// GET /crates/{name}/{version}/download -- download a crate archive.

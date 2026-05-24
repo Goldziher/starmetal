@@ -25,6 +25,9 @@ pub trait PackageService: Send + Sync {
         version: &str,
     ) -> Result<VersionMetadata>;
 
+    /// Validate metadata against current service policy.
+    async fn validate_metadata(&self, metadata: &VersionMetadata) -> Result<()>;
+
     /// Download an artifact.
     async fn get_artifact(&self, artifact_id: &ArtifactId) -> Result<Bytes>;
 

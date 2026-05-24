@@ -158,6 +158,13 @@
     },
     "UpstreamConfig": {
       "properties": {
+        "artifact_url": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "enabled": {
           "default": true,
           "type": "boolean"
@@ -228,7 +235,48 @@
       "additionalProperties": {
         "$ref": "#/$defs/UpstreamConfig"
       },
-      "default": {},
+      "default": {
+        "cargo": {
+          "artifact_url": "https://static.crates.io/crates",
+          "enabled": true,
+          "url": "https://index.crates.io"
+        },
+        "hex": {
+          "artifact_url": "https://repo.hex.pm",
+          "enabled": true,
+          "url": "https://hex.pm"
+        },
+        "maven": {
+          "artifact_url": null,
+          "enabled": false,
+          "url": "https://repo1.maven.org/maven2"
+        },
+        "npm": {
+          "artifact_url": null,
+          "enabled": true,
+          "url": "https://registry.npmjs.org"
+        },
+        "nuget": {
+          "artifact_url": null,
+          "enabled": false,
+          "url": "https://api.nuget.org/v3/index.json"
+        },
+        "pub": {
+          "artifact_url": null,
+          "enabled": false,
+          "url": "https://pub.dev"
+        },
+        "pypi": {
+          "artifact_url": null,
+          "enabled": true,
+          "url": "https://pypi.org"
+        },
+        "rubygems": {
+          "artifact_url": "https://rubygems.org",
+          "enabled": false,
+          "url": "https://rubygems.org"
+        }
+      },
       "type": "object"
     }
   },
