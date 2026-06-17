@@ -10,6 +10,7 @@
     ".claude/agents/qa-engineer.md",
     ".claude/agents/security-auditor.md",
     ".claude/agents/test-writer.md",
+    ".claude/plugins.json",
     ".claude/skills/iterate/SKILL.md",
     ".claude/skills/parallelize/SKILL.md",
     ".codex/agents/cli-engineer.toml",
@@ -23,6 +24,7 @@
     ".codex/agents/test-writer.toml",
     ".codex/commands/iterate.md",
     ".codex/commands/parallelize.md",
+    ".codex/plugins.json",
     "AGENTS.md",
     "CLAUDE.md"
   ]

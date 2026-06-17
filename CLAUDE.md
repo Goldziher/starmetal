@@ -1,7 +1,7 @@
 <!--
 🤖 AI-RULEZ :: GENERATED FILE — DO NOT EDIT DIRECTLY
 Project: depot
-Generated: 2026-05-23 14:25:16
+Generated: 2026-06-17 20:42:33
 Source: .ai-rulez/config.toml
 Target: CLAUDE.md
 Content: rules=38, sections=0, agents=9
@@ -12,7 +12,7 @@ the .ai-rulez/ directory. This file is auto-generated from source files.
 
 .AI-RULEZ FOLDER ORGANIZATION
 Root content (always included):
-  .ai-rulez/config.yaml    Main configuration (presets, profiles)
+  .ai-rulez/config.toml    Main configuration (presets, profiles)
   .ai-rulez/rules/         Mandatory rules for AI assistants
   .ai-rulez/context/       Reference documentation
   .ai-rulez/skills/        Specialized AI prompts
@@ -23,7 +23,7 @@ Domain content (profile-specific):
   .ai-rulez/domains/{name}/context/  Domain-specific documentation
   .ai-rulez/domains/{name}/skills/   Domain-specific AI prompts
 
-Profiles in config.yaml control which domains are included.
+Profiles in config.toml control which domains are included.
 
 INSTRUCTIONS FOR AI AGENTS
 1. NEVER edit this file (CLAUDE.md) - it is auto-generated
@@ -31,7 +31,7 @@ INSTRUCTIONS FOR AI AGENTS
 2. ALWAYS edit files in .ai-rulez/ instead:
    - Add/modify rules: .ai-rulez/rules/*.md
    - Add/modify context: .ai-rulez/context/*.md
-   - Update config: .ai-rulez/config.yaml
+   - Update config: .ai-rulez/config.toml
    - Domain-specific: .ai-rulez/domains/{name}/rules/*.md
 
 3. PREFER using the MCP Server (if available):
@@ -46,8 +46,8 @@ INSTRUCTIONS FOR AI AGENTS
    c. Commit both .ai-rulez/ and generated files
 
 Documentation: https://github.com/Goldziher/ai-rulez
-Content-Hash: blake3:fadf61d1f168ef01aa4207d394c1dbb250a1596bd983ec2c0816f5b0421a7114
-Source-Hash: blake3:44c11aa2c3f71454f048d65f464368665baec7fcd0c481820bd25fa19a84226b
+Content-Hash: blake3:42af5e3082ff9c356f2f68586fe4b01bece98199d07e285dc52bc0374b588d79
+Source-Hash: blake3:448377bfcf2a2388b878b296fb5ebdf52a1c5ce3464311aac7b8ed4e90a80585
 -->
 
 # depot
@@ -127,6 +127,7 @@ Remove dead code instead of commenting it out. Version control preserves history
 **Priority:** high
 
 Audit dependencies before adding them. Prefer well-maintained, widely-used packages with active maintenance. Pin versions and commit lock files. Use language-specific audit tools in CI:
+
 - Rust: `cargo audit`, `cargo deny` (license + advisory policies)
 - Python: `pip-audit`, `bandit` (SAST)
 - JavaScript/TypeScript: `npm audit`, `pnpm audit`
