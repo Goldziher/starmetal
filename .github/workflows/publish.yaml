@@ -363,7 +363,8 @@ jobs:
             "$tag" \
             dist/starmetal-* \
             "starmetal_${{ needs.meta.outputs.version }}_checksums.txt" \
-            --clobber
+            --clobber \
+            --repo "$GITHUB_REPOSITORY"
 
   package_dry_run:
     name: Dry-run package-manager builds
