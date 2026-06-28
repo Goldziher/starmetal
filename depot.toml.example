@@ -40,6 +40,27 @@ url = "https://hex.pm"
 artifact_url = "https://repo.hex.pm"
 max_response_bytes = 536870912
 
+[upstream.maven]
+enabled = true
+url = "https://repo1.maven.org/maven2"
+max_response_bytes = 536870912
+
+[upstream.rubygems]
+enabled = true
+url = "https://rubygems.org"
+artifact_url = "https://rubygems.org"
+max_response_bytes = 536870912
+
+[upstream.nuget]
+enabled = true
+url = "https://api.nuget.org/v3/index.json"
+max_response_bytes = 536870912
+
+[upstream.pub]
+enabled = true
+url = "https://pub.dev"
+max_response_bytes = 536870912
+
 [policies]
 block_unlicensed = false
 max_vuln_severity = "critical"   # low | medium | high | critical

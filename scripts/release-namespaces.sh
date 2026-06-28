@@ -26,7 +26,7 @@ Publishes the StarMetal v0.0.1 namespace packages:
 
 Credentials:
   npm:   run npm login before publishing, or let the script prompt via npm login
-  PyPI:  set UV_PUBLISH_TOKEN or PYPI_TOKEN, or paste the token at the prompt
+  PyPI:  legacy local publish only; future releases use trusted publishing
   Cargo: run cargo login first, or set CARGO_REGISTRY_TOKEN
 USAGE
 }

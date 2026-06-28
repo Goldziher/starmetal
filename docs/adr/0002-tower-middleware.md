@@ -9,8 +9,8 @@ Accepted
 Starmetal serves several native registry protocols through one HTTP server. Cross-cutting behavior must
 be applied consistently while adapters remain focused on protocol translation.
 
-The private MVP is read-focused. Write routes exist for experimental local publishing, but native
-publishing is not an MVP support claim.
+The product is experimental and read/proxy focused. Write routes exist for experimental local
+publishing, but native publishing is not supported.
 
 ## Decision
 
@@ -21,22 +21,22 @@ Implemented stack, from request entry inward:
 | Layer | Implemented behavior |
 |-------|----------------------|
 | `TraceLayer` | Structured request tracing |
-| `CorsLayer::permissive()` | Broad CORS policy for MVP development and local clients |
+| `CorsLayer::permissive()` | Broad CORS policy for experimental development and local clients |
 | Bearer auth middleware | Optional read-token enforcement when `auth.enabled = true` |
 | `CompressionLayer` | Response compression |
 
 Adapter routers are mounted by feature flag and runtime upstream enablement:
 
-| Prefix | Runtime default | MVP position |
+| Prefix | Runtime default | Status |
 |--------|-----------------|--------------|
-| `/pypi` | Enabled | Read candidate after live E2E |
-| `/npm` | Enabled | Read candidate after live E2E |
-| `/cargo` | Enabled | Read candidate after live E2E |
-| `/hex` | Enabled | Read candidate after live E2E |
-| `/maven` | Disabled | Opt-in beta |
-| `/rubygems` | Disabled | Opt-in beta |
-| `/nuget` | Disabled | Opt-in beta |
-| `/pub` | Disabled | Opt-in beta |
+| `/pypi` | Enabled | Experimental core |
+| `/npm` | Enabled | Experimental core |
+| `/cargo` | Enabled | Experimental core |
+| `/hex` | Enabled | Experimental core |
+| `/maven` | Enabled | Experimental core |
+| `/rubygems` | Enabled | Experimental core |
+| `/nuget` | Enabled | Experimental core |
+| `/pub` | Enabled | Experimental core |
 
 ## Implemented
 

@@ -32,9 +32,9 @@ Implemented CLI surface:
 | `sm package unyank` | Experimental local publishing |
 | `sm cache delete-artifact` | Implemented local cache operation |
 | `sm mcp serve` | Implemented stdio MCP |
-| `sm sync` | Not implemented in MVP |
-| `sm lock verify` | Not implemented in MVP |
-| `sm lock update` | Not implemented in MVP |
+| `sm sync` | Not implemented |
+| `sm lock verify` | Not implemented |
+| `sm lock update` | Not implemented |
 
 MCP runs over stdio. Read tools are available by default. Mutating tools require
 `sm mcp serve --allow-writes`.
@@ -59,5 +59,5 @@ MCP runs over stdio. Read tools are available by default. Mutating tools require
 ## Consequences
 
 - CLI and MCP stay aligned through `depot-ops`.
-- The private MVP can be operated locally without a config file.
+- Starmetal can be operated locally without a config file.
 - Remote admin behavior needs a separate ADR.

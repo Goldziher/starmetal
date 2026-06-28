@@ -1,19 +1,46 @@
 #!/usr/bin/env node
 
-const version = "0.0.1";
-const args = process.argv.slice(2);
+const { spawnSync } = require("node:child_process");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 
-if (args.includes("--version") || args.includes("-V")) {
-  console.log(`sm ${version}`);
-  process.exit(0);
+const binaryName = os.type() === "Windows_NT" ? "sm.exe" : "sm";
+const binaryPath = path.join(__dirname, binaryName);
+const installScriptPath = path.join(__dirname, "..", "install.js");
+
+function ensureBinaryExists() {
+  if (fs.existsSync(binaryPath)) {
+    return true;
+  }
+
+  console.error(`sm: binary not found at ${binaryPath}; running installer...`);
+  if (!fs.existsSync(installScriptPath)) {
+    console.error(`sm: installer not found at ${installScriptPath}`);
+    return false;
+  }
+
+  const installResult = spawnSync(process.execPath, [installScriptPath], {
+    stdio: "inherit",
+    cwd: path.dirname(installScriptPath),
+  });
+
+  return installResult.status === 0 && fs.existsSync(binaryPath);
 }
 
-console.log(`StarMetal ${version}
+if (!ensureBinaryExists()) {
+  console.error(
+    "sm: native binary is unavailable.\n" +
+      "The postinstall step that downloads the binary from GitHub releases may have failed.\n" +
+      "Try reinstalling with `npm install -g starmetal`, or use Homebrew, Docker, or cargo from source.",
+  );
+  process.exit(1);
+}
 
-This npm package reserves the public starmetal namespace while the native sm CLI distribution is finalized.
-Use the Docker image or build from source for the current registry server:
+const result = spawnSync(binaryPath, process.argv.slice(2), { stdio: "inherit" });
+if (result.error) {
+  console.error(`sm: failed to spawn binary: ${result.error.message}`);
+  process.exit(1);
+}
 
-  docker run --rm -p 8080:8080 starmetal:${version}
-  cargo build --release -p depot-cli --bin sm
-
-Repository: https://github.com/Goldziher/starmetal`);
+process.exit(result.status ?? 0);

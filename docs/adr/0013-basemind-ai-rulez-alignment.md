@@ -24,7 +24,7 @@ Rules:
 - Edit `.ai-rulez/` source files when AI instructions need to change.
 - Run `task setup:ai-rulez` or `npx -y ai-rulez@latest generate` after AI-Rulez source changes.
 - Keep Basemind-provided guidance subordinate to repo ADRs, tests, and generated support matrices.
-- Do not let AI instructions describe beta adapters or publishing as more supported than ADR-0011
+- Do not let AI instructions describe registry adapters or publishing as more supported than ADR-0011
   and ADR-0009 allow.
 
 ## Implemented
@@ -40,4 +40,4 @@ Rules:
 ## Consequences
 
 - Future AI instruction updates must go through AI-Rulez sources and regeneration.
-- Documentation claims remain the source of truth for private MVP readiness.
+- Documentation claims remain the source of truth for experimental readiness.

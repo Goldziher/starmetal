@@ -90,15 +90,21 @@ tasks:
       - task: docker:build
       - ./docker/pressure-test.sh
 
+  docker:integration:
+    desc: Run Docker smoke and pressure integration tests
+    cmds:
+      - task: docker:smoke
+      - ./docker/pressure-test.sh
+
   docker:run:
     desc: Run Starmetal with filesystem storage in a Docker volume
     cmds:
       - docker run --rm --publish 8080:8080 --volume starmetal-data:/var/lib/starmetal starmetal:local
 
-  docker:publish:gcr:
-    desc: Build and push the Starmetal image to GCP Artifact Registry
+  docker:publish:ghcr:
+    desc: Build and push the Starmetal image to GitHub Container Registry
     cmds:
-      - ./scripts/publish-docker-gcr.sh --push
+      - ./scripts/publish-docker-ghcr.sh --push
 
   release:namespaces:
     desc: Dry-run the v0.0.1 npm, PyPI, and crates.io namespace packages
@@ -109,6 +115,29 @@ tasks:
     desc: Publish the v0.0.1 npm, PyPI, and crates.io namespace packages
     cmds:
       - ./scripts/release-namespaces.sh --publish
+
+  release:sync-version:
+    desc: Sync Cargo, npm, PyPI, and wrapper versions for a release
+    requires:
+      vars: [VERSION]
+    cmds:
+      - ./scripts/release-bump.sh {{.VERSION}}
+
+  release:dry-run:
+    desc: Dispatch package and Docker dry-run release workflows
+    requires:
+      vars: [VERSION]
+    vars:
+      REF: '{{.REF | default "main"}}'
+    cmds:
+      - ./scripts/release-dry-run.sh {{.VERSION}} {{.REF}}
+
+  release:tag:
+    desc: Create and push a release tag; package and Docker workflows publish from the tag
+    requires:
+      vars: [VERSION]
+    cmds:
+      - ./scripts/release-tag.sh {{.VERSION}}
 
   setup:ai-rulez:
     desc: Generate AI assistant configuration files

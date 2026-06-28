@@ -6,13 +6,12 @@ Accepted
 
 ## Context
 
-Starmetal is a private/internal MVP for a package registry cache. It must isolate package protocol
+Starmetal is a private/internal experimental package registry cache. It must isolate package protocol
 details, storage backends, policy checks, integrity verification, and operator workflows so each can
 move independently.
 
-The MVP support claim is intentionally narrow. PyPI, npm, Cargo, and Hex are read candidates after
-fresh live native-client E2E verification. Maven, RubyGems, NuGet, and pub.dev are opt-in beta read
-adapters. Native publishing is outside MVP.
+All implemented read/proxy adapters are experimental core capabilities. Native publishing is not
+supported; local publishing is experimental and disabled by default.
 
 ## Decision
 
@@ -52,7 +51,7 @@ I/O framework crates.
 
 ## Deferred
 
-- Public support claims for any registry before live native-client E2E evidence.
+- Public support claims beyond experimental before live native-client E2E evidence.
 - Native publishing support claims.
 - Upstream publish forwarding.
 - Remote administration over HTTP.
@@ -63,5 +62,5 @@ I/O framework crates.
 
 - Core behavior is testable without network or storage services.
 - Protocol adapters can evolve without changing storage backends.
-- Experimental write behavior stays isolated from MVP read-support claims.
+- Experimental write behavior stays isolated from read/proxy support claims.
 - New framework dependencies in `depot-core` require a new ADR.

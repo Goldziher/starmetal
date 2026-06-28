@@ -9,17 +9,17 @@ Starmetal gives teams one controlled path for package-manager traffic across eco
 native registry protocols, proxies upstream reads, stores artifacts behind a common service layer,
 verifies cached bytes with Blake3, and applies policy before dependencies reach clients.
 
-Private MVP scope: **PyPI, npm, Cargo, and Hex read workflows** after fresh live E2E. Maven,
-RubyGems, NuGet, and pub.dev are opt-in beta adapters. Native publishing is out of MVP; local
-publishing is experimental and disabled by default.
+StarMetal is experimental. All currently implemented registry read/proxy workflows are experimental
+core capabilities; native publishing is not supported yet, and local publishing remains experimental
+and disabled by default.
 
-PyPI · npm · Cargo · Hex · Maven · RubyGems · NuGet · pub.dev · Blake3 integrity · OpenDAL storage · CLI + MCP ops
+PyPI · npm · Cargo · Hex · Maven · RubyGems · NuGet · pub.dev
 
 [![CI](https://img.shields.io/github/actions/workflow/status/Goldziher/starmetal/ci.yaml?style=flat-square)](https://github.com/Goldziher/starmetal/actions/workflows/ci.yaml)
 [![Rust 2024](https://img.shields.io/badge/rust-2024-orange?style=flat-square)](https://www.rust-lang.org/)
-[![License: BUSL-1.1](https://img.shields.io/badge/license-BUSL--1.1-blue?style=flat-square)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 
-[Quick Start](#quick-start) · [Registry Support](#registry-support) · [Docker](#docker) · [Deployment](#deployment) · [Release](docs/release.md) · [Architecture](#architecture) · [ADRs](#adrs)
+[Install](#install) · [Quick Start](#quick-start) · [Registry Support](#registry-support) · [Docker](#docker) · [Deployment](#deployment) · [Release](docs/release.md) · [Architecture](#architecture) · [ADRs](#adrs)
 
 </div>
 
@@ -47,22 +47,42 @@ Starmetal sits between package-manager clients and upstream registries:
 | Operations | CLI plus stdio MCP tools over the same local operations layer |
 
 Starmetal is built for private/internal deployments first. It is not yet a public internet-facing
-registry product, and support claims are gated on live native-client E2E.
+registry product, and every registry workflow should be treated as experimental until fresh live
+native-client E2E passes for that ecosystem.
 
 ## Registry Support
 
 | Registry | Route | Default | Status |
 |---|---:|---:|---|
-| PyPI | `/pypi` | Enabled | Private MVP read candidate after live E2E |
-| npm | `/npm` | Enabled | Private MVP read candidate after live E2E |
-| Cargo | `/cargo` | Enabled | Private MVP read candidate after live E2E |
-| Hex | `/hex` | Enabled | Private MVP read candidate after live E2E |
-| Maven | `/maven` | Disabled | Opt-in beta read adapter |
-| RubyGems | `/rubygems` | Disabled | Opt-in beta read adapter |
-| NuGet | `/nuget` | Disabled | Opt-in beta read adapter |
-| pub.dev | `/pub` | Disabled | Opt-in beta read adapter |
+| PyPI | `/pypi` | Enabled | Experimental core read/proxy adapter |
+| npm | `/npm` | Enabled | Experimental core read/proxy adapter |
+| Cargo | `/cargo` | Enabled | Experimental core read/proxy adapter |
+| Hex | `/hex` | Enabled | Experimental core read/proxy adapter |
+| Maven | `/maven` | Enabled | Experimental core read/proxy adapter |
+| RubyGems | `/rubygems` | Enabled | Experimental core read/proxy adapter |
+| NuGet | `/nuget` | Enabled | Experimental core read/proxy adapter |
+| pub.dev | `/pub` | Enabled | Experimental core read/proxy adapter |
 
-See [ADR-0011](docs/adr/0011-mvp-support-matrix.md) for the support criteria and promotion gates.
+Planned registry work includes OCI/distribution, Go modules, Composer, Conda, Debian/APT, and RPM/YUM.
+See [ADR-0011](docs/adr/0011-mvp-support-matrix.md) for experimental support criteria and promotion gates.
+
+## Install
+
+Docker is the primary deployment path. Release builds also publish verified `sm` installers for npm
+and PyPI, Homebrew bottles through `Goldziher/homebrew-tap`, and GitHub release archives for direct
+download.
+
+```bash
+docker run --rm -p 8080:8080 -v starmetal-data:/var/lib/starmetal ghcr.io/goldziher/starmetal:latest
+brew install Goldziher/tap/starmetal
+npm install -g starmetal
+pipx install starmetal
+```
+
+The npm package requires Node 22+. The PyPI package requires Python 3.10+. Both download the
+matching prebuilt binary from GitHub Releases and verify it against the release checksums file. The
+crates.io `starmetal` package currently holds the public namespace while the Rust crate publishing
+layout is finalized.
 
 ## Quick Start
 
@@ -79,7 +99,7 @@ task setup
 # Build and run tests
 task ci
 
-# Install the local sm binary
+# Install the local sm binary from this checkout
 cargo install --path crates/depot-cli --bin sm
 
 # Start Starmetal with defaults on 127.0.0.1:8080
@@ -95,7 +115,7 @@ sm --no-config --storage-backend memory registry status
 sm package fetch pypi six 1.16.0 six-1.16.0.tar.gz
 ```
 
-Run live native-client E2E before treating an MVP read workflow as ready:
+Run live native-client E2E before treating an experimental read workflow as ready:
 
 ```bash
 task test:e2e:pypi
@@ -104,19 +124,22 @@ task test:e2e:cargo
 task test:e2e:hex
 ```
 
-`task ci:live-e2e` runs the same MVP live gate plus live schema freshness checks.
+`task ci:live-e2e` runs the same live gate plus live schema freshness checks.
 
 ## Docker
 
-Docker is the primary deployment path for private MVP installs. The image uses Chainguard builder and
-runtime bases, runs as non-root, and uses one image for both API and CLI operations. Its entrypoint is
-`sm`; its default command is `serve`, so no args starts the API server, and args after the image name
-run normal CLI or MCP commands.
+Docker is the primary deployment path for private experimental installs. The image uses Chainguard
+builder and runtime bases, runs as non-root, and uses one image for both API and CLI operations. Its
+entrypoint is `sm`; its default command is `serve`, so no args starts the API server, and args after
+the image name run normal CLI or MCP commands.
+
+Published images use GitHub Container Registry: `ghcr.io/goldziher/starmetal`.
 
 ```bash
 docker build -t starmetal:local .
 docker run --rm -p 8080:8080 -v starmetal-data:/var/lib/starmetal starmetal:local
 docker run --rm starmetal:local config validate
+docker run --rm starmetal:local mcp serve
 ```
 
 Use a mounted config file for production settings, auth tokens, `public_base_url`, and S3/GCS
@@ -155,7 +178,7 @@ tokens = ["replace-with-a-secret-token"]
 
 Upstream URLs must be HTTPS and public by default. Local, private-network, or insecure upstreams
 require explicit `allow_private_network` and `allow_insecure` settings. See
-[docs/deployment.md](docs/deployment.md) for full private-MVP configuration guidance.
+[docs/deployment.md](docs/deployment.md) for full private deployment configuration guidance.
 
 ## CLI and MCP
 
@@ -242,10 +265,10 @@ under [`schemas/`](schemas/):
 - [0008 - Registry Expansion, superseded](docs/adr/0008-registry-expansion.md)
 - [0009 - Publishing and Upload Workflows](docs/adr/0009-publishing-upload-workflows.md)
 - [0010 - CLI and MCP Operations](docs/adr/0010-cli-mcp-operations.md)
-- [0011 - Private MVP Support Matrix](docs/adr/0011-mvp-support-matrix.md)
+- [0011 - Experimental Support Matrix](docs/adr/0011-mvp-support-matrix.md)
 - [0012 - CI Quality Gates](docs/adr/0012-ci-quality-gates.md)
 - [0013 - Basemind and AI-Rulez Alignment](docs/adr/0013-basemind-ai-rulez-alignment.md)
 
 ## License
 
-[BUSL-1.1](LICENSE)
+[MIT](LICENSE)

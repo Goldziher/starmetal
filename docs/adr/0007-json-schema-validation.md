@@ -11,7 +11,7 @@ OpenAPI, source code, and examples. JSON Schema files in this repo are usually S
 validation artifacts, not upstream authority.
 
 Schema evidence supports implementation and documentation. It does not by itself make a registry
-MVP-supported.
+production-supported.
 
 ## Decision
 

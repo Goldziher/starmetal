@@ -10,7 +10,7 @@ Starmetal must speak native registry protocols so existing package-manager clien
 private cache without client-side plugins.
 
 Support status is separate from implementation existence. An adapter can exist, compile, and have
-tests while still being a private MVP candidate or opt-in beta.
+tests while still being experimental.
 
 ## Decision
 
@@ -18,16 +18,16 @@ Each protocol adapter is an axum `Router` in `depot-adapters`.
 
 Implemented adapters:
 
-| Feature | Prefix | Protocol | MVP position |
+| Feature | Prefix | Protocol | Status |
 |---------|--------|----------|--------------|
-| `pypi` | `/pypi` | PyPI Simple Repository API, PEP 503/691 | Read candidate after live E2E |
-| `npm` | `/npm` | npm registry API | Read candidate after live E2E |
-| `cargo-registry` | `/cargo` | Cargo sparse index | Read candidate after live E2E |
-| `hex` | `/hex` | Hex API and registry proxy | Read candidate after live E2E |
-| `maven` | `/maven` | Maven repository layout | Opt-in beta |
-| `rubygems` | `/rubygems` | RubyGems Compact Index | Opt-in beta |
-| `nuget` | `/nuget` | NuGet V3 restore API | Opt-in beta |
-| `pub` | `/pub` | Hosted Pub Repository v2 | Opt-in beta |
+| `pypi` | `/pypi` | PyPI Simple Repository API, PEP 503/691 | Experimental core |
+| `npm` | `/npm` | npm registry API | Experimental core |
+| `cargo-registry` | `/cargo` | Cargo sparse index | Experimental core |
+| `hex` | `/hex` | Hex API and registry proxy | Experimental core |
+| `maven` | `/maven` | Maven repository layout | Experimental core |
+| `rubygems` | `/rubygems` | RubyGems Compact Index | Experimental core |
+| `nuget` | `/nuget` | NuGet V3 restore API | Experimental core |
+| `pub` | `/pub` | Hosted Pub Repository v2 | Experimental core |
 
 Each adapter owns:
 
@@ -39,8 +39,7 @@ Each adapter owns:
 ## Implemented
 
 - Pull-through read routes for all eight adapters behind feature flags.
-- Runtime default enablement for PyPI, npm, Cargo, and Hex.
-- Runtime default disablement for Maven, RubyGems, NuGet, and pub.dev.
+- Runtime default enablement for all implemented adapters.
 - Route-level conformance and ignored live E2E tests.
 - Raw upstream response preservation where native fields would be lost by domain conversion.
 - npm packument handling with raw `serde_json::Value`.
@@ -59,7 +58,7 @@ Each adapter owns:
 
 Read compatibility and write compatibility are separate claims.
 
-A read adapter can be documented as MVP-ready only when it has:
+A read adapter can be documented beyond experimental only when it has:
 
 1. Source linkage in `schemas/sources.toml`.
 2. Fixture or route conformance coverage.

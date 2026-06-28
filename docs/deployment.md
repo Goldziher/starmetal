@@ -2,19 +2,18 @@
 
 ## Scope
 
-This guide is for private/internal MVP deployments.
+This guide is for private/internal experimental deployments.
 
 Supported deployment posture:
 
-- Pull-through reads only.
-- PyPI, npm, Cargo, and Hex as read candidates after live E2E.
-- Maven, RubyGems, NuGet, and pub.dev only when explicitly opted into beta testing.
+- Pull-through reads/proxying only.
+- PyPI, npm, Cargo, Hex, Maven, RubyGems, NuGet, and pub.dev as experimental core capabilities.
 - Native publishing disabled.
 - Experimental local publishing disabled unless testing it intentionally.
 
 ## Container Deploy
 
-Docker is the primary private-MVP deployment path. The Dockerfile uses Chainguard images for both
+Docker is the primary private deployment path. The Dockerfile uses Chainguard images for both
 the Rust builder and the shell-less glibc runtime, pins the default image digests, and runs the final
 container as non-root UID/GID `65532`. The single image is used for both modes: `ENTRYPOINT` is
 `sm`, and `CMD` is `serve`.
@@ -65,12 +64,12 @@ docker run --rm \
   starmetal:local
 ```
 
-Build a smaller MVP-read image by compiling only the read candidate adapters and filesystem storage:
+Build a smaller image by compiling only selected adapters and filesystem storage:
 
 ```sh
 docker build \
   --build-arg CARGO_FEATURES=pypi,npm,cargo-registry,hex,backend-fs \
-  -t starmetal:mvp .
+  -t starmetal:minimal .
 ```
 
 ## Build From Source
@@ -96,7 +95,7 @@ Generate a starter config:
 sm config init
 ```
 
-Private MVP baseline:
+Private experimental baseline:
 
 ```toml
 [server]
@@ -116,12 +115,12 @@ tokens = []
 enabled = false
 ```
 
-Defaults already configure public upstream URLs. By default, PyPI, npm, Cargo, and Hex are enabled;
-Maven, RubyGems, NuGet, and pub.dev are disabled.
+Defaults already configure public upstream URLs. By default, all implemented upstreams are enabled:
+PyPI, npm, Cargo, Hex, Maven, RubyGems, NuGet, and pub.dev.
 
-## Opt Into Beta Read Adapters
+## Registry Upstreams
 
-Enable beta adapters only for explicit validation:
+Override upstreams when you need a private mirror or an explicit policy boundary:
 
 ```toml
 [upstream.maven]
@@ -142,7 +141,7 @@ enabled = true
 url = "https://pub.dev"
 ```
 
-Run the matching live E2E task before treating a beta workflow as ready:
+Run matching live E2E tasks before treating any experimental workflow as ready:
 
 ```sh
 task test:e2e:maven
@@ -164,7 +163,7 @@ For a release binary:
 ```
 
 Starmetal serves HTTP. Put it behind a private network boundary or a TLS-terminating reverse proxy. Do
-not expose the MVP server directly to the public internet.
+not expose the experimental server directly to the public internet.
 
 ## OpenDAL Storage
 
@@ -222,7 +221,7 @@ Do not commit real tokens.
 
 ## Publishing
 
-Native publishing is out of MVP. Keep publishing disabled for normal private deployments:
+Native publishing is not supported. Keep local publishing disabled for normal private deployments:
 
 ```toml
 [publishing]
@@ -259,7 +258,7 @@ task schema:validate
 task conformance
 ```
 
-Live read E2E for MVP candidates:
+Live read E2E:
 
 ```sh
 task test:e2e:pypi
@@ -280,9 +279,9 @@ Use these route bases when configuring private clients:
 | npm | `http://<host>:8080/npm` |
 | Cargo | `sparse+http://<host>:8080/cargo/` |
 | Hex | `http://<host>:8080/hex` |
-| Maven beta | `http://<host>:8080/maven` |
-| RubyGems beta | `http://<host>:8080/rubygems` |
-| NuGet beta | `http://<host>:8080/nuget/v3/index.json` |
-| pub.dev beta | `http://<host>:8080/pub` |
+| Maven | `http://<host>:8080/maven` |
+| RubyGems | `http://<host>:8080/rubygems` |
+| NuGet | `http://<host>:8080/nuget/v3/index.json` |
+| pub.dev | `http://<host>:8080/pub` |
 
 Replace `http` with `https` at the reverse proxy boundary when TLS is enabled there.

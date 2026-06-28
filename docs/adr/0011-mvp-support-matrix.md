@@ -1,4 +1,4 @@
-# ADR-0011: Private MVP Support Matrix
+# ADR-0011: Experimental Support Matrix
 
 ## Status
 
@@ -6,31 +6,34 @@ Accepted
 
 ## Context
 
-Starmetal has implementation for more registries than the private MVP should claim as supported. The
-project needs one source of truth for README, architecture, deployment, and ADR language.
+Starmetal currently implements several registry read/proxy adapters, but the whole product remains
+experimental. Documentation needs one source of truth that distinguishes implemented experimental
+capability from production-ready support.
 
 ## Decision
 
-Starmetal's MVP is private/internal. Support claims are limited to read workflows and require fresh live
-native-client E2E evidence.
+All implemented registry read/proxy adapters are core experimental capabilities and are enabled by
+default in runtime config. Native publishing is not supported. Local publishing is experimental,
+disabled by default, and requires explicit scoped tokens when enabled.
 
-| Registry | Default route enablement | Read status | Write status |
-|----------|--------------------------|-------------|--------------|
-| PyPI | Enabled | MVP read candidate after live E2E | Native publishing out of MVP |
-| npm | Enabled | MVP read candidate after live E2E | Native publishing out of MVP |
-| Cargo | Enabled | MVP read candidate after live E2E | Native publishing out of MVP |
-| Hex | Enabled | MVP read candidate after live E2E | Native publishing out of MVP |
-| Maven | Disabled | Opt-in beta | Native publishing out of MVP |
-| RubyGems | Disabled | Opt-in beta | Native publishing out of MVP |
-| NuGet | Disabled | Opt-in beta | Native publishing out of MVP |
-| pub.dev | Disabled | Opt-in beta | Native publishing out of MVP |
+| Registry | Default route enablement | Read/proxy status | Write status |
+|----------|--------------------------|-------------------|--------------|
+| PyPI | Enabled | Experimental core capability | Native publishing not supported |
+| npm | Enabled | Experimental core capability | Native publishing not supported |
+| Cargo | Enabled | Experimental core capability | Native publishing not supported |
+| Hex | Enabled | Experimental core capability | Native publishing not supported |
+| Maven | Enabled | Experimental core capability | Native publishing not supported |
+| RubyGems | Enabled | Experimental core capability | Native publishing not supported |
+| NuGet | Enabled | Experimental core capability | Native publishing not supported |
+| pub.dev | Enabled | Experimental core capability | Native publishing not supported |
 
-Local publishing is experimental for all ecosystems. It is disabled by default, requires scoped
-publishing tokens when enabled, and must not be described as native publishing support.
+Planned registry work includes OCI/distribution, Go modules, Composer, Conda, Debian/APT, and
+RPM/YUM. Planned registries must not be described as implemented until adapters, upstream clients,
+fixtures, and route coverage exist.
 
 ## Promotion Criteria
 
-To promote a read workflow into MVP-ready documentation, the registry must have:
+Before describing any workflow as ready beyond experimental, the registry must have:
 
 1. Feature-gated adapter and runtime route.
 2. Source provenance in `schemas/sources.toml`.
@@ -48,6 +51,6 @@ To promote native publishing in a future ADR, the registry must also have:
 
 ## Consequences
 
-- README and architecture support tables must use this ADR.
-- Beta adapters can stay compiled in full builds without becoming MVP-supported.
+- README, architecture, deployment, and AI instruction sources must use this ADR.
+- All current registry adapters are core experimental capabilities, not production support claims.
 - Tests may exist before support claims, but docs must label those paths accurately.

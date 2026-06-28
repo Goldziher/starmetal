@@ -6,11 +6,10 @@ Starmetal is a private/internal package registry cache. It speaks native package
 stores artifacts through OpenDAL, verifies cached bytes with Blake3 sidecars, and applies policy in
 the service layer.
 
-MVP support is read-focused:
+Support is experimental and read/proxy focused:
 
-- PyPI, npm, Cargo, and Hex are MVP read candidates after fresh live native-client E2E passes.
-- Maven, RubyGems, NuGet, and pub.dev are opt-in beta read adapters.
-- Native publishing is out of MVP.
+- PyPI, npm, Cargo, Hex, Maven, RubyGems, NuGet, and pub.dev are experimental core capabilities.
+- Native publishing is not supported.
 - Local publishing is experimental and disabled by default.
 
 See [ADR-0011](adr/0011-mvp-support-matrix.md) for the support matrix.
@@ -24,7 +23,7 @@ graph TB
         npm_cli[npm]
         cargo_cli[cargo]
         mix[mix]
-        beta_clients[Maven / Bundler / dotnet / dart pub]
+        extra_clients[Maven / Bundler / dotnet / dart pub]
     end
 
     subgraph Middleware
@@ -39,7 +38,7 @@ graph TB
         npm[npm]
         cargo[Cargo]
         hex[Hex]
-        beta[Maven / RubyGems / NuGet / pub.dev beta]
+        extra[Maven / RubyGems / NuGet / pub.dev]
     end
 
     subgraph Service
@@ -66,7 +65,7 @@ graph TB
     npm_cli --> trace
     cargo_cli --> trace
     mix --> trace
-    beta_clients --> trace
+    extra_clients --> trace
 
     trace --> cors --> auth --> compress
 
@@ -74,19 +73,19 @@ graph TB
     compress --> npm
     compress --> cargo
     compress --> hex
-    compress --> beta
+    compress --> extra
 
     pypi --> package_service
     npm --> package_service
     cargo --> package_service
     hex --> package_service
-    beta --> package_service
+    extra --> package_service
 
     pypi -. native shape .-> upstreams
     npm -. native shape .-> upstreams
     cargo -. native shape .-> upstreams
     hex -. native shape .-> upstreams
-    beta -. native shape .-> upstreams
+    extra -. native shape .-> upstreams
 
     package_service --> caching
     publishing --> caching
@@ -167,21 +166,21 @@ sequenceDiagram
 
 | Registry | Route prefix | Default enabled | Read status |
 |----------|--------------|-----------------|-------------|
-| PyPI | `/pypi` | Yes | MVP read candidate after live E2E |
-| npm | `/npm` | Yes | MVP read candidate after live E2E |
-| Cargo | `/cargo` | Yes | MVP read candidate after live E2E |
-| Hex | `/hex` | Yes | MVP read candidate after live E2E |
-| Maven | `/maven` | No | Opt-in beta |
-| RubyGems | `/rubygems` | No | Opt-in beta |
-| NuGet | `/nuget` | No | Opt-in beta |
-| pub.dev | `/pub` | No | Opt-in beta |
+| PyPI | `/pypi` | Yes | Experimental core |
+| npm | `/npm` | Yes | Experimental core |
+| Cargo | `/cargo` | Yes | Experimental core |
+| Hex | `/hex` | Yes | Experimental core |
+| Maven | `/maven` | Yes | Experimental core |
+| RubyGems | `/rubygems` | Yes | Experimental core |
+| NuGet | `/nuget` | Yes | Experimental core |
+| pub.dev | `/pub` | Yes | Experimental core |
 
 Runtime defaults are defined in `Config::default()`. Full CLI builds compile all adapters, but
-compiled does not mean enabled or MVP-supported.
+compiled does not mean production-supported.
 
 ## Publishing Scope
 
-Native publishing is outside MVP. Existing write routes and `sm package publish` are experimental
+Native publishing is not supported. Existing write routes and `sm package publish` are experimental
 local publishing surfaces:
 
 - Disabled by default through `[publishing] enabled = false`.
@@ -242,6 +241,6 @@ not create support claims without live E2E evidence.
 - [0008 - Registry Expansion, superseded](adr/0008-registry-expansion.md)
 - [0009 - Publishing and Upload Workflows](adr/0009-publishing-upload-workflows.md)
 - [0010 - CLI and MCP Operations](adr/0010-cli-mcp-operations.md)
-- [0011 - Private MVP Support Matrix](adr/0011-mvp-support-matrix.md)
+- [0011 - Experimental Support Matrix](adr/0011-mvp-support-matrix.md)
 - [0012 - CI Quality Gates](adr/0012-ci-quality-gates.md)
 - [0013 - Basemind and AI-Rulez Alignment](adr/0013-basemind-ai-rulez-alignment.md)

@@ -1,4 +1,4 @@
-# ADR-0012: CI Quality Gates for MVP Readiness
+# ADR-0012: CI Quality Gates for Experimental Readiness
 
 ## Status
 
@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-Starmetal's private MVP readiness depends on generated schemas, offline conformance, Rust correctness,
+Starmetal's experimental readiness depends on generated schemas, offline conformance, Rust correctness,
 and live native-client behavior. These checks have different cost profiles and should be separated.
 
 ## Decision
@@ -32,7 +32,7 @@ practical.
 
 ## Live E2E Gate
 
-Run before documenting a registry as MVP-ready:
+Run before documenting a registry beyond experimental:
 
 ```sh
 task test:e2e:pypi
@@ -41,7 +41,7 @@ task test:e2e:cargo
 task test:e2e:hex
 ```
 
-Run beta E2E checks before promoting opt-in beta adapters:
+Run live E2E checks before promoting additional registry confidence:
 
 ```sh
 task test:e2e:maven

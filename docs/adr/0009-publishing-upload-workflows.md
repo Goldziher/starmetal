@@ -2,25 +2,25 @@
 
 ## Status
 
-Accepted for direction; MVP support deferred
+Accepted for direction; production support deferred
 
 ## Context
 
 Publishing has a larger blast radius than pull-through reads. It accepts untrusted archives, mutates
 metadata, requires write authorization, and has ecosystem-specific failure modes.
 
-The private MVP is read-focused. Native publishing is out of MVP. Local publishing exists only as
-experimental plumbing for internal validation and operator workflows.
+The product is experimental and read/proxy focused. Native publishing is unsupported. Local
+publishing exists only as experimental plumbing for internal validation and operator workflows.
 
 ## Decision
 
 Starmetal separates three concepts:
 
-| Concept | MVP position |
+| Concept | Position |
 |---------|--------------|
-| Pull-through reads | Private MVP read candidates or opt-in beta, per ADR-0011 |
+| Pull-through reads | Experimental core capabilities, per ADR-0011 |
 | Local publishing | Experimental, disabled by default |
-| Native publishing support | Out of MVP |
+| Native publishing support | Unsupported |
 
 Implemented local publishing behavior:
 
@@ -33,7 +33,7 @@ Implemented local publishing behavior:
 - CLI and MCP can publish one explicit artifact when publishing is enabled.
 - MCP mutating tools require `sm mcp serve --allow-writes`.
 - Native upload routes call `PublishingService` when publishing is enabled, but these routes are
-  experimental and do not create an MVP support claim.
+  experimental and do not create a native publishing support claim.
 
 ## Implemented
 

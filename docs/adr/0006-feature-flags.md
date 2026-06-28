@@ -6,8 +6,8 @@ Accepted
 
 ## Context
 
-Starmetal compiles optional protocol adapters and storage backends. Private MVP defaults should keep the
-core four read adapters available while letting operators opt into beta adapters.
+Starmetal compiles optional protocol adapters and storage backends. The default CLI build should keep
+all implemented registry adapters available while still allowing smaller operator builds.
 
 Feature availability is not the same as a support claim.
 
@@ -17,16 +17,16 @@ Cargo feature flags gate adapters and storage backends.
 
 Implemented `depot-adapters` features:
 
-| Feature | Default in `depot-adapters` | MVP position |
+| Feature | Default in `depot-adapters` | Status |
 |---------|-----------------------------|--------------|
-| `pypi` | Yes | Read candidate after live E2E |
-| `npm` | Yes | Read candidate after live E2E |
-| `cargo-registry` | Yes | Read candidate after live E2E |
-| `hex` | Yes | Read candidate after live E2E |
-| `maven` | No | Opt-in beta |
-| `rubygems` | No | Opt-in beta |
-| `nuget` | No | Opt-in beta |
-| `pub` | No | Opt-in beta |
+| `pypi` | Yes | Experimental core |
+| `npm` | Yes | Experimental core |
+| `cargo-registry` | Yes | Experimental core |
+| `hex` | Yes | Experimental core |
+| `maven` | No | Experimental core in full CLI builds |
+| `rubygems` | No | Experimental core in full CLI builds |
+| `nuget` | No | Experimental core in full CLI builds |
+| `pub` | No | Experimental core in full CLI builds |
 
 Implemented `depot-storage` features:
 
@@ -38,7 +38,7 @@ Implemented `depot-storage` features:
 | `backend-memory` | Tests and local workflows |
 
 `depot-cli` defaults to `full`, which compiles all adapters plus filesystem storage. Runtime config
-still disables Maven, RubyGems, NuGet, and pub.dev upstreams by default.
+enables all implemented upstreams by default.
 
 Example minimal build:
 
@@ -56,7 +56,7 @@ cargo build -p depot-cli --no-default-features --features pypi,backend-s3
 
 ## Deferred
 
-- Treating compiled beta adapters as MVP-supported by default.
+- Production support claims without live E2E evidence.
 - At-rest encryption, despite config and schema fields.
 - Matrix CI for every feature combination.
 

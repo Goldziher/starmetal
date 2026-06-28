@@ -9,8 +9,8 @@ Accepted
 Package ecosystems use different integrity algorithms. Starmetal needs one internal cache integrity
 mechanism while preserving upstream hashes where registries provide them.
 
-Starmetal also has a TOML lock file format, but lock verification and update CLI workflows are not part
-of the private MVP.
+Starmetal also has a TOML lock file format, but lock verification and update CLI workflows are not
+implemented yet.
 
 ## Decision
 

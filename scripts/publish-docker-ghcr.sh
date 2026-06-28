@@ -2,26 +2,25 @@
 set -euo pipefail
 
 VERSION="${VERSION:-0.0.1}"
-GCP_REGION="${GCP_REGION:-us-central1}"
-GCP_ARTIFACT_REGISTRY_REPOSITORY="${GCP_ARTIFACT_REGISTRY_REPOSITORY:-starmetal}"
+GHCR_REGISTRY="${GHCR_REGISTRY:-ghcr.io}"
+GHCR_OWNER="${GHCR_OWNER:-goldziher}"
 IMAGE_NAME="${IMAGE_NAME:-starmetal}"
 MODE="dry-run"
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/publish-docker-gcr.sh [--dry-run|--push]
+Usage: scripts/publish-docker-ghcr.sh [--dry-run|--push]
 
-Builds the StarMetal Docker image and optionally pushes it to GCP Artifact Registry.
-
-Required for --push unless DOCKER_IMAGE is set:
-  GCP_PROJECT_ID
+Builds the StarMetal Docker image and optionally pushes it to GitHub Container Registry.
 
 Optional:
   VERSION=0.0.1
-  GCP_REGION=us-central1
-  GCP_ARTIFACT_REGISTRY_REPOSITORY=starmetal
+  GHCR_REGISTRY=ghcr.io
+  GHCR_OWNER=goldziher
   IMAGE_NAME=starmetal
-  DOCKER_IMAGE=us-central1-docker.pkg.dev/<project>/<repo>/starmetal
+  DOCKER_IMAGE=ghcr.io/goldziher/starmetal
+  GHCR_USERNAME=<github-user>
+  GHCR_TOKEN=<token-with-package-write>
 USAGE
 }
 
@@ -43,14 +42,7 @@ done
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [[ -z "${DOCKER_IMAGE:-}" ]]; then
-  if [[ -n "${GCP_PROJECT_ID:-}" ]]; then
-    DOCKER_IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REGISTRY_REPOSITORY}/${IMAGE_NAME}"
-  elif [[ "$MODE" == "dry-run" ]]; then
-    DOCKER_IMAGE="$IMAGE_NAME"
-  else
-    echo "GCP_PROJECT_ID is required for --push when DOCKER_IMAGE is not set" >&2
-    exit 1
-  fi
+  DOCKER_IMAGE="${GHCR_REGISTRY}/${GHCR_OWNER,,}/${IMAGE_NAME}"
 fi
 
 cd "$REPO_ROOT"
@@ -64,9 +56,13 @@ if [[ "$MODE" == "dry-run" ]]; then
   exit 0
 fi
 
-if command -v gcloud >/dev/null 2>&1; then
-  registry_host="${DOCKER_IMAGE%%/*}"
-  gcloud auth configure-docker "$registry_host" --quiet
+registry_host="${DOCKER_IMAGE%%/*}"
+username="${GHCR_USERNAME:-${GITHUB_ACTOR:-}}"
+token="${GHCR_TOKEN:-${GITHUB_TOKEN:-}}"
+if [[ -n "$username" && -n "$token" ]]; then
+  printf %s "$token" | docker login "$registry_host" --username "$username" --password-stdin
+else
+  echo "GHCR_USERNAME/GHCR_TOKEN not set; assuming docker is already logged in to ${registry_host}"
 fi
 
 docker push "${DOCKER_IMAGE}:${VERSION}"

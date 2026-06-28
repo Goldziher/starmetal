@@ -1,0 +1,590 @@
+name: Publish Packages
+
+on:
+  push:
+    tags:
+      - v[0-9]+.*
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish or dry-run, e.g. v0.1.0"
+        required: true
+        type: string
+      ref:
+        description: "Git ref to build; defaults to main for dry runs"
+        required: false
+        default: main
+        type: string
+      dry_run:
+        description: "Build and validate without publishing"
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: publish-${{ github.workflow }}-${{ github.ref }}-${{ inputs.tag || '' }}-${{ inputs.dry_run || false }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+  packages: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  meta:
+    name: Resolve release metadata
+    runs-on: ubuntu-latest
+    outputs:
+      checkout_ref: ${{ steps.version.outputs.checkout_ref }}
+      version: ${{ steps.version.outputs.version }}
+      python_version: ${{ steps.version.outputs.python_version }}
+      tag: ${{ steps.version.outputs.tag }}
+      dry_run: ${{ steps.version.outputs.dry_run }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      crates_exists: ${{ steps.published.outputs.crates_exists }}
+      npm_exists: ${{ steps.published.outputs.npm_exists }}
+      pypi_exists: ${{ steps.published.outputs.pypi_exists }}
+      release_assets_exist: ${{ steps.release_assets.outputs.release_assets_exist }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || '' }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Resolve version from tag
+        id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_REF: ${{ inputs.ref }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            tag="$INPUT_TAG"
+            checkout_ref="$INPUT_REF"
+            dry_run="${INPUT_DRY_RUN:-true}"
+          else
+            tag="${GITHUB_REF#refs/tags/}"
+            checkout_ref="$tag"
+            dry_run=false
+          fi
+
+          version="${tag#v}"
+          python_version="${version//-rc./rc}"
+          prerelease=false
+          if [[ "$version" == *-* ]]; then
+            prerelease=true
+          fi
+
+          {
+            echo "checkout_ref=$checkout_ref"
+            echo "tag=$tag"
+            echo "version=$version"
+            echo "python_version=$python_version"
+            echo "dry_run=$dry_run"
+            echo "prerelease=$prerelease"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Release metadata"
+            echo "- Tag: \`$tag\`"
+            echo "- Version: \`$version\`"
+            echo "- Checkout ref: \`$checkout_ref\`"
+            echo "- Dry run: \`$dry_run\`"
+            echo "- Prerelease: \`$prerelease\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify version consistency
+        run: |
+          set -euo pipefail
+          version="${{ steps.version.outputs.version }}"
+          python_version="${{ steps.version.outputs.python_version }}"
+
+          workspace_version="$(grep -E '^version = "' Cargo.toml | head -1 | cut -d'"' -f2)"
+          crate_version="$(grep -E '^version = "' packages/crates/starmetal/Cargo.toml | head -1 | cut -d'"' -f2)"
+          pypi_version="$(grep -E '^version = "' packages/pypi/pyproject.toml | head -1 | cut -d'"' -f2)"
+          pypi_init_version="$(grep -E '^__version__ = "' packages/pypi/src/starmetal/__init__.py | cut -d'"' -f2)"
+          npm_version="$(jq -r '.version' packages/npm/package.json)"
+
+          for pair in \
+            "workspace:${workspace_version}:${version}" \
+            "crates.io:${crate_version}:${version}" \
+            "PyPI:${pypi_version}:${python_version}" \
+            "PyPI __init__:${pypi_init_version}:${python_version}" \
+            "npm:${npm_version}:${version}"; do
+            label="${pair%%:*}"
+            rest="${pair#*:}"
+            actual="${rest%%:*}"
+            expected="${rest#*:}"
+            if [[ "$actual" != "$expected" ]]; then
+              echo "::error::${label} version mismatch: expected ${expected}, got ${actual}"
+              exit 1
+            fi
+          done
+
+      - name: Detect existing package versions
+        id: published
+        run: |
+          set -euo pipefail
+          version="${{ steps.version.outputs.version }}"
+          python_version="${{ steps.version.outputs.python_version }}"
+
+          crates_exists=false
+          if curl -fsS "https://crates.io/api/v1/crates/starmetal/${version}" >/dev/null 2>&1; then
+            crates_exists=true
+          fi
+
+          npm_exists=false
+          if npm view "starmetal@${version}" version >/dev/null 2>&1; then
+            npm_exists=true
+          fi
+
+          pypi_exists=false
+          if curl -fsS "https://pypi.org/pypi/starmetal/${python_version}/json" >/dev/null 2>&1; then
+            pypi_exists=true
+          fi
+
+          {
+            echo "crates_exists=$crates_exists"
+            echo "npm_exists=$npm_exists"
+            echo "pypi_exists=$pypi_exists"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Existing package versions"
+            echo "- crates.io: \`$crates_exists\`"
+            echo "- npm: \`$npm_exists\`"
+            echo "- PyPI: \`$pypi_exists\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Detect existing GitHub release assets
+        id: release_assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ steps.version.outputs.tag }}"
+          dry_run="${{ steps.version.outputs.dry_run }}"
+          release_assets_exist=false
+
+          if [[ "$dry_run" != "true" ]] && gh release view "$tag" >/dev/null 2>&1; then
+            count="$(gh release view "$tag" --json assets --jq '.assets | length')"
+            if [[ "${count:-0}" -gt 0 ]]; then
+              release_assets_exist=true
+            fi
+          fi
+
+          echo "release_assets_exist=$release_assets_exist" >> "$GITHUB_OUTPUT"
+          echo "GitHub release assets exist? $release_assets_exist" >> "$GITHUB_STEP_SUMMARY"
+
+  create_release:
+    name: Create draft GitHub release
+    needs: meta
+    if: needs.meta.outputs.dry_run != 'true' && needs.meta.outputs.release_assets_exist != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.meta.outputs.checkout_ref }}
+
+      - name: Ensure draft release exists
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ needs.meta.outputs.tag }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists."
+            exit 0
+          fi
+
+          prerelease=""
+          if [[ "${{ needs.meta.outputs.prerelease }}" == "true" ]]; then
+            prerelease="--prerelease"
+          fi
+          gh release create "$tag" --title "$tag" --notes "Release $tag" --verify-tag --draft $prerelease
+
+  build_binaries:
+    name: Build binary / ${{ matrix.triple }}
+    needs: [meta, create_release]
+    if: >-
+      always() &&
+      needs.meta.result == 'success' &&
+      (
+        needs.meta.outputs.dry_run == 'true' ||
+        (
+          needs.meta.outputs.release_assets_exist != 'true' &&
+          needs.create_release.result == 'success'
+        )
+      )
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - triple: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            archive: starmetal-x86_64-unknown-linux-gnu.tar.gz
+            binary: sm
+          - triple: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+            archive: starmetal-aarch64-unknown-linux-gnu.tar.gz
+            binary: sm
+          - triple: x86_64-apple-darwin
+            os: macos-15-intel
+            archive: starmetal-x86_64-apple-darwin.tar.gz
+            binary: sm
+          - triple: aarch64-apple-darwin
+            os: macos-15
+            archive: starmetal-aarch64-apple-darwin.tar.gz
+            binary: sm
+          - triple: x86_64-pc-windows-msvc
+            os: windows-latest
+            archive: starmetal-x86_64-pc-windows-msvc.zip
+            binary: sm.exe
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.meta.outputs.checkout_ref }}
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.triple }}
+
+      - name: Setup cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.triple }}
+
+      - name: Build release binary
+        shell: bash
+        run: cargo build --locked --release -p depot-cli --bin sm --target "${{ matrix.triple }}"
+
+      - name: Package release archive
+        shell: bash
+        run: ./scripts/package-release.sh "${{ matrix.triple }}"
+
+      - name: Smoke-test archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir smoke
+          case "${{ matrix.archive }}" in
+            *.zip)
+              if command -v 7z >/dev/null 2>&1; then
+                7z x "${{ matrix.archive }}" -osmoke >/dev/null
+              else
+                unzip -q "${{ matrix.archive }}" -d smoke
+              fi
+              ;;
+            *.tar.gz)
+              tar xzf "${{ matrix.archive }}" -C smoke
+              ;;
+          esac
+          "smoke/${{ matrix.binary }}" --version
+
+      - name: Upload archive artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-archive-${{ matrix.triple }}
+          path: ${{ matrix.archive }}
+          if-no-files-found: error
+
+  checksums:
+    name: Generate release checksums
+    needs: [meta, build_binaries]
+    if: needs.build_binaries.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download archives
+        uses: actions/download-artifact@v7
+        with:
+          pattern: release-archive-*
+          path: dist
+          merge-multiple: true
+
+      - name: Verify expected archives and generate checksums
+        run: |
+          set -euo pipefail
+          expected=(
+            "starmetal-x86_64-unknown-linux-gnu.tar.gz"
+            "starmetal-aarch64-unknown-linux-gnu.tar.gz"
+            "starmetal-x86_64-apple-darwin.tar.gz"
+            "starmetal-aarch64-apple-darwin.tar.gz"
+            "starmetal-x86_64-pc-windows-msvc.zip"
+          )
+
+          missing=0
+          for asset in "${expected[@]}"; do
+            if [[ ! -f "dist/$asset" ]]; then
+              echo "::error::Missing expected archive: $asset"
+              missing=$((missing + 1))
+            fi
+          done
+          if [[ "$missing" -gt 0 ]]; then
+            exit 1
+          fi
+
+          (cd dist && sha256sum starmetal-*.tar.gz starmetal-*.zip | sort) \
+            > "starmetal_${{ needs.meta.outputs.version }}_checksums.txt"
+          cat "starmetal_${{ needs.meta.outputs.version }}_checksums.txt"
+
+      - name: Upload checksum artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-checksums
+          path: starmetal_${{ needs.meta.outputs.version }}_checksums.txt
+          if-no-files-found: error
+
+      - name: Upload archives and checksums to GitHub release
+        if: needs.meta.outputs.dry_run != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ needs.meta.outputs.tag }}"
+          gh release upload \
+            "$tag" \
+            dist/starmetal-* \
+            "starmetal_${{ needs.meta.outputs.version }}_checksums.txt" \
+            --clobber
+
+  package_dry_run:
+    name: Dry-run package-manager builds
+    needs: [meta, checksums]
+    if: needs.meta.outputs.dry_run == 'true' && needs.checksums.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.meta.outputs.checkout_ref }}
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Dry-run crates.io package
+        run: cargo publish --dry-run --manifest-path packages/crates/starmetal/Cargo.toml --allow-dirty
+
+      - name: Dry-run npm package
+        run: |
+          set -euo pipefail
+          cd packages/npm
+          npm pack --dry-run
+
+      - name: Build PyPI package
+        run: uv build packages/pypi --out-dir packages/pypi/dist --clear
+
+  finalize_release:
+    name: Publish GitHub release
+    needs: [meta, checksums]
+    if: >-
+      always() &&
+      needs.meta.result == 'success' &&
+      needs.meta.outputs.dry_run != 'true' &&
+      (
+        needs.meta.outputs.release_assets_exist == 'true' ||
+        needs.checksums.result == 'success'
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - name: Promote complete draft release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ needs.meta.outputs.tag }}"
+          version="${{ needs.meta.outputs.version }}"
+          required=(
+            "starmetal-x86_64-unknown-linux-gnu.tar.gz"
+            "starmetal-aarch64-unknown-linux-gnu.tar.gz"
+            "starmetal-x86_64-apple-darwin.tar.gz"
+            "starmetal-aarch64-apple-darwin.tar.gz"
+            "starmetal-x86_64-pc-windows-msvc.zip"
+            "starmetal_${version}_checksums.txt"
+          )
+
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' > /tmp/assets.txt
+          missing=0
+          for asset in "${required[@]}"; do
+            if ! grep -qx "$asset" /tmp/assets.txt; then
+              echo "::error::release $tag is missing $asset"
+              missing=$((missing + 1))
+            fi
+          done
+          if [[ "$missing" -gt 0 ]]; then
+            echo "::error::release $tag is incomplete; leaving it as a draft"
+            exit 1
+          fi
+
+          gh release edit "$tag" --draft=false --repo "$GITHUB_REPOSITORY"
+
+  publish_crates:
+    name: Publish crates.io
+    needs: [meta, finalize_release]
+    if: >-
+      needs.meta.outputs.dry_run != 'true' &&
+      needs.meta.outputs.crates_exists != 'true' &&
+      needs.finalize_release.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.meta.outputs.checkout_ref }}
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Authenticate to crates.io
+        id: crates_auth
+        uses: rust-lang/crates-io-auth-action@v1
+
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates_auth.outputs.token }}
+        run: cargo publish --manifest-path packages/crates/starmetal/Cargo.toml
+
+  publish_npm:
+    name: Publish npm
+    needs: [meta, finalize_release]
+    if: >-
+      needs.meta.outputs.dry_run != 'true' &&
+      needs.meta.outputs.npm_exists != 'true' &&
+      needs.finalize_release.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.meta.outputs.checkout_ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Update npm
+        run: npm install -g npm@latest
+
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ""
+        run: |
+          set -euo pipefail
+          unset NODE_AUTH_TOKEN
+          cd packages/npm
+          npm_tag="latest"
+          if [[ "${{ needs.meta.outputs.prerelease }}" == "true" ]]; then
+            npm_tag="beta"
+          fi
+          npm publish --provenance --access public --tag "$npm_tag"
+
+  publish_pypi:
+    name: Publish PyPI
+    needs: [meta, finalize_release]
+    if: >-
+      needs.meta.outputs.dry_run != 'true' &&
+      needs.meta.outputs.pypi_exists != 'true' &&
+      needs.finalize_release.result == 'success'
+    runs-on: ubuntu-latest
+    environment: pypi
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.meta.outputs.checkout_ref }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Build Python package
+        run: uv build packages/pypi --out-dir packages/pypi/dist --clear
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/pypi/dist
+          skip-existing: true
+
+  publish_homebrew:
+    name: Update Homebrew formula and dispatch bottles
+    needs: [meta, finalize_release]
+    if: >-
+      needs.meta.outputs.dry_run != 'true' &&
+      needs.finalize_release.result == 'success' &&
+      needs.meta.outputs.prerelease != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.meta.outputs.checkout_ref }}
+
+      - name: Update tap formula and start bottle workflow
+        env:
+          HOMEBREW_TOKEN: ${{ secrets.HOMEBREW_TOKEN }}
+          GH_TOKEN: ${{ secrets.HOMEBREW_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${HOMEBREW_TOKEN:-}" ]]; then
+            echo "HOMEBREW_TOKEN not set; skipping Homebrew formula and bottles."
+            exit 0
+          fi
+
+          version="${{ needs.meta.outputs.version }}"
+          tag="${{ needs.meta.outputs.tag }}"
+          archive="starmetal-${version}.tar.gz"
+          curl -fsSL "https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${tag}.tar.gz" -o "$archive"
+          sha256="$(sha256sum "$archive" | awk '{print $1}')"
+          ./scripts/update-homebrew-formula.sh "$version" "$sha256" > starmetal.rb
+
+          git clone --depth 1 "https://x-access-token:${HOMEBREW_TOKEN}@github.com/Goldziher/homebrew-tap.git" tap
+          cp starmetal.rb tap/Formula/starmetal.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/starmetal.rb
+          if git diff --cached --quiet; then
+            echo "Formula already up to date."
+          else
+            git commit -m "starmetal ${version}"
+            git push
+          fi
+
+          gh workflow run bottle.yml \
+            --repo Goldziher/homebrew-tap \
+            -f formula=starmetal \
+            -f tag="$tag" \
+            -f release_repo="$GITHUB_REPOSITORY"

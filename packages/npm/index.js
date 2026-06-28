@@ -1,5 +1,7 @@
+const { version } = require("./package.json");
+
 module.exports = {
   name: "starmetal",
-  version: "0.0.1",
+  version,
   command: "sm",
 };

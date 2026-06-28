@@ -454,7 +454,7 @@ fn default_upstreams() -> HashMap<String, UpstreamConfig> {
     upstream.insert(
         "maven".into(),
         UpstreamConfig {
-            enabled: false,
+            enabled: true,
             url: "https://repo1.maven.org/maven2".into(),
             artifact_url: None,
             allow_insecure: false,
@@ -465,7 +465,7 @@ fn default_upstreams() -> HashMap<String, UpstreamConfig> {
     upstream.insert(
         "rubygems".into(),
         UpstreamConfig {
-            enabled: false,
+            enabled: true,
             url: "https://rubygems.org".into(),
             artifact_url: Some("https://rubygems.org".into()),
             allow_insecure: false,
@@ -476,7 +476,7 @@ fn default_upstreams() -> HashMap<String, UpstreamConfig> {
     upstream.insert(
         "nuget".into(),
         UpstreamConfig {
-            enabled: false,
+            enabled: true,
             url: "https://api.nuget.org/v3/index.json".into(),
             artifact_url: None,
             allow_insecure: false,
@@ -487,7 +487,7 @@ fn default_upstreams() -> HashMap<String, UpstreamConfig> {
     upstream.insert(
         "pub".into(),
         UpstreamConfig {
-            enabled: false,
+            enabled: true,
             url: "https://pub.dev".into(),
             artifact_url: None,
             allow_insecure: false,
@@ -653,14 +653,14 @@ mod tests {
     #[test]
     fn defaults_have_all_upstreams() {
         let config = Config::default();
-        assert!(config.upstream.contains_key("pypi"));
-        assert!(config.upstream.contains_key("npm"));
-        assert!(config.upstream.contains_key("cargo"));
-        assert!(config.upstream.contains_key("hex"));
-        assert!(config.upstream.contains_key("maven"));
-        assert!(config.upstream.contains_key("rubygems"));
-        assert!(config.upstream.contains_key("nuget"));
-        assert!(config.upstream.contains_key("pub"));
+        for ecosystem in [
+            "pypi", "npm", "cargo", "hex", "maven", "rubygems", "nuget", "pub",
+        ] {
+            assert!(
+                config.upstream_enabled(ecosystem),
+                "{ecosystem} should be enabled by default"
+            );
+        }
     }
 
     #[test]
