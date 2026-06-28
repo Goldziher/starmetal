@@ -13,7 +13,7 @@ COPY --chown=65532:65532 . .
 RUN --mount=type=cache,target=/home/nonroot/.cargo/registry,uid=65532,gid=65532 \
     --mount=type=cache,target=/home/nonroot/.cargo/git,uid=65532,gid=65532 \
     --mount=type=cache,target=/work/target,uid=65532,gid=65532 \
-    cargo build --locked --release -p depot-cli --bin sm --no-default-features --features "${CARGO_FEATURES}" \
+    cargo build --locked --release -p starmetal-cli --bin sm --no-default-features --features "${CARGO_FEATURES}" \
     && mkdir -p /work/out/var/lib/starmetal \
     && cp /work/target/release/sm /work/out/sm
 
@@ -21,9 +21,9 @@ FROM ${RUNTIME_IMAGE} AS runtime
 
 COPY --from=builder --chown=65532:65532 /work/out/sm /usr/local/bin/sm
 COPY --from=builder --chown=65532:65532 /work/out/var/lib/starmetal /var/lib/starmetal
-COPY --chown=65532:65532 docker/starmetal.toml /etc/starmetal/depot.toml
+COPY --chown=65532:65532 docker/starmetal.toml /etc/starmetal/starmetal.toml
 
-ENV DEPOT_CONFIG=/etc/starmetal/depot.toml
+ENV STARMETAL_CONFIG=/etc/starmetal/starmetal.toml
 ENV RUST_LOG=info
 
 VOLUME ["/var/lib/starmetal"]

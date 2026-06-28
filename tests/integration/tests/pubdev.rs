@@ -1,6 +1,6 @@
 use tokio::process::Command;
 
-use depot_integration_tests::TestServer;
+use starmetal_integration_tests::TestServer;
 
 async fn require_dart() -> String {
     if let Ok(output) = Command::new("dart").arg("--version").output().await
@@ -19,7 +19,7 @@ async fn dart_pub_get(
 ) -> std::process::Output {
     std::fs::write(
         project_dir.join("pubspec.yaml"),
-        r#"name: depot_pub_e2e
+        r#"name: starmetal_pub_e2e
 publish_to: none
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -41,7 +41,7 @@ dependencies:
 
 #[tokio::test]
 #[ignore] // requires network + dart
-async fn dart_pub_get_installs_package_through_depot() {
+async fn dart_pub_get_installs_package_through_starmetal() {
     let dart = require_dart().await;
     let server = TestServer::start_all_enabled().await;
     let project = tempfile::tempdir().expect("project tempdir");
@@ -96,7 +96,7 @@ async fn pub_serves_metadata_and_archive() {
         .expect("expected rewritten archive URL");
     assert!(
         archive_url.starts_with(&format!("{}/pub/api/archives/", server.base_url())),
-        "archive URL should point back to Depot: {archive_url}"
+        "archive URL should point back to Starmetal: {archive_url}"
     );
 
     let version_response = client
@@ -129,7 +129,7 @@ async fn pub_serves_metadata_and_archive() {
 
 #[tokio::test]
 #[ignore] // requires network + dart
-async fn dart_pub_get_works_from_depot_cache() {
+async fn dart_pub_get_works_from_starmetal_cache() {
     let dart = require_dart().await;
     let server = TestServer::start_all_enabled().await;
 

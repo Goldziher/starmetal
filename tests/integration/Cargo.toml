@@ -1,6 +1,6 @@
 [package]
-name = "depot-integration-tests"
-description = "Integration tests for depot"
+name = "starmetal-integration-tests"
+description = "Integration tests for starmetal"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,7 +9,7 @@ publish = false
 [dependencies]
 ahash.workspace = true
 axum.workspace = true
-depot-adapters = { workspace = true, features = [
+starmetal-adapters = { workspace = true, features = [
     "cargo-registry",
     "hex",
     "maven",
@@ -19,8 +19,8 @@ depot-adapters = { workspace = true, features = [
     "pub",
     "rubygems",
 ] }
-depot-core.workspace = true
-depot-server = { workspace = true, features = [
+starmetal-core.workspace = true
+starmetal-server = { workspace = true, features = [
     "cargo-registry",
     "hex",
     "maven",
@@ -30,8 +30,8 @@ depot-server = { workspace = true, features = [
     "pub",
     "rubygems",
 ] }
-depot-service.workspace = true
-depot-storage = { workspace = true, features = ["backend-memory"] }
+starmetal-service.workspace = true
+starmetal-storage = { workspace = true, features = ["backend-memory"] }
 tokio.workspace = true
 
 [dev-dependencies]

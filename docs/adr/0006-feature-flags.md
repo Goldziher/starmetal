@@ -15,9 +15,9 @@ Feature availability is not the same as a support claim.
 
 Cargo feature flags gate adapters and storage backends.
 
-Implemented `depot-adapters` features:
+Implemented `starmetal-adapters` features:
 
-| Feature | Default in `depot-adapters` | Status |
+| Feature | Default in `starmetal-adapters` | Status |
 |---------|-----------------------------|--------------|
 | `pypi` | Yes | Experimental core |
 | `npm` | Yes | Experimental core |
@@ -28,7 +28,7 @@ Implemented `depot-adapters` features:
 | `nuget` | No | Experimental core in full CLI builds |
 | `pub` | No | Experimental core in full CLI builds |
 
-Implemented `depot-storage` features:
+Implemented `starmetal-storage` features:
 
 | Feature | Purpose |
 |---------|---------|
@@ -37,20 +37,20 @@ Implemented `depot-storage` features:
 | `backend-gcs` | Google Cloud Storage |
 | `backend-memory` | Tests and local workflows |
 
-`depot-cli` defaults to `full`, which compiles all adapters plus filesystem storage. Runtime config
+`starmetal-cli` defaults to `full`, which compiles all adapters plus filesystem storage. Runtime config
 enables all implemented upstreams by default.
 
 Example minimal build:
 
 ```sh
-cargo build -p depot-cli --no-default-features --features pypi,backend-s3
+cargo build -p starmetal-cli --no-default-features --features pypi,backend-s3
 ```
 
 ## Implemented
 
-- Adapter module gates in `depot-adapters`.
-- Server route gates in `depot-server`.
-- Runtime construction gates in `depot-ops`.
+- Adapter module gates in `starmetal-adapters`.
+- Server route gates in `starmetal-server`.
+- Runtime construction gates in `starmetal-ops`.
 - Pass-through CLI features.
 - Additive storage backend features.
 

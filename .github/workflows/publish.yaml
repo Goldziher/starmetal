@@ -274,7 +274,7 @@ jobs:
 
       - name: Build release binary
         shell: bash
-        run: cargo build --locked --release -p depot-cli --bin sm --target "${{ matrix.triple }}"
+        run: cargo build --locked --release -p starmetal-cli --bin sm --target "${{ matrix.triple }}"
 
       - name: Package release archive
         shell: bash

@@ -1,0 +1,36 @@
+[package]
+name = "starmetal-ops"
+description = "Shared local operator API for Starmetal CLI and MCP frontends"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = []
+pypi = ["starmetal-adapters/pypi", "starmetal-server/pypi"]
+npm = ["starmetal-adapters/npm", "starmetal-server/npm"]
+cargo-registry = ["starmetal-adapters/cargo-registry", "starmetal-server/cargo-registry"]
+hex = ["starmetal-adapters/hex", "starmetal-server/hex"]
+maven = ["starmetal-adapters/maven", "starmetal-server/maven"]
+rubygems = ["starmetal-adapters/rubygems", "starmetal-server/rubygems"]
+nuget = ["starmetal-adapters/nuget", "starmetal-server/nuget"]
+pub = ["starmetal-adapters/pub", "starmetal-server/pub"]
+backend-fs = ["starmetal-storage/backend-fs"]
+backend-memory = ["starmetal-storage/backend-memory"]
+backend-s3 = ["starmetal-storage/backend-s3"]
+backend-gcs = ["starmetal-storage/backend-gcs"]
+
+[dependencies]
+ahash.workspace = true
+bytes.workspace = true
+schemars.workspace = true
+serde.workspace = true
+starmetal-adapters = { workspace = true, default-features = false }
+starmetal-core.workspace = true
+starmetal-server = { workspace = true, default-features = false }
+starmetal-service.workspace = true
+starmetal-storage = { workspace = true, default-features = false }
+tokio.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

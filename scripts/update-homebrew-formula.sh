@@ -25,7 +25,7 @@ class Starmetal < Formula
   depends_on "rust" => :build
 
   def install
-    system "cargo", "install", *std_cargo_args(path: "crates/depot-cli")
+    system "cargo", "install", *std_cargo_args(path: "crates/starmetal-cli")
   end
 
   test do

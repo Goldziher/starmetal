@@ -93,7 +93,7 @@
       "type": "object"
     }
   },
-  "$id": "https://schemas.depot.local/registries/hex.schema.json",
+  "$id": "https://schemas.starmetal.local/registries/hex.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "Starmetal-derived JSON Schema for the Hex package HTTP API response; official registry resources use protobuf.",
   "properties": {
@@ -159,10 +159,10 @@
   ],
   "title": "Hex Package HTTP API",
   "type": "object",
-  "x-depot-source": {
-    "generated_by": "depot-schema-manager",
-    "schema_kind": "depot-derived-json-schema",
-    "source_file": "crates/depot-core/src/registry/hex.rs",
+  "x-starmetal-source": {
+    "generated_by": "starmetal-schema-manager",
+    "schema_kind": "starmetal-derived-json-schema",
+    "source_file": "crates/starmetal-core/src/registry/hex.rs",
     "source_ids": [
       "hex-registry-v2",
       "hex-package-proto",
@@ -172,7 +172,7 @@
       "official-prose",
       "official-protobuf"
     ],
-    "source_type": "depot_core::registry::hex::HexPackage",
-    "validated_by": "crates/depot-core/tests/schema_validation.rs; tests/conformance"
+    "source_type": "starmetal_core::registry::hex::HexPackage",
+    "validated_by": "crates/starmetal-core/tests/schema_validation.rs; tests/conformance"
   }
 }

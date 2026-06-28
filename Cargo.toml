@@ -1,13 +1,13 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/depot-adapters",
-    "crates/depot-cli",
-    "crates/depot-core",
-    "crates/depot-ops",
-    "crates/depot-server",
-    "crates/depot-service",
-    "crates/depot-storage",
+    "crates/starmetal-adapters",
+    "crates/starmetal-cli",
+    "crates/starmetal-core",
+    "crates/starmetal-ops",
+    "crates/starmetal-server",
+    "crates/starmetal-service",
+    "crates/starmetal-storage",
     "tests/conformance",
     "tests/integration",
     "tools/schema-manager",
@@ -44,14 +44,6 @@ chrono = { version = "0.4", features = ["serde"] }
 
 # CLI
 clap = { version = "4", features = ["derive"] }
-depot-adapters = { path = "crates/depot-adapters", default-features = false }
-
-# Workspace crates
-depot-core = { path = "crates/depot-core" }
-depot-ops = { path = "crates/depot-ops", default-features = false }
-depot-server = { path = "crates/depot-server", default-features = false }
-depot-service = { path = "crates/depot-service" }
-depot-storage = { path = "crates/depot-storage", default-features = false }
 
 # Compression
 flate2 = "1"
@@ -92,6 +84,14 @@ serde_json = "1"
 serde_yaml = "0.9.34"
 sha1 = "0.11"
 sha2 = "0.11"
+starmetal-adapters = { path = "crates/starmetal-adapters", default-features = false }
+
+# Workspace crates
+starmetal-core = { path = "crates/starmetal-core" }
+starmetal-ops = { path = "crates/starmetal-ops", default-features = false }
+starmetal-server = { path = "crates/starmetal-server", default-features = false }
+starmetal-service = { path = "crates/starmetal-service" }
+starmetal-storage = { path = "crates/starmetal-storage", default-features = false }
 tar = "0.4.46"
 
 # Testing

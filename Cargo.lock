@@ -699,197 +699,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4ae5f15dda3c708c0ade84bfee31ccab44a3da4f88015ed22f63732abe300c8"
 
 [[package]]
-name = "depot-adapters"
-version = "0.0.1"
-dependencies = [
- "ahash",
- "async-trait",
- "axum",
- "base64",
- "bytes",
- "depot-core",
- "flate2",
- "hex",
- "prost",
- "reqwest",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha1 0.11.0",
- "sha2 0.11.0",
- "tar",
- "thiserror",
- "tokio",
- "tracing",
- "zip",
-]
-
-[[package]]
-name = "depot-cli"
-version = "0.0.1"
-dependencies = [
- "axum",
- "clap",
- "depot-adapters",
- "depot-core",
- "depot-ops",
- "depot-server",
- "depot-storage",
- "rmcp",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "depot-conformance-tests"
-version = "0.0.1"
-dependencies = [
- "ahash",
- "async-trait",
- "axum",
- "bytes",
- "depot-adapters",
- "depot-core",
- "depot-service",
- "depot-storage",
- "flate2",
- "roxmltree",
- "serde_json",
- "tar",
- "tokio",
- "tower",
- "zip",
-]
-
-[[package]]
-name = "depot-core"
-version = "0.0.1"
-dependencies = [
- "ahash",
- "async-trait",
- "blake3",
- "bytes",
- "jsonschema",
- "memchr",
- "schemars",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "toml",
- "url",
-]
-
-[[package]]
-name = "depot-integration-tests"
-version = "0.0.1"
-dependencies = [
- "ahash",
- "axum",
- "depot-adapters",
- "depot-core",
- "depot-server",
- "depot-service",
- "depot-storage",
- "reqwest",
- "serde_json",
- "tempfile",
- "tokio",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "depot-ops"
-version = "0.0.1"
-dependencies = [
- "ahash",
- "bytes",
- "depot-adapters",
- "depot-core",
- "depot-server",
- "depot-service",
- "depot-storage",
- "schemars",
- "serde",
- "tempfile",
- "tokio",
-]
-
-[[package]]
-name = "depot-schema-manager"
-version = "0.0.1"
-dependencies = [
- "blake3",
- "clap",
- "depot-core",
- "reqwest",
- "schemars",
- "serde",
- "serde_json",
- "tokio",
- "toml",
-]
-
-[[package]]
-name = "depot-server"
-version = "0.0.1"
-dependencies = [
- "axum",
- "depot-adapters",
- "depot-core",
- "depot-storage",
- "tokio",
- "tower",
- "tower-http",
- "tracing",
-]
-
-[[package]]
-name = "depot-service"
-version = "0.0.1"
-dependencies = [
- "ahash",
- "async-trait",
- "base64",
- "bytes",
- "depot-core",
- "hex",
- "serde",
- "serde_json",
- "sha1 0.11.0",
- "sha2 0.11.0",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "depot-storage"
-version = "0.0.1"
-dependencies = [
- "async-trait",
- "bytes",
- "depot-core",
- "opendal",
- "tempfile",
- "thiserror",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "depot-test-generator"
-version = "0.0.1"
-dependencies = [
- "clap",
- "serde",
- "serde_json",
- "walkdir",
-]
-
-[[package]]
 name = "der"
 version = "0.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3349,6 +3158,197 @@ name = "stable_deref_trait"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
+
+[[package]]
+name = "starmetal-adapters"
+version = "0.0.1"
+dependencies = [
+ "ahash",
+ "async-trait",
+ "axum",
+ "base64",
+ "bytes",
+ "flate2",
+ "hex",
+ "prost",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha1 0.11.0",
+ "sha2 0.11.0",
+ "starmetal-core",
+ "tar",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "zip",
+]
+
+[[package]]
+name = "starmetal-cli"
+version = "0.0.1"
+dependencies = [
+ "axum",
+ "clap",
+ "rmcp",
+ "serde",
+ "serde_json",
+ "starmetal-adapters",
+ "starmetal-core",
+ "starmetal-ops",
+ "starmetal-server",
+ "starmetal-storage",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "starmetal-conformance-tests"
+version = "0.0.1"
+dependencies = [
+ "ahash",
+ "async-trait",
+ "axum",
+ "bytes",
+ "flate2",
+ "roxmltree",
+ "serde_json",
+ "starmetal-adapters",
+ "starmetal-core",
+ "starmetal-service",
+ "starmetal-storage",
+ "tar",
+ "tokio",
+ "tower",
+ "zip",
+]
+
+[[package]]
+name = "starmetal-core"
+version = "0.0.1"
+dependencies = [
+ "ahash",
+ "async-trait",
+ "blake3",
+ "bytes",
+ "jsonschema",
+ "memchr",
+ "schemars",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "toml",
+ "url",
+]
+
+[[package]]
+name = "starmetal-integration-tests"
+version = "0.0.1"
+dependencies = [
+ "ahash",
+ "axum",
+ "reqwest",
+ "serde_json",
+ "starmetal-adapters",
+ "starmetal-core",
+ "starmetal-server",
+ "starmetal-service",
+ "starmetal-storage",
+ "tempfile",
+ "tokio",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "starmetal-ops"
+version = "0.0.1"
+dependencies = [
+ "ahash",
+ "bytes",
+ "schemars",
+ "serde",
+ "starmetal-adapters",
+ "starmetal-core",
+ "starmetal-server",
+ "starmetal-service",
+ "starmetal-storage",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "starmetal-schema-manager"
+version = "0.0.1"
+dependencies = [
+ "blake3",
+ "clap",
+ "reqwest",
+ "schemars",
+ "serde",
+ "serde_json",
+ "starmetal-core",
+ "tokio",
+ "toml",
+]
+
+[[package]]
+name = "starmetal-server"
+version = "0.0.1"
+dependencies = [
+ "axum",
+ "starmetal-adapters",
+ "starmetal-core",
+ "starmetal-storage",
+ "tokio",
+ "tower",
+ "tower-http",
+ "tracing",
+]
+
+[[package]]
+name = "starmetal-service"
+version = "0.0.1"
+dependencies = [
+ "ahash",
+ "async-trait",
+ "base64",
+ "bytes",
+ "hex",
+ "serde",
+ "serde_json",
+ "sha1 0.11.0",
+ "sha2 0.11.0",
+ "starmetal-core",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "starmetal-storage"
+version = "0.0.1"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "opendal",
+ "starmetal-core",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "starmetal-test-generator"
+version = "0.0.1"
+dependencies = [
+ "clap",
+ "serde",
+ "serde_json",
+ "walkdir",
+]
 
 [[package]]
 name = "strsim"

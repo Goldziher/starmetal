@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- `depot-service` crate: application service layer with `CachingPackageService` implementing pull-through caching, blake3 integrity verification, and policy enforcement.
+- `starmetal-service` crate: application service layer with `CachingPackageService` implementing pull-through caching, blake3 integrity verification, and policy enforcement.
 - Blake3 integrity verification: hash computed on first artifact fetch, stored as `.blake3` sidecar file, verified on every cache read.
 - Policy enforcement on `get_artifact`: `blocked_packages` checked before fetching to prevent policy bypass.
 - Adapter state traits for accessing `PackageService` and ecosystem-specific upstream clients.
@@ -23,9 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Public feature flags for all adapter and backend combinations, including pass-through CLI features for PyPI, npm, Cargo, Hex, Maven, RubyGems, NuGet, pub.dev, fs, memory, S3, and GCS.
 - Runtime adapter support for Maven Central-compatible repositories, RubyGems Compact Index, NuGet V3, and hosted pub.dev repositories.
 - Canonical registry schema provenance in `schemas/sources.toml` and generated `schemas/manifest.json`.
-- `tools/schema-manager` for fetching upstream spec artifacts, generating Depot-derived schemas, checking committed schema drift, and optional live source checks.
+- `tools/schema-manager` for fetching upstream spec artifacts, generating Starmetal-derived schemas, checking committed schema drift, and optional live source checks.
 - Upstream source artifacts for Hex protobufs, Maven XSDs, npm types, NuGet nuspec XSD, pub.dev DTO evidence, RubyGems Compact Index/gem schema evidence, OSV advisories, and Sonatype/Nexus API evidence.
-- Depot-derived schemas for PyPI, npm, Cargo sparse index/config, Hex, NuGet service/package/registration resources, pub.dev package metadata, Depot config, and lockfiles.
+- Starmetal-derived schemas for PyPI, npm, Cargo sparse index/config, Hex, NuGet service/package/registration resources, pub.dev package metadata, Starmetal config, and lockfiles.
 - Fixture-based conformance tests and representative fixtures for PyPI, npm, Cargo, Hex, Maven, RubyGems, NuGet, and pub.dev.
 - Route-level conformance coverage for Maven, RubyGems, NuGet, and pub.dev.
 - Required live native-client E2E coverage for PyPI, npm, Cargo, Hex, Maven, RubyGems, NuGet, and pub.dev via `task test:e2e`.
@@ -42,7 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Native local hosted publishing routes for Hex tarball uploads, RubyGems gem uploads, NuGet V2 package uploads, and hosted pub.dev archive uploads.
 - Archive metadata extraction for RubyGems `.gem`, NuGet `.nupkg`/`.nuspec`, pub.dev `.tar.gz`, and Hex tarball publish payloads.
 - Publish-route conformance coverage for Hex, RubyGems, NuGet, and pub.dev, including metadata/index readback, artifact downloads, and checksum sidecars where applicable.
-- `depot-ops` crate as the shared local operator API for CLI and MCP frontends.
+- `starmetal-ops` crate as the shared local operator API for CLI and MCP frontends.
 - Fuller CLI command tree for config, registry, package, cache, server, and MCP operations with no-config execution support.
 - stdio MCP server backed by the same operations layer as the CLI, with mutating tools gated by `--allow-writes`.
 - Explicit artifact publish operation in both CLI and MCP for locally hosted package metadata.
@@ -53,9 +53,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Adapters now serve cached upstream data directly with URL rewriting instead of reconstructing responses from `VersionMetadata`. This preserves protocol-specific fields (npm dependencies, PyPI requires-python, Cargo deps/features).
 - npm adapter uses raw `serde_json::Value` instead of typed `NpmPackument` struct to handle the variety of npm field shapes.
 - Upstream hashes preserved in `ArtifactDigest.upstream_hashes`.
-- Dependency flow updated: `depot-server -> depot-service -> depot-core` added alongside existing paths.
-- `depot config` now serializes a redacted config representation so auth tokens are never printed.
-- `depot serve` now builds storage via `OpenDalStorage::from_config`.
+- Dependency flow updated: `starmetal-server -> starmetal-service -> starmetal-core` added alongside existing paths.
+- `starmetal config` now serializes a redacted config representation so auth tokens are never printed.
+- `starmetal serve` now builds storage via `OpenDalStorage::from_config`.
 - Disabled upstream registries are no longer mounted; disabled routes return normal router `404`.
 - Encryption config remains deserializable for compatibility, but `encryption.enabled = true` is rejected for the MVP.
 - `sync`, `lock verify`, and `lock update` return controlled not-implemented errors instead of panicking.
@@ -74,9 +74,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - PyPI, npm, Cargo, and Maven adapters now have initial local hosted publishing routes that write through `PublishingService` and serve the published artifacts through existing native read paths.
 - Hex, RubyGems, NuGet, and pub.dev adapters now write local hosted publishes through `PublishingService` and serve those packages through their native read/index routes.
 - Cargo `config.json` advertises an API endpoint and `auth-required` when publishing is enabled.
-- npm and PyPI read adapters can synthesize local metadata responses from Depot-published versions when no raw upstream response exists.
+- npm and PyPI read adapters can synthesize local metadata responses from Starmetal-published versions when no raw upstream response exists.
 - Cargo dependencies were refreshed with `cargo upgrade --incompatible`; `zip` moved to the latest incompatible major release and the workspace lockfile was regenerated with `cargo update`.
-- `depot serve` now builds its runtime through the shared operations layer used by CLI and MCP commands.
+- `starmetal serve` now builds its runtime through the shared operations layer used by CLI and MCP commands.
 
 ### Fixed
 
@@ -86,5 +86,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Maven repository paths now correctly translate package names from `group_id:artifact_id` to path layout.
 - Hex checksum parsing now decodes the signed, gzipped protobuf wrapper used by live `repo.hex.pm`.
 - Bundler E2E uses `bundle config set path` for modern Bundler versions.
-- `depot-server` no longer enables `depot-storage` default features implicitly.
+- `starmetal-server` no longer enables `starmetal-storage` default features implicitly.
 - Digest formatting after the `sha1`/`sha2` incompatible updates now uses explicit hex encoding instead of formatter traits removed from the upgraded digest output types.

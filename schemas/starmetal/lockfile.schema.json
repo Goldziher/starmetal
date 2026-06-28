@@ -1,0 +1,127 @@
+{
+  "$defs": {
+    "Ecosystem": {
+      "description": "Supported package ecosystems.",
+      "enum": [
+        "pypi",
+        "npm",
+        "cargo",
+        "hex",
+        "maven",
+        "rubygems",
+        "nuget",
+        "pub"
+      ],
+      "type": "string"
+    },
+    "LockMetadata": {
+      "properties": {
+        "generated_at": {
+          "type": "string"
+        },
+        "schema_version": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "starmetal_version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "generated_at",
+        "starmetal_version"
+      ],
+      "type": "object"
+    },
+    "LockedArtifact": {
+      "properties": {
+        "blake3": {
+          "type": "string"
+        },
+        "filename": {
+          "type": "string"
+        },
+        "size": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "filename",
+        "blake3",
+        "size"
+      ],
+      "type": "object"
+    },
+    "LockedPackage": {
+      "properties": {
+        "artifacts": {
+          "items": {
+            "$ref": "#/$defs/LockedArtifact"
+          },
+          "type": "array"
+        },
+        "ecosystem": {
+          "$ref": "#/$defs/Ecosystem"
+        },
+        "name": {
+          "type": "string"
+        },
+        "pinned": {
+          "default": false,
+          "type": "boolean"
+        },
+        "resolved_from": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ecosystem",
+        "name",
+        "version",
+        "artifacts",
+        "resolved_from"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://schemas.starmetal.local/starmetal/lockfile.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Starmetal-owned JSON Schema for starmetal-lock.toml.",
+  "properties": {
+    "metadata": {
+      "$ref": "#/$defs/LockMetadata"
+    },
+    "packages": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/LockedPackage"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "metadata"
+  ],
+  "title": "Starmetal Lock File",
+  "type": "object",
+  "x-starmetal-source": {
+    "generated_by": "starmetal-schema-manager",
+    "schema_kind": "starmetal-owned-json-schema",
+    "source_file": "crates/starmetal-core/src/lockfile.rs",
+    "source_ids": [
+      "starmetal-lockfile"
+    ],
+    "source_kinds": [
+      "starmetal-rust-type"
+    ],
+    "source_type": "starmetal_core::lockfile::LockFile",
+    "validated_by": "crates/starmetal-core/tests/schema_validation.rs"
+  }
+}

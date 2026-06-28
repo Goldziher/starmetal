@@ -1,4 +1,4 @@
-use depot_integration_tests::TestServer;
+use starmetal_integration_tests::TestServer;
 
 #[tokio::test]
 async fn healthz_returns_ok() {

@@ -2,47 +2,47 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use ahash::AHashMap;
-use depot_adapters::cargo::upstream::CargoUpstreamClient;
-use depot_adapters::hex::upstream::HexUpstreamClient;
-use depot_adapters::maven::upstream::MavenUpstreamClient;
-use depot_adapters::npm::upstream::NpmUpstreamClient;
-use depot_adapters::nuget::upstream::NuGetUpstreamClient;
-use depot_adapters::pubdev::upstream::PubUpstreamClient;
-use depot_adapters::pypi::upstream::PypiUpstreamClient;
-use depot_adapters::rubygems::upstream::RubyGemsUpstreamClient;
-use depot_core::config::Config;
-use depot_core::package::Ecosystem;
-use depot_core::policy::PolicyConfig;
-use depot_core::ports::UpstreamClient;
-use depot_server::state::{AppState, UpstreamClients};
-use depot_service::CachingPackageService;
-use depot_storage::OpenDalStorage;
+use starmetal_adapters::cargo::upstream::CargoUpstreamClient;
+use starmetal_adapters::hex::upstream::HexUpstreamClient;
+use starmetal_adapters::maven::upstream::MavenUpstreamClient;
+use starmetal_adapters::npm::upstream::NpmUpstreamClient;
+use starmetal_adapters::nuget::upstream::NuGetUpstreamClient;
+use starmetal_adapters::pubdev::upstream::PubUpstreamClient;
+use starmetal_adapters::pypi::upstream::PypiUpstreamClient;
+use starmetal_adapters::rubygems::upstream::RubyGemsUpstreamClient;
+use starmetal_core::config::Config;
+use starmetal_core::package::Ecosystem;
+use starmetal_core::policy::PolicyConfig;
+use starmetal_core::ports::UpstreamClient;
+use starmetal_server::state::{AppState, UpstreamClients};
+use starmetal_service::CachingPackageService;
+use starmetal_storage::OpenDalStorage;
 
-/// A running depot test server with in-memory storage.
+/// A running starmetal test server with in-memory storage.
 pub struct TestServer {
     pub addr: SocketAddr,
     shutdown: tokio::sync::oneshot::Sender<()>,
 }
 
 impl TestServer {
-    /// Start a depot server on a random port with memory storage.
+    /// Start a starmetal server on a random port with memory storage.
     ///
     /// Reads optional env vars:
-    /// - `DEPOT_TEST_UPSTREAM_PYPI_URL`: override PyPI upstream (default: https://pypi.org)
-    /// - `DEPOT_TEST_UPSTREAM_NPM_URL`: override npm upstream (default: https://registry.npmjs.org)
-    /// - `DEPOT_TEST_UPSTREAM_CARGO_INDEX_URL`: override Cargo index (default: https://index.crates.io)
-    /// - `DEPOT_TEST_UPSTREAM_CARGO_DL_URL`: override Cargo download (default: https://static.crates.io/crates)
-    /// - `DEPOT_TEST_UPSTREAM_HEX_URL`: override Hex upstream (default: https://hex.pm)
-    /// - `DEPOT_TEST_UPSTREAM_HEX_REPO_URL`: override Hex repo (default: https://repo.hex.pm)
-    /// - `DEPOT_TEST_UPSTREAM_MAVEN_URL`: override Maven upstream (default: https://repo1.maven.org/maven2)
-    /// - `DEPOT_TEST_UPSTREAM_RUBYGEMS_URL`: override RubyGems upstream (default: https://rubygems.org)
-    /// - `DEPOT_TEST_UPSTREAM_NUGET_URL`: override NuGet upstream (default: https://api.nuget.org/v3/index.json)
-    /// - `DEPOT_TEST_UPSTREAM_PUB_URL`: override pub.dev upstream (default: https://pub.dev)
+    /// - `STARMETAL_TEST_UPSTREAM_PYPI_URL`: override PyPI upstream (default: https://pypi.org)
+    /// - `STARMETAL_TEST_UPSTREAM_NPM_URL`: override npm upstream (default: https://registry.npmjs.org)
+    /// - `STARMETAL_TEST_UPSTREAM_CARGO_INDEX_URL`: override Cargo index (default: https://index.crates.io)
+    /// - `STARMETAL_TEST_UPSTREAM_CARGO_DL_URL`: override Cargo download (default: https://static.crates.io/crates)
+    /// - `STARMETAL_TEST_UPSTREAM_HEX_URL`: override Hex upstream (default: https://hex.pm)
+    /// - `STARMETAL_TEST_UPSTREAM_HEX_REPO_URL`: override Hex repo (default: https://repo.hex.pm)
+    /// - `STARMETAL_TEST_UPSTREAM_MAVEN_URL`: override Maven upstream (default: https://repo1.maven.org/maven2)
+    /// - `STARMETAL_TEST_UPSTREAM_RUBYGEMS_URL`: override RubyGems upstream (default: https://rubygems.org)
+    /// - `STARMETAL_TEST_UPSTREAM_NUGET_URL`: override NuGet upstream (default: https://api.nuget.org/v3/index.json)
+    /// - `STARMETAL_TEST_UPSTREAM_PUB_URL`: override pub.dev upstream (default: https://pub.dev)
     pub async fn start() -> Self {
         Self::start_with_all_enabled(false).await
     }
 
-    /// Start a depot server with all configured registry routes enabled.
+    /// Start a starmetal server with all configured registry routes enabled.
     pub async fn start_all_enabled() -> Self {
         Self::start_with_all_enabled(true).await
     }
@@ -52,49 +52,49 @@ impl TestServer {
         let mut upstream_clients: AHashMap<Ecosystem, Arc<dyn UpstreamClient>> = AHashMap::new();
 
         // PyPI
-        let pypi_url = std::env::var("DEPOT_TEST_UPSTREAM_PYPI_URL")
+        let pypi_url = std::env::var("STARMETAL_TEST_UPSTREAM_PYPI_URL")
             .unwrap_or_else(|_| "https://pypi.org".into());
         let pypi_client = Arc::new(PypiUpstreamClient::new(pypi_url));
         upstream_clients.insert(Ecosystem::PyPI, pypi_client.clone());
 
         // npm
-        let npm_url = std::env::var("DEPOT_TEST_UPSTREAM_NPM_URL")
+        let npm_url = std::env::var("STARMETAL_TEST_UPSTREAM_NPM_URL")
             .unwrap_or_else(|_| "https://registry.npmjs.org".into());
         let npm_client = Arc::new(NpmUpstreamClient::new(npm_url));
         upstream_clients.insert(Ecosystem::Npm, npm_client.clone());
 
         // Cargo
-        let cargo_index_url = std::env::var("DEPOT_TEST_UPSTREAM_CARGO_INDEX_URL")
+        let cargo_index_url = std::env::var("STARMETAL_TEST_UPSTREAM_CARGO_INDEX_URL")
             .unwrap_or_else(|_| "https://index.crates.io".into());
-        let cargo_dl_url = std::env::var("DEPOT_TEST_UPSTREAM_CARGO_DL_URL")
+        let cargo_dl_url = std::env::var("STARMETAL_TEST_UPSTREAM_CARGO_DL_URL")
             .unwrap_or_else(|_| "https://static.crates.io/crates".into());
         let cargo_client = Arc::new(CargoUpstreamClient::new(cargo_index_url, cargo_dl_url));
         upstream_clients.insert(Ecosystem::Cargo, cargo_client.clone());
 
         // Hex
-        let hex_url = std::env::var("DEPOT_TEST_UPSTREAM_HEX_URL")
+        let hex_url = std::env::var("STARMETAL_TEST_UPSTREAM_HEX_URL")
             .unwrap_or_else(|_| "https://hex.pm".into());
-        let hex_repo_url = std::env::var("DEPOT_TEST_UPSTREAM_HEX_REPO_URL")
+        let hex_repo_url = std::env::var("STARMETAL_TEST_UPSTREAM_HEX_REPO_URL")
             .unwrap_or_else(|_| "https://repo.hex.pm".into());
         let hex_client = Arc::new(HexUpstreamClient::new(hex_url, hex_repo_url));
         upstream_clients.insert(Ecosystem::Hex, hex_client.clone());
 
-        let maven_url = std::env::var("DEPOT_TEST_UPSTREAM_MAVEN_URL")
+        let maven_url = std::env::var("STARMETAL_TEST_UPSTREAM_MAVEN_URL")
             .unwrap_or_else(|_| "https://repo1.maven.org/maven2".into());
         let maven_client = Arc::new(MavenUpstreamClient::new(maven_url));
         upstream_clients.insert(Ecosystem::Maven, maven_client.clone());
 
-        let rubygems_url = std::env::var("DEPOT_TEST_UPSTREAM_RUBYGEMS_URL")
+        let rubygems_url = std::env::var("STARMETAL_TEST_UPSTREAM_RUBYGEMS_URL")
             .unwrap_or_else(|_| "https://rubygems.org".into());
         let rubygems_client = Arc::new(RubyGemsUpstreamClient::new(rubygems_url));
         upstream_clients.insert(Ecosystem::RubyGems, rubygems_client.clone());
 
-        let nuget_url = std::env::var("DEPOT_TEST_UPSTREAM_NUGET_URL")
+        let nuget_url = std::env::var("STARMETAL_TEST_UPSTREAM_NUGET_URL")
             .unwrap_or_else(|_| "https://api.nuget.org/v3/index.json".into());
         let nuget_client = Arc::new(NuGetUpstreamClient::new(nuget_url));
         upstream_clients.insert(Ecosystem::NuGet, nuget_client.clone());
 
-        let pub_url = std::env::var("DEPOT_TEST_UPSTREAM_PUB_URL")
+        let pub_url = std::env::var("STARMETAL_TEST_UPSTREAM_PUB_URL")
             .unwrap_or_else(|_| "https://pub.dev".into());
         let pub_client = Arc::new(PubUpstreamClient::new(pub_url));
         upstream_clients.insert(Ecosystem::Pub, pub_client.clone());
@@ -128,7 +128,7 @@ impl TestServer {
             pub_upstream: pub_client,
         };
         let state = AppState::new(config, service.clone(), service, upstreams);
-        let app = depot_server::app::build_app(state);
+        let app = starmetal_server::app::build_app(state);
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await

@@ -5,9 +5,9 @@ description: "Registry protocol adapter specialist for PyPI, npm, Cargo, and Hex
 
 # Protocol Engineer
 
-You are the protocol adapter specialist for `depot-adapters`. Your scope is:
+You are the protocol adapter specialist for `starmetal-adapters`. Your scope is:
 
-- `crates/depot-adapters/src/` — all adapter modules
+- `crates/starmetal-adapters/src/` — all adapter modules
 
 ## Responsibilities
 

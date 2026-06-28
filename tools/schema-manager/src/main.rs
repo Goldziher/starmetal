@@ -2,21 +2,21 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand};
-use depot_core::config::Config;
-use depot_core::lockfile::LockFile;
-use depot_core::registry::cargo::{CargoConfig, CargoIndexEntry};
-use depot_core::registry::hex::HexPackage;
-use depot_core::registry::npm::NpmPackument;
-use depot_core::registry::nuget::{
-    NugetPackageVersions, NugetRegistrationIndex, NugetServiceIndex,
-};
-use depot_core::registry::pubdev::PubPackage;
-use depot_core::registry::pypi::{PypiIndex, PypiProject};
 use schemars::schema_for;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use starmetal_core::config::Config;
+use starmetal_core::lockfile::LockFile;
+use starmetal_core::registry::cargo::{CargoConfig, CargoIndexEntry};
+use starmetal_core::registry::hex::HexPackage;
+use starmetal_core::registry::npm::NpmPackument;
+use starmetal_core::registry::nuget::{
+    NugetPackageVersions, NugetRegistrationIndex, NugetServiceIndex,
+};
+use starmetal_core::registry::pubdev::PubPackage;
+use starmetal_core::registry::pypi::{PypiIndex, PypiProject};
 
-const TOOL_NAME: &str = "depot-schema-manager";
+const TOOL_NAME: &str = "starmetal-schema-manager";
 const DEFAULT_SOURCES: &str = "schemas/sources.toml";
 const DEFAULT_SCHEMA_ROOT: &str = "schemas";
 const MANIFEST_PATH: &str = "manifest.json";
@@ -26,7 +26,7 @@ type Result<T> = std::result::Result<T, DynError>;
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "depot-schema-manager",
+    name = "starmetal-schema-manager",
     about = "Manage Starmetal registry schema artifacts"
 )]
 struct Cli {
@@ -163,7 +163,7 @@ async fn fetch_sources(
     live: bool,
 ) -> Result<()> {
     let client = reqwest::Client::builder()
-        .user_agent("depot-schema-manager/0.1")
+        .user_agent("starmetal-schema-manager/0.1")
         .build()
         .map_err(|err| format!("failed to build HTTP client: {err}"))?;
     let mut failures = Vec::new();
@@ -293,9 +293,9 @@ fn schema_specs() -> Vec<SchemaSpec> {
             path: "registries/pypi.schema.json",
             title: "PyPI Simple Repository API Project Detail",
             description: "Starmetal-derived JSON Schema for a PEP 691 Simple API project detail response.",
-            schema_kind: "depot-derived-json-schema",
-            source_type: "depot_core::registry::pypi::PypiProject",
-            source_file: "crates/depot-core/src/registry/pypi.rs",
+            schema_kind: "starmetal-derived-json-schema",
+            source_type: "starmetal_core::registry::pypi::PypiProject",
+            source_file: "crates/starmetal-core/src/registry/pypi.rs",
             source_ids: &[
                 "pypa-specifications-index",
                 "pypi-simple-api",
@@ -306,7 +306,7 @@ fn schema_specs() -> Vec<SchemaSpec> {
                 "pypi-json-api",
             ],
             source_kinds: &["official-prose-index", "official-prose"],
-            validated_by: "crates/depot-core/tests/schema_validation.rs; tests/conformance",
+            validated_by: "crates/starmetal-core/tests/schema_validation.rs; tests/conformance",
             schema: serde_json::to_value(schema_for!(PypiProject)).expect("schema serializes"),
         },
         SchemaSpec {
@@ -315,16 +315,16 @@ fn schema_specs() -> Vec<SchemaSpec> {
             path: "registries/pypi-index.schema.json",
             title: "PyPI Simple Repository API Project Index",
             description: "Starmetal-derived JSON Schema for a PEP 691 Simple API project index response.",
-            schema_kind: "depot-derived-json-schema",
-            source_type: "depot_core::registry::pypi::PypiIndex",
-            source_file: "crates/depot-core/src/registry/pypi.rs",
+            schema_kind: "starmetal-derived-json-schema",
+            source_type: "starmetal_core::registry::pypi::PypiIndex",
+            source_file: "crates/starmetal-core/src/registry/pypi.rs",
             source_ids: &[
                 "pypa-specifications-index",
                 "pypi-simple-api",
                 "pypi-name-normalization",
             ],
             source_kinds: &["official-prose-index", "official-prose"],
-            validated_by: "crates/depot-core/tests/schema_validation.rs; tests/conformance",
+            validated_by: "crates/starmetal-core/tests/schema_validation.rs; tests/conformance",
             schema: serde_json::to_value(schema_for!(PypiIndex)).expect("schema serializes"),
         },
         SchemaSpec {
@@ -333,12 +333,12 @@ fn schema_specs() -> Vec<SchemaSpec> {
             path: "registries/npm.schema.json",
             title: "npm Registry Packument",
             description: "Starmetal-derived JSON Schema for npm registry package metadata.",
-            schema_kind: "depot-derived-json-schema",
-            source_type: "depot_core::registry::npm::NpmPackument",
-            source_file: "crates/depot-core/src/registry/npm.rs",
+            schema_kind: "starmetal-derived-json-schema",
+            source_type: "starmetal_core::registry::npm::NpmPackument",
+            source_file: "crates/starmetal-core/src/registry/npm.rs",
             source_ids: &["npm-package-metadata", "npm-types"],
             source_kinds: &["official-prose", "official-typescript"],
-            validated_by: "crates/depot-core/tests/schema_validation.rs; tests/conformance",
+            validated_by: "crates/starmetal-core/tests/schema_validation.rs; tests/conformance",
             schema: serde_json::to_value(schema_for!(NpmPackument)).expect("schema serializes"),
         },
         SchemaSpec {
@@ -347,12 +347,12 @@ fn schema_specs() -> Vec<SchemaSpec> {
             path: "registries/cargo.schema.json",
             title: "Cargo Sparse Index Entry",
             description: "Starmetal-derived JSON Schema for one Cargo sparse index JSONL entry.",
-            schema_kind: "depot-derived-json-schema",
-            source_type: "depot_core::registry::cargo::CargoIndexEntry",
-            source_file: "crates/depot-core/src/registry/cargo.rs",
+            schema_kind: "starmetal-derived-json-schema",
+            source_type: "starmetal_core::registry::cargo::CargoIndexEntry",
+            source_file: "crates/starmetal-core/src/registry/cargo.rs",
             source_ids: &["cargo-registry-index"],
             source_kinds: &["official-prose"],
-            validated_by: "crates/depot-core/tests/schema_validation.rs; tests/conformance",
+            validated_by: "crates/starmetal-core/tests/schema_validation.rs; tests/conformance",
             schema: serde_json::to_value(schema_for!(CargoIndexEntry)).expect("schema serializes"),
         },
         SchemaSpec {
@@ -361,12 +361,12 @@ fn schema_specs() -> Vec<SchemaSpec> {
             path: "registries/cargo-config.schema.json",
             title: "Cargo Sparse Registry Config",
             description: "Starmetal-derived JSON Schema for Cargo sparse registry config.json.",
-            schema_kind: "depot-derived-json-schema",
-            source_type: "depot_core::registry::cargo::CargoConfig",
-            source_file: "crates/depot-core/src/registry/cargo.rs",
+            schema_kind: "starmetal-derived-json-schema",
+            source_type: "starmetal_core::registry::cargo::CargoConfig",
+            source_file: "crates/starmetal-core/src/registry/cargo.rs",
             source_ids: &["cargo-registry-index"],
             source_kinds: &["official-prose"],
-            validated_by: "crates/depot-core/tests/schema_validation.rs; tests/conformance",
+            validated_by: "crates/starmetal-core/tests/schema_validation.rs; tests/conformance",
             schema: serde_json::to_value(schema_for!(CargoConfig)).expect("schema serializes"),
         },
         SchemaSpec {
@@ -375,30 +375,30 @@ fn schema_specs() -> Vec<SchemaSpec> {
             path: "registries/hex.schema.json",
             title: "Hex Package HTTP API",
             description: "Starmetal-derived JSON Schema for the Hex package HTTP API response; official registry resources use protobuf.",
-            schema_kind: "depot-derived-json-schema",
-            source_type: "depot_core::registry::hex::HexPackage",
-            source_file: "crates/depot-core/src/registry/hex.rs",
+            schema_kind: "starmetal-derived-json-schema",
+            source_type: "starmetal_core::registry::hex::HexPackage",
+            source_file: "crates/starmetal-core/src/registry/hex.rs",
             source_ids: &[
                 "hex-registry-v2",
                 "hex-package-proto",
                 "hex-package-metadata",
             ],
             source_kinds: &["official-prose", "official-protobuf"],
-            validated_by: "crates/depot-core/tests/schema_validation.rs; tests/conformance",
+            validated_by: "crates/starmetal-core/tests/schema_validation.rs; tests/conformance",
             schema: serde_json::to_value(schema_for!(HexPackage)).expect("schema serializes"),
         },
         SchemaSpec {
-            id: "depot-config",
-            registry: "depot",
-            path: "depot/config.schema.json",
+            id: "starmetal-config",
+            registry: "starmetal",
+            path: "starmetal/config.schema.json",
             title: "Starmetal Configuration",
-            description: "Starmetal-owned JSON Schema for depot.toml.",
-            schema_kind: "depot-owned-json-schema",
-            source_type: "depot_core::config::Config",
-            source_file: "crates/depot-core/src/config.rs",
-            source_ids: &["depot-config"],
-            source_kinds: &["depot-rust-type"],
-            validated_by: "crates/depot-core/tests/schema_validation.rs",
+            description: "Starmetal-owned JSON Schema for starmetal.toml.",
+            schema_kind: "starmetal-owned-json-schema",
+            source_type: "starmetal_core::config::Config",
+            source_file: "crates/starmetal-core/src/config.rs",
+            source_ids: &["starmetal-config"],
+            source_kinds: &["starmetal-rust-type"],
+            validated_by: "crates/starmetal-core/tests/schema_validation.rs",
             schema: serde_json::to_value(schema_for!(Config)).expect("schema serializes"),
         },
         SchemaSpec {
@@ -407,12 +407,12 @@ fn schema_specs() -> Vec<SchemaSpec> {
             path: "registries/nuget-service-index.schema.json",
             title: "NuGet V3 Service Index",
             description: "Starmetal-derived JSON Schema for the NuGet V3 service index response.",
-            schema_kind: "depot-derived-json-schema",
-            source_type: "depot_core::registry::nuget::NugetServiceIndex",
-            source_file: "crates/depot-core/src/registry/nuget.rs",
+            schema_kind: "starmetal-derived-json-schema",
+            source_type: "starmetal_core::registry::nuget::NugetServiceIndex",
+            source_file: "crates/starmetal-core/src/registry/nuget.rs",
             source_ids: &["nuget-v3-overview", "nuget-v3-service-index"],
             source_kinds: &["official-prose"],
-            validated_by: "crates/depot-core/tests/schema_validation.rs",
+            validated_by: "crates/starmetal-core/tests/schema_validation.rs",
             schema: serde_json::to_value(schema_for!(NugetServiceIndex))
                 .expect("schema serializes"),
         },
@@ -422,12 +422,12 @@ fn schema_specs() -> Vec<SchemaSpec> {
             path: "registries/nuget-package-base-address.schema.json",
             title: "NuGet V3 Package Base Address Versions",
             description: "Starmetal-derived JSON Schema for the NuGet PackageBaseAddress version listing response.",
-            schema_kind: "depot-derived-json-schema",
-            source_type: "depot_core::registry::nuget::NugetPackageVersions",
-            source_file: "crates/depot-core/src/registry/nuget.rs",
+            schema_kind: "starmetal-derived-json-schema",
+            source_type: "starmetal_core::registry::nuget::NugetPackageVersions",
+            source_file: "crates/starmetal-core/src/registry/nuget.rs",
             source_ids: &["nuget-v3-overview", "nuget-v3-package-base-address"],
             source_kinds: &["official-prose"],
-            validated_by: "crates/depot-core/tests/schema_validation.rs",
+            validated_by: "crates/starmetal-core/tests/schema_validation.rs",
             schema: serde_json::to_value(schema_for!(NugetPackageVersions))
                 .expect("schema serializes"),
         },
@@ -437,16 +437,16 @@ fn schema_specs() -> Vec<SchemaSpec> {
             path: "registries/nuget-registration.schema.json",
             title: "NuGet V3 Registration Index",
             description: "Starmetal-derived JSON Schema for NuGet V3 registration metadata.",
-            schema_kind: "depot-derived-json-schema",
-            source_type: "depot_core::registry::nuget::NugetRegistrationIndex",
-            source_file: "crates/depot-core/src/registry/nuget.rs",
+            schema_kind: "starmetal-derived-json-schema",
+            source_type: "starmetal_core::registry::nuget::NugetRegistrationIndex",
+            source_file: "crates/starmetal-core/src/registry/nuget.rs",
             source_ids: &[
                 "nuget-v3-overview",
                 "nuget-v3-registration",
                 "nuget-nuspec-xsd",
             ],
             source_kinds: &["official-prose", "official-xml-schema"],
-            validated_by: "crates/depot-core/tests/schema_validation.rs",
+            validated_by: "crates/starmetal-core/tests/schema_validation.rs",
             schema: serde_json::to_value(schema_for!(NugetRegistrationIndex))
                 .expect("schema serializes"),
         },
@@ -456,30 +456,30 @@ fn schema_specs() -> Vec<SchemaSpec> {
             path: "registries/pub-package.schema.json",
             title: "Hosted Pub Package Metadata",
             description: "Starmetal-derived JSON Schema for Hosted Pub Repository package metadata.",
-            schema_kind: "depot-derived-json-schema",
-            source_type: "depot_core::registry::pubdev::PubPackage",
-            source_file: "crates/depot-core/src/registry/pubdev.rs",
+            schema_kind: "starmetal-derived-json-schema",
+            source_type: "starmetal_core::registry::pubdev::PubPackage",
+            source_file: "crates/starmetal-core/src/registry/pubdev.rs",
             source_ids: &[
                 "pub-hosted-repository-v2",
                 "pub-dev-supported-api",
                 "pub-dev-package-api-dtos",
             ],
             source_kinds: &["official-prose", "official-dart-source"],
-            validated_by: "crates/depot-core/tests/schema_validation.rs",
+            validated_by: "crates/starmetal-core/tests/schema_validation.rs",
             schema: serde_json::to_value(schema_for!(PubPackage)).expect("schema serializes"),
         },
         SchemaSpec {
-            id: "depot-lockfile",
-            registry: "depot",
-            path: "depot/lockfile.schema.json",
+            id: "starmetal-lockfile",
+            registry: "starmetal",
+            path: "starmetal/lockfile.schema.json",
             title: "Starmetal Lock File",
-            description: "Starmetal-owned JSON Schema for depot-lock.toml.",
-            schema_kind: "depot-owned-json-schema",
-            source_type: "depot_core::lockfile::LockFile",
-            source_file: "crates/depot-core/src/lockfile.rs",
-            source_ids: &["depot-lockfile"],
-            source_kinds: &["depot-rust-type"],
-            validated_by: "crates/depot-core/tests/schema_validation.rs",
+            description: "Starmetal-owned JSON Schema for starmetal-lock.toml.",
+            schema_kind: "starmetal-owned-json-schema",
+            source_type: "starmetal_core::lockfile::LockFile",
+            source_file: "crates/starmetal-core/src/lockfile.rs",
+            source_ids: &["starmetal-lockfile"],
+            source_kinds: &["starmetal-rust-type"],
+            validated_by: "crates/starmetal-core/tests/schema_validation.rs",
             schema: serde_json::to_value(schema_for!(LockFile)).expect("schema serializes"),
         },
     ]
@@ -491,7 +491,7 @@ fn enrich_schema(schema: &mut Value, spec: &SchemaSpec) -> Result<()> {
         .ok_or_else(|| format!("schema '{}' did not render as an object", spec.id))?;
     object.insert(
         "$id".to_string(),
-        Value::String(format!("https://schemas.depot.local/{}", spec.path)),
+        Value::String(format!("https://schemas.starmetal.local/{}", spec.path)),
     );
     object.insert("title".to_string(), Value::String(spec.title.to_string()));
     object.insert(
@@ -499,7 +499,7 @@ fn enrich_schema(schema: &mut Value, spec: &SchemaSpec) -> Result<()> {
         Value::String(spec.description.to_string()),
     );
     object.insert(
-        "x-depot-source".to_string(),
+        "x-starmetal-source".to_string(),
         json!({
             "schema_kind": spec.schema_kind,
             "source_type": spec.source_type,
@@ -621,7 +621,7 @@ mod tests {
                 schema.spec.id
             );
             assert!(
-                value.get("x-depot-source").is_some(),
+                value.get("x-starmetal-source").is_some(),
                 "{} should have source metadata",
                 schema.spec.id
             );

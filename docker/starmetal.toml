@@ -1,5 +1,5 @@
 # Container default configuration for Starmetal.
-# Override by bind-mounting a config file and setting DEPOT_CONFIG.
+# Override by bind-mounting a config file and setting STARMETAL_CONFIG.
 
 [server]
 bind = "0.0.0.0:8080"

@@ -6,31 +6,31 @@ use axum::Router;
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
 use bytes::Bytes;
-use depot_adapters::cargo::models::{cargo_entries_to_version_infos, cargo_entry_to_metadata};
-use depot_adapters::cargo::upstream::CargoUpstreamClient;
-use depot_adapters::hex::models::{hex_package_to_version_infos, hex_release_to_metadata};
-use depot_adapters::hex::upstream::HexUpstreamClient;
-use depot_adapters::maven::upstream::MavenUpstreamClient;
-use depot_adapters::npm::models::{extract_version_infos, extract_version_metadata};
-use depot_adapters::npm::upstream::NpmUpstreamClient;
-use depot_adapters::nuget::upstream::NuGetUpstreamClient;
-use depot_adapters::pubdev::upstream::PubUpstreamClient;
-use depot_adapters::pypi::models::{pypi_files_to_metadata, pypi_project_to_version_infos};
-use depot_adapters::pypi::upstream::PypiUpstreamClient;
-use depot_adapters::rubygems::upstream::RubyGemsUpstreamClient;
-use depot_adapters::{cargo, hex, maven, npm, nuget, pubdev, pypi, rubygems};
-use depot_core::config::Config;
-use depot_core::error::{DepotError, Result};
-use depot_core::package::{ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata};
-use depot_core::ports::{PackageService, PublishingService};
-use depot_core::publishing::{PublishRequest, PublishResult, YankRequest};
-use depot_core::registry::cargo::{CargoConfig, CargoIndexEntry, sparse_index_path};
-use depot_core::registry::hex::HexPackage;
-use depot_core::registry::npm::NpmPackument;
-use depot_core::registry::nuget::{NugetPackageVersions, NugetServiceIndex};
-use depot_core::registry::pubdev::PubPackage;
-use depot_core::registry::pypi::PypiProject;
 use roxmltree::{Document, Node};
+use starmetal_adapters::cargo::models::{cargo_entries_to_version_infos, cargo_entry_to_metadata};
+use starmetal_adapters::cargo::upstream::CargoUpstreamClient;
+use starmetal_adapters::hex::models::{hex_package_to_version_infos, hex_release_to_metadata};
+use starmetal_adapters::hex::upstream::HexUpstreamClient;
+use starmetal_adapters::maven::upstream::MavenUpstreamClient;
+use starmetal_adapters::npm::models::{extract_version_infos, extract_version_metadata};
+use starmetal_adapters::npm::upstream::NpmUpstreamClient;
+use starmetal_adapters::nuget::upstream::NuGetUpstreamClient;
+use starmetal_adapters::pubdev::upstream::PubUpstreamClient;
+use starmetal_adapters::pypi::models::{pypi_files_to_metadata, pypi_project_to_version_infos};
+use starmetal_adapters::pypi::upstream::PypiUpstreamClient;
+use starmetal_adapters::rubygems::upstream::RubyGemsUpstreamClient;
+use starmetal_adapters::{cargo, hex, maven, npm, nuget, pubdev, pypi, rubygems};
+use starmetal_core::config::Config;
+use starmetal_core::error::{Result, StarmetalError};
+use starmetal_core::package::{ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata};
+use starmetal_core::ports::{PackageService, PublishingService};
+use starmetal_core::publishing::{PublishRequest, PublishResult, YankRequest};
+use starmetal_core::registry::cargo::{CargoConfig, CargoIndexEntry, sparse_index_path};
+use starmetal_core::registry::hex::HexPackage;
+use starmetal_core::registry::npm::NpmPackument;
+use starmetal_core::registry::nuget::{NugetPackageVersions, NugetServiceIndex};
+use starmetal_core::registry::pubdev::PubPackage;
+use starmetal_core::registry::pypi::PypiProject;
 use tower::ServiceExt;
 
 fn fixture(path: &str) -> &'static str {
@@ -288,7 +288,7 @@ impl PackageService for FixtureService {
         }
         match self.get_raw_upstream(ecosystem, name).await? {
             Some(_) => Ok(Vec::new()),
-            None => Err(DepotError::PackageNotFound {
+            None => Err(StarmetalError::PackageNotFound {
                 ecosystem: ecosystem.to_string(),
                 name: name.as_str().to_string(),
             }),
@@ -301,7 +301,7 @@ impl PackageService for FixtureService {
         name: &PackageName,
         version: &str,
     ) -> Result<VersionMetadata> {
-        Err(DepotError::VersionNotFound {
+        Err(StarmetalError::VersionNotFound {
             ecosystem: ecosystem.to_string(),
             name: name.as_str().to_string(),
             version: version.to_string(),
@@ -349,13 +349,13 @@ impl PackageService for FixtureService {
 #[async_trait]
 impl PublishingService for FixtureService {
     async fn publish_package(&self, _request: PublishRequest) -> Result<PublishResult> {
-        Err(DepotError::Publish(
+        Err(StarmetalError::Publish(
             "fixture service does not support publishing".to_string(),
         ))
     }
 
     async fn set_yanked(&self, request: YankRequest) -> Result<VersionMetadata> {
-        Err(DepotError::VersionNotFound {
+        Err(StarmetalError::VersionNotFound {
             ecosystem: request.ecosystem.to_string(),
             name: request.name.to_string(),
             version: request.version,
@@ -410,7 +410,7 @@ async fn npm_route_serves_fixture_packument_with_rewritten_tarballs() {
     let router = npm::router::<RouteState>().with_state(state);
     let request = Request::builder()
         .uri("/@scope/sample")
-        .header(header::HOST, "depot.local")
+        .header(header::HOST, "starmetal.local")
         .body(Body::empty())
         .expect("request should build");
 
@@ -422,7 +422,7 @@ async fn npm_route_serves_fixture_packument_with_rewritten_tarballs() {
     assert_eq!(packument["name"], "@scope/sample");
     assert_eq!(
         packument["versions"]["2.0.0"]["dist"]["tarball"],
-        "http://depot.local/npm/@scope/sample/-/sample-2.0.0.tgz"
+        "http://starmetal.local/npm/@scope/sample/-/sample-2.0.0.tgz"
     );
     assert_eq!(
         packument["versions"]["2.0.0"]["dist"]["integrity"],
@@ -441,12 +441,12 @@ async fn cargo_routes_serve_sparse_config_and_index_fixture() {
 
     let config_request = Request::builder()
         .uri("/config.json")
-        .header(header::HOST, "depot.local")
+        .header(header::HOST, "starmetal.local")
         .body(Body::empty())
         .expect("request should build");
     let (config_status, config_body) = response_body(router.clone(), config_request).await;
     assert_eq!(config_status, StatusCode::OK);
-    assert!(config_body.contains("http://depot.local/cargo/crates/{crate}/{version}/download"));
+    assert!(config_body.contains("http://starmetal.local/cargo/crates/{crate}/{version}/download"));
 
     let index_request = Request::builder()
         .uri("/sa/mp/sample-crate")
@@ -548,7 +548,7 @@ async fn nuget_route_serves_service_index_versions_and_checksum() {
     let router = nuget::router::<RouteState>().with_state(state);
     let request = Request::builder()
         .uri("/v3/index.json")
-        .header(header::HOST, "depot.local")
+        .header(header::HOST, "starmetal.local")
         .body(Body::empty())
         .expect("request should build");
     let (status, body) = response_body(router.clone(), request).await;
@@ -579,12 +579,12 @@ async fn pub_route_serves_fixture_package_with_rewritten_archive() {
     let router = pubdev::router::<RouteState>().with_state(state);
     let request = Request::builder()
         .uri("/api/packages/sample")
-        .header(header::HOST, "depot.local")
+        .header(header::HOST, "starmetal.local")
         .body(Body::empty())
         .expect("request should build");
     let (status, body) = response_body(router, request).await;
     assert_eq!(status, StatusCode::OK);
-    assert!(body.contains("http://depot.local/pub/api/archives/sample-1.0.0.tar.gz"));
+    assert!(body.contains("http://starmetal.local/pub/api/archives/sample-1.0.0.tar.gz"));
 }
 
 #[test]

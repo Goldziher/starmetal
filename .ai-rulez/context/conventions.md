@@ -10,7 +10,7 @@ priority: high
 cargo build --workspace
 cargo check --workspace
 cargo test --workspace
-cargo test -p depot-core
+cargo test -p starmetal-core
 cargo clippy --workspace
 cargo fmt --check
 ```

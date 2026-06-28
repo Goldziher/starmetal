@@ -1,5 +1,5 @@
 {
-  "$id": "https://schemas.depot.local/registries/nuget-package-base-address.schema.json",
+  "$id": "https://schemas.starmetal.local/registries/nuget-package-base-address.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "Starmetal-derived JSON Schema for the NuGet PackageBaseAddress version listing response.",
   "properties": {
@@ -15,10 +15,10 @@
   ],
   "title": "NuGet V3 Package Base Address Versions",
   "type": "object",
-  "x-depot-source": {
-    "generated_by": "depot-schema-manager",
-    "schema_kind": "depot-derived-json-schema",
-    "source_file": "crates/depot-core/src/registry/nuget.rs",
+  "x-starmetal-source": {
+    "generated_by": "starmetal-schema-manager",
+    "schema_kind": "starmetal-derived-json-schema",
+    "source_file": "crates/starmetal-core/src/registry/nuget.rs",
     "source_ids": [
       "nuget-v3-overview",
       "nuget-v3-package-base-address"
@@ -26,7 +26,7 @@
     "source_kinds": [
       "official-prose"
     ],
-    "source_type": "depot_core::registry::nuget::NugetPackageVersions",
-    "validated_by": "crates/depot-core/tests/schema_validation.rs"
+    "source_type": "starmetal_core::registry::nuget::NugetPackageVersions",
+    "validated_by": "crates/starmetal-core/tests/schema_validation.rs"
   }
 }

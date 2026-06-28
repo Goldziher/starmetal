@@ -364,19 +364,19 @@ path = "upstream/osv/schema.json"
 description = "OSV JSON Schema referenced by Hosted Pub Repository Specification v2 for package security advisories only."
 
 [[source]]
-id = "depot-config"
-registry = "depot"
-kind = "depot-rust-type"
-url = "crates/depot-core/src/config.rs"
+id = "starmetal-config"
+registry = "starmetal"
+kind = "starmetal-rust-type"
+url = "crates/starmetal-core/src/config.rs"
 official = false
 fetched = false
 description = "Starmetal-owned configuration Rust type."
 
 [[source]]
-id = "depot-lockfile"
-registry = "depot"
-kind = "depot-rust-type"
-url = "crates/depot-core/src/lockfile.rs"
+id = "starmetal-lockfile"
+registry = "starmetal"
+kind = "starmetal-rust-type"
+url = "crates/starmetal-core/src/lockfile.rs"
 official = false
 fetched = false
 description = "Starmetal-owned lockfile Rust type."

@@ -29,7 +29,7 @@ Storage is configured with a backend name plus OpenDAL options:
 backend = "fs"
 
 [storage.options]
-root = "./depot-data"
+root = "./starmetal-data"
 ```
 
 Artifact keys use:
@@ -46,21 +46,21 @@ The service also stores implementation metadata under ordinary storage keys:
 | `<ecosystem>/<name>/_versions.json` | Cached or locally generated version list |
 | `<ecosystem>/<name>/<version>/_metadata.json` | Cached or locally generated version metadata |
 | `<ecosystem>/<name>/_raw_upstream` | Raw upstream protocol payload for adapters that need it |
-| `_depot/published/<ecosystem>/<name>/<version>.json` | Experimental local publish manifest |
+| `_starmetal/published/<ecosystem>/<name>/<version>.json` | Experimental local publish manifest |
 
 ## Implemented
 
 - OpenDAL-backed `StoragePort`.
 - Filesystem, S3, GCS, and memory feature flags.
 - Blake3 sidecar storage for every cached or locally published artifact.
-- Experimental local publish manifests under `_depot/published/`.
+- Experimental local publish manifests under `_starmetal/published/`.
 
 ## Deferred
 
 - Database-backed metadata indexes.
 - Multi-object transactions.
 - Upstream publish forwarding status storage.
-- General-purpose `_depot/indexes/` registry index storage.
+- General-purpose `_starmetal/indexes/` registry index storage.
 - Storage-level registry semantics.
 
 ## Consequences

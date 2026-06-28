@@ -1,6 +1,6 @@
 [package]
-name = "depot-conformance-tests"
-description = "Fixture-based registry conformance tests for depot"
+name = "starmetal-conformance-tests"
+description = "Fixture-based registry conformance tests for starmetal"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,7 +11,10 @@ ahash.workspace = true
 async-trait.workspace = true
 axum.workspace = true
 bytes.workspace = true
-depot-adapters = { path = "../../crates/depot-adapters", default-features = false, features = [
+flate2.workspace = true
+roxmltree = "0.21"
+serde_json.workspace = true
+starmetal-adapters = { path = "../../crates/starmetal-adapters", default-features = false, features = [
     "cargo-registry",
     "hex",
     "maven",
@@ -21,12 +24,9 @@ depot-adapters = { path = "../../crates/depot-adapters", default-features = fals
     "pub",
     "rubygems",
 ] }
-depot-core.workspace = true
-depot-service.workspace = true
-depot-storage = { workspace = true, features = ["backend-memory"] }
-flate2.workspace = true
-roxmltree = "0.21"
-serde_json.workspace = true
+starmetal-core.workspace = true
+starmetal-service.workspace = true
+starmetal-storage = { workspace = true, features = ["backend-memory"] }
 tar.workspace = true
 tokio.workspace = true
 tower.workspace = true

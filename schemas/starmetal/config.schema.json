@@ -1,0 +1,495 @@
+{
+  "$defs": {
+    "AuthConfig": {
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "tokens": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "Ecosystem": {
+      "description": "Supported package ecosystems.",
+      "enum": [
+        "pypi",
+        "npm",
+        "cargo",
+        "hex",
+        "maven",
+        "rubygems",
+        "nuget",
+        "pub"
+      ],
+      "type": "string"
+    },
+    "EncryptionConfig": {
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "key_file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "GcsConfig": {
+      "properties": {
+        "bucket": {
+          "type": "string"
+        },
+        "credential_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "endpoint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "bucket"
+      ],
+      "type": "object"
+    },
+    "PolicyConfig": {
+      "properties": {
+        "allowed_licenses": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "block_unlicensed": {
+          "default": false,
+          "type": "boolean"
+        },
+        "blocked_packages": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "max_vuln_severity": {
+          "$ref": "#/$defs/VulnSeverity",
+          "default": "critical"
+        }
+      },
+      "type": "object"
+    },
+    "PublishMode": {
+      "enum": [
+        "local",
+        "local-and-forward",
+        "forward-only"
+      ],
+      "type": "string"
+    },
+    "PublishTokenConfig": {
+      "properties": {
+        "ecosystems": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Ecosystem"
+          },
+          "type": "array"
+        },
+        "packages": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "scopes": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/TokenScope"
+          },
+          "type": "array"
+        },
+        "token": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "token"
+      ],
+      "type": "object"
+    },
+    "PublishingConfig": {
+      "properties": {
+        "allow_overwrite": {
+          "default": false,
+          "type": "boolean"
+        },
+        "allow_shadowing": {
+          "default": false,
+          "type": "boolean"
+        },
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "mode": {
+          "$ref": "#/$defs/PublishMode",
+          "default": "local"
+        },
+        "tokens": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PublishTokenConfig"
+          },
+          "type": "array"
+        },
+        "upstream": {
+          "additionalProperties": {
+            "$ref": "#/$defs/PublishingUpstreamConfig"
+          },
+          "default": {},
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "PublishingUpstreamConfig": {
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "password_env": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "token_env": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "username_env": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "S3Config": {
+      "properties": {
+        "bucket": {
+          "type": "string"
+        },
+        "endpoint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "region": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "bucket",
+        "region"
+      ],
+      "type": "object"
+    },
+    "ServerConfig": {
+      "properties": {
+        "bind": {
+          "default": "127.0.0.1:8080",
+          "type": "string"
+        },
+        "cors_allowed_origins": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "max_upload_bytes": {
+          "default": 536870912,
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "public_base_url": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "StorageConfig": {
+      "properties": {
+        "backend": {
+          "default": "fs",
+          "type": "string"
+        },
+        "gcs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GcsConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "options": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "type": "object"
+        },
+        "path": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "s3": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/S3Config"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "type": "object"
+    },
+    "TokenScope": {
+      "enum": [
+        "read",
+        "publish",
+        "yank",
+        "admin"
+      ],
+      "type": "string"
+    },
+    "UpstreamConfig": {
+      "properties": {
+        "allow_insecure": {
+          "default": false,
+          "type": "boolean"
+        },
+        "allow_private_network": {
+          "default": false,
+          "type": "boolean"
+        },
+        "artifact_url": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "enabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "max_response_bytes": {
+          "default": 536870912,
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object"
+    },
+    "VulnSeverity": {
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.starmetal.local/starmetal/config.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Starmetal-owned JSON Schema for starmetal.toml.",
+  "properties": {
+    "auth": {
+      "$ref": "#/$defs/AuthConfig",
+      "default": {
+        "enabled": false,
+        "tokens": []
+      }
+    },
+    "encryption": {
+      "$ref": "#/$defs/EncryptionConfig",
+      "default": {
+        "enabled": false,
+        "key_file": null
+      }
+    },
+    "policies": {
+      "$ref": "#/$defs/PolicyConfig",
+      "default": {
+        "allowed_licenses": [],
+        "block_unlicensed": false,
+        "blocked_packages": [],
+        "max_vuln_severity": "critical"
+      }
+    },
+    "publishing": {
+      "$ref": "#/$defs/PublishingConfig",
+      "default": {
+        "allow_overwrite": false,
+        "allow_shadowing": false,
+        "enabled": false,
+        "mode": "local",
+        "tokens": [],
+        "upstream": {}
+      }
+    },
+    "server": {
+      "$ref": "#/$defs/ServerConfig",
+      "default": {
+        "bind": "127.0.0.1:8080",
+        "cors_allowed_origins": [],
+        "max_upload_bytes": 536870912,
+        "public_base_url": null
+      }
+    },
+    "storage": {
+      "$ref": "#/$defs/StorageConfig",
+      "default": {
+        "backend": "fs",
+        "gcs": null,
+        "options": {},
+        "path": null,
+        "s3": null
+      }
+    },
+    "upstream": {
+      "additionalProperties": {
+        "$ref": "#/$defs/UpstreamConfig"
+      },
+      "default": {
+        "cargo": {
+          "allow_insecure": false,
+          "allow_private_network": false,
+          "artifact_url": "https://static.crates.io/crates",
+          "enabled": true,
+          "max_response_bytes": 536870912,
+          "url": "https://index.crates.io"
+        },
+        "hex": {
+          "allow_insecure": false,
+          "allow_private_network": false,
+          "artifact_url": "https://repo.hex.pm",
+          "enabled": true,
+          "max_response_bytes": 536870912,
+          "url": "https://hex.pm"
+        },
+        "maven": {
+          "allow_insecure": false,
+          "allow_private_network": false,
+          "artifact_url": null,
+          "enabled": true,
+          "max_response_bytes": 536870912,
+          "url": "https://repo1.maven.org/maven2"
+        },
+        "npm": {
+          "allow_insecure": false,
+          "allow_private_network": false,
+          "artifact_url": null,
+          "enabled": true,
+          "max_response_bytes": 536870912,
+          "url": "https://registry.npmjs.org"
+        },
+        "nuget": {
+          "allow_insecure": false,
+          "allow_private_network": false,
+          "artifact_url": null,
+          "enabled": true,
+          "max_response_bytes": 536870912,
+          "url": "https://api.nuget.org/v3/index.json"
+        },
+        "pub": {
+          "allow_insecure": false,
+          "allow_private_network": false,
+          "artifact_url": null,
+          "enabled": true,
+          "max_response_bytes": 536870912,
+          "url": "https://pub.dev"
+        },
+        "pypi": {
+          "allow_insecure": false,
+          "allow_private_network": false,
+          "artifact_url": null,
+          "enabled": true,
+          "max_response_bytes": 536870912,
+          "url": "https://pypi.org"
+        },
+        "rubygems": {
+          "allow_insecure": false,
+          "allow_private_network": false,
+          "artifact_url": "https://rubygems.org",
+          "enabled": true,
+          "max_response_bytes": 536870912,
+          "url": "https://rubygems.org"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "title": "Starmetal Configuration",
+  "type": "object",
+  "x-starmetal-source": {
+    "generated_by": "starmetal-schema-manager",
+    "schema_kind": "starmetal-owned-json-schema",
+    "source_file": "crates/starmetal-core/src/config.rs",
+    "source_ids": [
+      "starmetal-config"
+    ],
+    "source_kinds": [
+      "starmetal-rust-type"
+    ],
+    "source_type": "starmetal_core::config::Config",
+    "validated_by": "crates/starmetal-core/tests/schema_validation.rs"
+  }
+}

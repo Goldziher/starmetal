@@ -90,7 +90,7 @@
       "type": "object"
     }
   },
-  "$id": "https://schemas.depot.local/registries/pub-package.schema.json",
+  "$id": "https://schemas.starmetal.local/registries/pub-package.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "Starmetal-derived JSON Schema for Hosted Pub Repository package metadata.",
   "properties": {
@@ -121,10 +121,10 @@
   ],
   "title": "Hosted Pub Package Metadata",
   "type": "object",
-  "x-depot-source": {
-    "generated_by": "depot-schema-manager",
-    "schema_kind": "depot-derived-json-schema",
-    "source_file": "crates/depot-core/src/registry/pubdev.rs",
+  "x-starmetal-source": {
+    "generated_by": "starmetal-schema-manager",
+    "schema_kind": "starmetal-derived-json-schema",
+    "source_file": "crates/starmetal-core/src/registry/pubdev.rs",
     "source_ids": [
       "pub-hosted-repository-v2",
       "pub-dev-supported-api",
@@ -134,7 +134,7 @@
       "official-prose",
       "official-dart-source"
     ],
-    "source_type": "depot_core::registry::pubdev::PubPackage",
-    "validated_by": "crates/depot-core/tests/schema_validation.rs"
+    "source_type": "starmetal_core::registry::pubdev::PubPackage",
+    "validated_by": "crates/starmetal-core/tests/schema_validation.rs"
   }
 }

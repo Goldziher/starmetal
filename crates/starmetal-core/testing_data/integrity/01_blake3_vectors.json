@@ -1,0 +1,22 @@
+[
+	{
+		"name": "empty input",
+		"input": { "data": "" },
+		"expected": {
+			"blake3": "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262"
+		},
+		"error": null
+	},
+	{
+		"name": "hello starmetal",
+		"input": { "data": "hello starmetal" },
+		"expected": { "blake3": null },
+		"description": "hash computed at runtime, verified via roundtrip"
+	},
+	{
+		"name": "binary-like data",
+		"input": { "data": "\u0000\u0001\u0002\u0003" },
+		"expected": { "blake3": null },
+		"description": "hash computed at runtime, verified via roundtrip"
+	}
+]

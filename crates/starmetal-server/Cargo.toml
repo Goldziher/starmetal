@@ -1,0 +1,30 @@
+[package]
+name = "starmetal-server"
+description = "HTTP server and Tower middleware stack for Starmetal"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[package.metadata.cargo-machete]
+ignored = ["starmetal-adapters", "starmetal-storage", "tokio", "tower", "tracing"]
+
+[features]
+default = ["pypi", "npm", "cargo-registry", "hex"]
+pypi = ["starmetal-adapters/pypi"]
+npm = ["starmetal-adapters/npm"]
+cargo-registry = ["starmetal-adapters/cargo-registry"]
+hex = ["starmetal-adapters/hex"]
+maven = ["starmetal-adapters/maven"]
+rubygems = ["starmetal-adapters/rubygems"]
+nuget = ["starmetal-adapters/nuget"]
+pub = ["starmetal-adapters/pub"]
+
+[dependencies]
+axum.workspace = true
+starmetal-adapters = { workspace = true, default-features = false }
+starmetal-core.workspace = true
+starmetal-storage = { workspace = true, default-features = false }
+tokio.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+tracing.workspace = true

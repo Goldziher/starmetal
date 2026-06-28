@@ -1,6 +1,6 @@
 use tokio::process::Command;
 
-use depot_integration_tests::TestServer;
+use starmetal_integration_tests::TestServer;
 
 /// Check that npm is available, return the command name.
 async fn require_npm() -> String {
@@ -148,7 +148,7 @@ async fn npm_nonexistent_package_returns_404() {
 
     let response = client
         .get(format!(
-            "{}/npm/this-does-not-exist-depot-test",
+            "{}/npm/this-does-not-exist-starmetal-test",
             server.base_url()
         ))
         .send()
@@ -276,7 +276,7 @@ async fn npm_install_nonexistent_package_fails() {
     let output = npm_install(
         &npm,
         &registry_url,
-        "this-package-does-not-exist-depot-test",
+        "this-package-does-not-exist-starmetal-test",
         tmp.path(),
         cache.path(),
     )

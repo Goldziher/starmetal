@@ -1,6 +1,6 @@
 use tokio::process::Command;
 
-use depot_integration_tests::TestServer;
+use starmetal_integration_tests::TestServer;
 
 async fn require_bundle() -> String {
     if let Ok(output) = Command::new("bundle").arg("--version").output().await
@@ -59,7 +59,7 @@ gem "rack", "2.2.8"
 
 #[tokio::test]
 #[ignore] // requires network + bundle
-async fn bundler_installs_gem_through_depot() {
+async fn bundler_installs_gem_through_starmetal() {
     let bundle = require_bundle().await;
     let server = TestServer::start_all_enabled().await;
     let project = tempfile::tempdir().expect("project tempdir");
@@ -118,7 +118,7 @@ async fn rubygems_serves_compact_index() {
 
 #[tokio::test]
 #[ignore] // requires network + bundle
-async fn bundler_install_works_from_depot_cache() {
+async fn bundler_install_works_from_starmetal_cache() {
     let bundle = require_bundle().await;
     let server = TestServer::start_all_enabled().await;
 

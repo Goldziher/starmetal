@@ -17,7 +17,7 @@ supported; local publishing is experimental and disabled by default.
 
 Starmetal uses hexagonal architecture.
 
-Implemented ports in `depot-core`:
+Implemented ports in `starmetal-core`:
 
 | Port | Direction | Purpose |
 |------|-----------|---------|
@@ -30,15 +30,15 @@ Implemented crate boundaries:
 
 | Crate | Boundary |
 |-------|----------|
-| `depot-core` | Domain types, config, policy, ports, lock file, registry schema types |
-| `depot-service` | `CachingPackageService` and experimental local publishing workflow |
-| `depot-storage` | OpenDAL-backed `StoragePort` implementations |
-| `depot-adapters` | Axum protocol adapters and upstream clients |
-| `depot-server` | Axum app assembly and Tower middleware |
-| `depot-ops` | Shared local operations for CLI and MCP |
-| `depot-cli` | Clap CLI and stdio MCP entry points |
+| `starmetal-core` | Domain types, config, policy, ports, lock file, registry schema types |
+| `starmetal-service` | `CachingPackageService` and experimental local publishing workflow |
+| `starmetal-storage` | OpenDAL-backed `StoragePort` implementations |
+| `starmetal-adapters` | Axum protocol adapters and upstream clients |
+| `starmetal-server` | Axum app assembly and Tower middleware |
+| `starmetal-ops` | Shared local operations for CLI and MCP |
+| `starmetal-cli` | Clap CLI and stdio MCP entry points |
 
-`depot-core` remains framework-free. It must not depend on axum, tower, opendal, reqwest, or other
+`starmetal-core` remains framework-free. It must not depend on axum, tower, opendal, reqwest, or other
 I/O framework crates.
 
 ## Implemented
@@ -46,7 +46,7 @@ I/O framework crates.
 - Pull-through reads go through `PackageService`.
 - Adapters can access ecosystem upstream clients directly to preserve native response shapes.
 - Storage access is hidden behind `StoragePort`.
-- Local operator commands and MCP tools share `depot-ops`.
+- Local operator commands and MCP tools share `starmetal-ops`.
 - Experimental local publishing goes through `PublishingService`, not direct adapter storage writes.
 
 ## Deferred
@@ -63,4 +63,4 @@ I/O framework crates.
 - Core behavior is testable without network or storage services.
 - Protocol adapters can evolve without changing storage backends.
 - Experimental write behavior stays isolated from read/proxy support claims.
-- New framework dependencies in `depot-core` require a new ADR.
+- New framework dependencies in `starmetal-core` require a new ADR.

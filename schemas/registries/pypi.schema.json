@@ -80,7 +80,7 @@
       "description": "Yanked can be `false`, `true`, or a reason string."
     }
   },
-  "$id": "https://schemas.depot.local/registries/pypi.schema.json",
+  "$id": "https://schemas.starmetal.local/registries/pypi.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "Starmetal-derived JSON Schema for a PEP 691 Simple API project detail response.",
   "properties": {
@@ -111,10 +111,10 @@
   ],
   "title": "PyPI Simple Repository API Project Detail",
   "type": "object",
-  "x-depot-source": {
-    "generated_by": "depot-schema-manager",
-    "schema_kind": "depot-derived-json-schema",
-    "source_file": "crates/depot-core/src/registry/pypi.rs",
+  "x-starmetal-source": {
+    "generated_by": "starmetal-schema-manager",
+    "schema_kind": "starmetal-derived-json-schema",
+    "source_file": "crates/starmetal-core/src/registry/pypi.rs",
     "source_ids": [
       "pypa-specifications-index",
       "pypi-simple-api",
@@ -128,7 +128,7 @@
       "official-prose-index",
       "official-prose"
     ],
-    "source_type": "depot_core::registry::pypi::PypiProject",
-    "validated_by": "crates/depot-core/tests/schema_validation.rs; tests/conformance"
+    "source_type": "starmetal_core::registry::pypi::PypiProject",
+    "validated_by": "crates/starmetal-core/tests/schema_validation.rs; tests/conformance"
   }
 }

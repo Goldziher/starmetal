@@ -100,7 +100,7 @@ task setup
 task ci
 
 # Install the local sm binary from this checkout
-cargo install --path crates/depot-cli --bin sm
+cargo install --path crates/starmetal-cli --bin sm
 
 # Start Starmetal with defaults on 127.0.0.1:8080
 sm serve
@@ -148,7 +148,7 @@ OpenDAL options:
 ```bash
 docker run --rm \
   -p 8080:8080 \
-  -v ./depot.toml:/etc/starmetal/depot.toml:ro \
+  -v ./starmetal.toml:/etc/starmetal/starmetal.toml:ro \
   -v starmetal-data:/var/lib/starmetal \
   starmetal:local
 ```
@@ -182,7 +182,7 @@ require explicit `allow_private_network` and `allow_insecure` settings. See
 
 ## CLI and MCP
 
-The CLI command is `sm`. Config lookup still supports `DEPOT_CONFIG` and `depot.toml` for
+The CLI command is `sm`. Config lookup still supports `STARMETAL_CONFIG` and `starmetal.toml` for
 compatibility; the CLI and MCP server can run without a config file using built-in defaults plus
 explicit flags.
 
@@ -216,13 +216,13 @@ service/core boundary.
 
 | Crate | Role |
 |---|---|
-| `depot-core` | Domain types, config, policy, ports, lock file, registry schema types |
-| `depot-service` | Pull-through cache, Blake3 verification, policy checks, experimental local publishing |
-| `depot-storage` | OpenDAL-backed `StoragePort` implementation |
-| `depot-adapters` | Feature-gated protocol routers and upstream clients |
-| `depot-server` | Axum app assembly and Tower middleware |
-| `depot-ops` | Shared local operator API used by CLI and MCP |
-| `depot-cli` | Clap CLI and stdio MCP server |
+| `starmetal-core` | Domain types, config, policy, ports, lock file, registry schema types |
+| `starmetal-service` | Pull-through cache, Blake3 verification, policy checks, experimental local publishing |
+| `starmetal-storage` | OpenDAL-backed `StoragePort` implementation |
+| `starmetal-adapters` | Feature-gated protocol routers and upstream clients |
+| `starmetal-server` | Axum app assembly and Tower middleware |
+| `starmetal-ops` | Shared local operator API used by CLI and MCP |
+| `starmetal-cli` | Clap CLI and stdio MCP server |
 
 See [docs/architecture.md](docs/architecture.md) for diagrams and component details.
 
@@ -250,7 +250,7 @@ Schema provenance, fetched upstream artifacts, Starmetal-derived JSON Schemas, a
 under [`schemas/`](schemas/):
 
 - [`schemas/registries/`](schemas/registries/) - derived registry schemas where the protocol is JSON-like
-- [`schemas/depot/`](schemas/depot/) - config and lockfile schemas
+- [`schemas/starmetal/`](schemas/starmetal/) - config and lockfile schemas
 - [`schemas/README.md`](schemas/README.md) - source links and registry-by-registry derivation notes
 
 ## ADRs

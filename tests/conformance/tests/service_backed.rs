@@ -3,14 +3,14 @@ use std::sync::Arc;
 use ahash::AHashMap;
 use async_trait::async_trait;
 use bytes::Bytes;
-use depot_core::error::{DepotError, Result};
-use depot_core::package::{
+use starmetal_core::error::{Result, StarmetalError};
+use starmetal_core::package::{
     ArtifactDigest, ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata,
 };
-use depot_core::policy::PolicyConfig;
-use depot_core::ports::{PackageService, UpstreamClient};
-use depot_service::CachingPackageService;
-use depot_storage::OpenDalStorage;
+use starmetal_core::policy::PolicyConfig;
+use starmetal_core::ports::{PackageService, UpstreamClient};
+use starmetal_service::CachingPackageService;
+use starmetal_storage::OpenDalStorage;
 
 const ARTIFACT_BYTES: &[u8] = b"artifact bytes";
 const SHA1: &str = "1f80eeacf4808e99293f1d55132f34cd5c5a46a5";
@@ -209,7 +209,7 @@ async fn service_backed_conformance_rejects_policy_violations() {
         .get_artifact(&artifact)
         .await
         .expect_err("blocked package should not be served");
-    assert!(matches!(err, DepotError::PolicyViolation(_)));
+    assert!(matches!(err, StarmetalError::PolicyViolation(_)));
 }
 
 #[tokio::test]
@@ -245,7 +245,7 @@ async fn service_backed_conformance_rejects_bad_upstream_hashes() {
             .await
             .expect_err(&format!("{algorithm} mismatch should be rejected"));
         assert!(
-            matches!(err, DepotError::IntegrityError { .. }),
+            matches!(err, StarmetalError::IntegrityError { .. }),
             "expected integrity error for {algorithm}, got {err:?}"
         );
     }

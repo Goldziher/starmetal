@@ -104,31 +104,31 @@ graph TB
 
 ```mermaid
 graph LR
-    cli[depot-cli] --> ops[depot-ops]
-    ops --> server[depot-server]
-    ops --> service[depot-service]
-    ops --> storage[depot-storage]
-    ops --> adapters[depot-adapters]
+    cli[starmetal-cli] --> ops[starmetal-ops]
+    ops --> server[starmetal-server]
+    ops --> service[starmetal-service]
+    ops --> storage[starmetal-storage]
+    ops --> adapters[starmetal-adapters]
     server --> adapters
     server --> service
-    adapters --> core[depot-core]
+    adapters --> core[starmetal-core]
     service --> core
     storage --> core
 ```
 
 | Crate | Purpose |
 |-------|---------|
-| `depot-core` | Domain types, config, policy, ports, lock file, registry schema types |
-| `depot-service` | Pull-through cache, Blake3 verification, policy checks, experimental local publishing |
-| `depot-storage` | OpenDAL `StoragePort` implementation |
-| `depot-adapters` | Feature-gated protocol routers and upstream clients |
-| `depot-server` | Axum app assembly and Tower middleware |
-| `depot-ops` | Shared local runtime and operator operations |
-| `depot-cli` | Clap CLI and stdio MCP server |
+| `starmetal-core` | Domain types, config, policy, ports, lock file, registry schema types |
+| `starmetal-service` | Pull-through cache, Blake3 verification, policy checks, experimental local publishing |
+| `starmetal-storage` | OpenDAL `StoragePort` implementation |
+| `starmetal-adapters` | Feature-gated protocol routers and upstream clients |
+| `starmetal-server` | Axum app assembly and Tower middleware |
+| `starmetal-ops` | Shared local runtime and operator operations |
+| `starmetal-cli` | Clap CLI and stdio MCP server |
 | `tests/conformance` | Offline schema, protocol, and route conformance tests |
 | `tests/integration` | Ignored live native-client E2E tests |
 
-`depot-core` must stay framework-free. All I/O crosses port traits.
+`starmetal-core` must stay framework-free. All I/O crosses port traits.
 
 ## Request Flow
 
@@ -203,7 +203,7 @@ Additional service-managed keys include:
 - `<ecosystem>/<name>/_versions.json`
 - `<ecosystem>/<name>/<version>/_metadata.json`
 - `<ecosystem>/<name>/_raw_upstream`
-- `_depot/published/<ecosystem>/<name>/<version>.json`
+- `_starmetal/published/<ecosystem>/<name>/<version>.json`
 
 ## Schemas
 
@@ -215,7 +215,7 @@ schemas/
 ├── manifest.json
 ├── upstream/
 ├── registries/
-└── depot/
+└── starmetal/
 ```
 
 Use:

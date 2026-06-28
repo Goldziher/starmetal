@@ -12,19 +12,19 @@ All code lives under `crates/` — there is no top-level `src/`.
 
 | Crate | Role |
 |-------|------|
-| `depot-core` | Domain types, port traits (`PackageService`, `StoragePort`, `UpstreamClient`), policy engine, lock file, config |
-| `depot-service` | Application service layer. `CachingPackageService` implements pull-through caching, blake3 integrity verification (sidecar `.blake3` files), and policy enforcement. Sits between adapters and core. |
-| `depot-storage` | OpenDAL-backed `StoragePort` implementation. Feature-gated backends: `backend-fs`, `backend-s3`, `backend-gcs`, `backend-memory` |
-| `depot-adapters` | Inbound protocol adapters (axum routers) + outbound upstream clients. Feature-gated: `pypi`, `npm`, `cargo-registry`, `hex`. Each adapter defines a state trait (`HasPypiState`, `HasNpmState`, `HasCargoState`, `HasHexState`) for accessing `PackageService` + ecosystem-specific upstream client. |
-| `depot-server` | Axum app assembly, Tower middleware stack (tracing, CORS, auth, compression), shared `AppState` |
-| `depot-cli` | Binary crate. Clap CLI with commands: `serve`, `sync`, `lock`, `config` |
+| `starmetal-core` | Domain types, port traits (`PackageService`, `StoragePort`, `UpstreamClient`), policy engine, lock file, config |
+| `starmetal-service` | Application service layer. `CachingPackageService` implements pull-through caching, blake3 integrity verification (sidecar `.blake3` files), and policy enforcement. Sits between adapters and core. |
+| `starmetal-storage` | OpenDAL-backed `StoragePort` implementation. Feature-gated backends: `backend-fs`, `backend-s3`, `backend-gcs`, `backend-memory` |
+| `starmetal-adapters` | Inbound protocol adapters (axum routers) + outbound upstream clients. Feature-gated: `pypi`, `npm`, `cargo-registry`, `hex`. Each adapter defines a state trait (`HasPypiState`, `HasNpmState`, `HasCargoState`, `HasHexState`) for accessing `PackageService` + ecosystem-specific upstream client. |
+| `starmetal-server` | Axum app assembly, Tower middleware stack (tracing, CORS, auth, compression), shared `AppState` |
+| `starmetal-cli` | Binary crate. Clap CLI with commands: `serve`, `sync`, `lock`, `config` |
 | `tests/integration` | Integration test crate with 31 tests covering pip, npm, cargo, and mix client workflows |
 
 ## Dependency Flow
 
-`depot-cli → depot-server → depot-adapters → depot-core`
-`→ depot-service  → depot-core`
-`→ depot-storage  → depot-core`
+`starmetal-cli → starmetal-server → starmetal-adapters → starmetal-core`
+`→ starmetal-service  → starmetal-core`
+`→ starmetal-storage  → starmetal-core`
 
 The core crate has zero framework dependencies — all I/O goes through port traits.
 

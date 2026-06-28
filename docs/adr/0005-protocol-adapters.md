@@ -14,7 +14,7 @@ tests while still being experimental.
 
 ## Decision
 
-Each protocol adapter is an axum `Router` in `depot-adapters`.
+Each protocol adapter is an axum `Router` in `starmetal-adapters`.
 
 Implemented adapters:
 
@@ -71,5 +71,5 @@ credential semantics, failure modes, and native publish-then-install E2E evidenc
 ## Consequences
 
 - Adapters remain self-contained protocol edges.
-- Shared cache, policy, integrity, and local publish behavior stays in `depot-service`.
+- Shared cache, policy, integrity, and local publish behavior stays in `starmetal-service`.
 - Feature flags and runtime upstream settings must both be considered when describing support.

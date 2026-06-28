@@ -115,7 +115,7 @@ jobs:
           ref: ${{ steps.meta.outputs.checkout_ref }}
           fetch-depth: 0
 
-      - uses: go-task/setup-task@v1
+      - uses: go-task/setup-task@v2
 
       - name: Smoke-test container
         run: task docker:smoke

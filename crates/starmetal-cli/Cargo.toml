@@ -1,0 +1,62 @@
+[package]
+name = "starmetal-cli"
+description = "sm CLI binary for the Starmetal package registry"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[package.metadata.cargo-machete]
+ignored = ["starmetal-adapters", "starmetal-storage", "serde"]
+
+[[bin]]
+name = "sm"
+path = "src/main.rs"
+
+[features]
+default = ["full"]
+full = [
+    "pypi",
+    "npm",
+    "cargo-registry",
+    "hex",
+    "maven",
+    "rubygems",
+    "nuget",
+    "pub",
+    "backend-fs",
+]
+pypi = ["starmetal-adapters/pypi", "starmetal-ops/pypi", "starmetal-server/pypi"]
+npm = ["starmetal-adapters/npm", "starmetal-ops/npm", "starmetal-server/npm"]
+cargo-registry = [
+    "starmetal-adapters/cargo-registry",
+    "starmetal-ops/cargo-registry",
+    "starmetal-server/cargo-registry",
+]
+hex = ["starmetal-adapters/hex", "starmetal-ops/hex", "starmetal-server/hex"]
+maven = ["starmetal-adapters/maven", "starmetal-ops/maven", "starmetal-server/maven"]
+rubygems = [
+    "starmetal-adapters/rubygems",
+    "starmetal-ops/rubygems",
+    "starmetal-server/rubygems",
+]
+nuget = ["starmetal-adapters/nuget", "starmetal-ops/nuget", "starmetal-server/nuget"]
+pub = ["starmetal-adapters/pub", "starmetal-ops/pub", "starmetal-server/pub"]
+backend-fs = ["starmetal-ops/backend-fs", "starmetal-storage/backend-fs"]
+backend-memory = ["starmetal-ops/backend-memory", "starmetal-storage/backend-memory"]
+backend-s3 = ["starmetal-ops/backend-s3", "starmetal-storage/backend-s3"]
+backend-gcs = ["starmetal-ops/backend-gcs", "starmetal-storage/backend-gcs"]
+
+[dependencies]
+axum.workspace = true
+clap.workspace = true
+rmcp.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+starmetal-adapters = { workspace = true, default-features = false }
+starmetal-core.workspace = true
+starmetal-ops = { workspace = true, default-features = false }
+starmetal-server = { workspace = true, default-features = false }
+starmetal-storage = { workspace = true, default-features = false }
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

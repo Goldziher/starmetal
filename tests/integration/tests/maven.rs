@@ -1,6 +1,6 @@
 use tokio::process::Command;
 
-use depot_integration_tests::TestServer;
+use starmetal_integration_tests::TestServer;
 
 async fn require_mvn() -> String {
     if let Ok(output) = Command::new("mvn").arg("--version").output().await
@@ -13,7 +13,7 @@ async fn require_mvn() -> String {
 
 async fn maven_resolve(
     mvn: &str,
-    depot_maven_url: &str,
+    starmetal_maven_url: &str,
     project_dir: &std::path::Path,
     repo_dir: &std::path::Path,
 ) -> std::process::Output {
@@ -24,9 +24,9 @@ async fn maven_resolve(
             r#"<settings>
   <mirrors>
     <mirror>
-      <id>depot</id>
+      <id>starmetal</id>
       <mirrorOf>*</mirrorOf>
-      <url>{depot_maven_url}</url>
+      <url>{starmetal_maven_url}</url>
     </mirror>
   </mirrors>
 </settings>
@@ -40,7 +40,7 @@ async fn maven_resolve(
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
-  <groupId>depot.e2e</groupId>
+  <groupId>starmetal.e2e</groupId>
   <artifactId>maven-e2e</artifactId>
   <version>0.0.0</version>
   <dependencies>
@@ -72,7 +72,7 @@ async fn maven_resolve(
 
 #[tokio::test]
 #[ignore] // requires network + mvn
-async fn maven_resolves_dependency_through_depot() {
+async fn maven_resolves_dependency_through_starmetal() {
     let mvn = require_mvn().await;
     let server = TestServer::start_all_enabled().await;
     let project = tempfile::tempdir().expect("project tempdir");
@@ -146,7 +146,7 @@ async fn maven_serves_artifacts_and_checksum_sidecars() {
 
 #[tokio::test]
 #[ignore] // requires network + mvn
-async fn maven_resolve_works_from_depot_cache() {
+async fn maven_resolve_works_from_starmetal_cache() {
     let mvn = require_mvn().await;
     let server = TestServer::start_all_enabled().await;
 

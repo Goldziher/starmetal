@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_by": "depot-schema-manager",
+  "generated_by": "starmetal-schema-manager",
   "sources": [
     {
       "id": "pypa-specifications-index",
@@ -432,10 +432,10 @@
       "description": "OSV JSON Schema referenced by Hosted Pub Repository Specification v2 for package security advisories only."
     },
     {
-      "id": "depot-config",
-      "registry": "depot",
-      "kind": "depot-rust-type",
-      "url": "crates/depot-core/src/config.rs",
+      "id": "starmetal-config",
+      "registry": "starmetal",
+      "kind": "starmetal-rust-type",
+      "url": "crates/starmetal-core/src/config.rs",
       "official": false,
       "fetched": false,
       "path": null,
@@ -443,10 +443,10 @@
       "description": "Starmetal-owned configuration Rust type."
     },
     {
-      "id": "depot-lockfile",
-      "registry": "depot",
-      "kind": "depot-rust-type",
-      "url": "crates/depot-core/src/lockfile.rs",
+      "id": "starmetal-lockfile",
+      "registry": "starmetal",
+      "kind": "starmetal-rust-type",
+      "url": "crates/starmetal-core/src/lockfile.rs",
       "official": false,
       "fetched": false,
       "path": null,
@@ -459,9 +459,9 @@
       "id": "pypi-simple-project",
       "registry": "pypi",
       "path": "registries/pypi.schema.json",
-      "schema_kind": "depot-derived-json-schema",
-      "source_type": "depot_core::registry::pypi::PypiProject",
-      "source_file": "crates/depot-core/src/registry/pypi.rs",
+      "schema_kind": "starmetal-derived-json-schema",
+      "source_type": "starmetal_core::registry::pypi::PypiProject",
+      "source_file": "crates/starmetal-core/src/registry/pypi.rs",
       "source_ids": [
         "pypa-specifications-index",
         "pypi-simple-api",
@@ -475,17 +475,17 @@
         "official-prose-index",
         "official-prose"
       ],
-      "generated_by": "depot-schema-manager",
-      "validated_by": "crates/depot-core/tests/schema_validation.rs; tests/conformance",
-      "blake3": "cf75f71c610b6e54f28beda8236ed1820a0f1d55176835468899b575f848e199"
+      "generated_by": "starmetal-schema-manager",
+      "validated_by": "crates/starmetal-core/tests/schema_validation.rs; tests/conformance",
+      "blake3": "2b26c7feff86351dbeefeb1338515dc338832ec0d17ffba0a32017f5f9650162"
     },
     {
       "id": "pypi-simple-index",
       "registry": "pypi",
       "path": "registries/pypi-index.schema.json",
-      "schema_kind": "depot-derived-json-schema",
-      "source_type": "depot_core::registry::pypi::PypiIndex",
-      "source_file": "crates/depot-core/src/registry/pypi.rs",
+      "schema_kind": "starmetal-derived-json-schema",
+      "source_type": "starmetal_core::registry::pypi::PypiIndex",
+      "source_file": "crates/starmetal-core/src/registry/pypi.rs",
       "source_ids": [
         "pypa-specifications-index",
         "pypi-simple-api",
@@ -495,17 +495,17 @@
         "official-prose-index",
         "official-prose"
       ],
-      "generated_by": "depot-schema-manager",
-      "validated_by": "crates/depot-core/tests/schema_validation.rs; tests/conformance",
-      "blake3": "db2da510feb11a8a632cb705c34a7ea7dd4e423d71646edc7516320fd706691a"
+      "generated_by": "starmetal-schema-manager",
+      "validated_by": "crates/starmetal-core/tests/schema_validation.rs; tests/conformance",
+      "blake3": "3e19917d2fbcc750f7af51075076b300f62bcb0b780a91cb11f5749ad189fa79"
     },
     {
       "id": "npm-packument",
       "registry": "npm",
       "path": "registries/npm.schema.json",
-      "schema_kind": "depot-derived-json-schema",
-      "source_type": "depot_core::registry::npm::NpmPackument",
-      "source_file": "crates/depot-core/src/registry/npm.rs",
+      "schema_kind": "starmetal-derived-json-schema",
+      "source_type": "starmetal_core::registry::npm::NpmPackument",
+      "source_file": "crates/starmetal-core/src/registry/npm.rs",
       "source_ids": [
         "npm-package-metadata",
         "npm-types"
@@ -514,51 +514,51 @@
         "official-prose",
         "official-typescript"
       ],
-      "generated_by": "depot-schema-manager",
-      "validated_by": "crates/depot-core/tests/schema_validation.rs; tests/conformance",
-      "blake3": "ac21c728f78df2b699ff01e915a23c6e66b99a31722b62b06884aac21d7c42d0"
+      "generated_by": "starmetal-schema-manager",
+      "validated_by": "crates/starmetal-core/tests/schema_validation.rs; tests/conformance",
+      "blake3": "3f793f81cafb9fc0d870593f51cd4d312f50f117253d90c95ecc661bb2c24ace"
     },
     {
       "id": "cargo-sparse-index-entry",
       "registry": "cargo",
       "path": "registries/cargo.schema.json",
-      "schema_kind": "depot-derived-json-schema",
-      "source_type": "depot_core::registry::cargo::CargoIndexEntry",
-      "source_file": "crates/depot-core/src/registry/cargo.rs",
+      "schema_kind": "starmetal-derived-json-schema",
+      "source_type": "starmetal_core::registry::cargo::CargoIndexEntry",
+      "source_file": "crates/starmetal-core/src/registry/cargo.rs",
       "source_ids": [
         "cargo-registry-index"
       ],
       "source_kinds": [
         "official-prose"
       ],
-      "generated_by": "depot-schema-manager",
-      "validated_by": "crates/depot-core/tests/schema_validation.rs; tests/conformance",
-      "blake3": "881df2ae5a888fa8b81e34aef8336fa6f7f4b5173bc61b7206b0f597bd734a95"
+      "generated_by": "starmetal-schema-manager",
+      "validated_by": "crates/starmetal-core/tests/schema_validation.rs; tests/conformance",
+      "blake3": "248d56ecb17ceff0de355764a239f5b0e018641b570d89ebcf597184ebc5c55a"
     },
     {
       "id": "cargo-config",
       "registry": "cargo",
       "path": "registries/cargo-config.schema.json",
-      "schema_kind": "depot-derived-json-schema",
-      "source_type": "depot_core::registry::cargo::CargoConfig",
-      "source_file": "crates/depot-core/src/registry/cargo.rs",
+      "schema_kind": "starmetal-derived-json-schema",
+      "source_type": "starmetal_core::registry::cargo::CargoConfig",
+      "source_file": "crates/starmetal-core/src/registry/cargo.rs",
       "source_ids": [
         "cargo-registry-index"
       ],
       "source_kinds": [
         "official-prose"
       ],
-      "generated_by": "depot-schema-manager",
-      "validated_by": "crates/depot-core/tests/schema_validation.rs; tests/conformance",
-      "blake3": "10931816a6fe08daa73eb4ec98cdcfed65c508df72930ce3702aba712f0870ea"
+      "generated_by": "starmetal-schema-manager",
+      "validated_by": "crates/starmetal-core/tests/schema_validation.rs; tests/conformance",
+      "blake3": "235451c35448770aba5b422bece6d7ea94eaf85fc0e14dfea7311ec1af6971e6"
     },
     {
       "id": "hex-package-http-api",
       "registry": "hex",
       "path": "registries/hex.schema.json",
-      "schema_kind": "depot-derived-json-schema",
-      "source_type": "depot_core::registry::hex::HexPackage",
-      "source_file": "crates/depot-core/src/registry/hex.rs",
+      "schema_kind": "starmetal-derived-json-schema",
+      "source_type": "starmetal_core::registry::hex::HexPackage",
+      "source_file": "crates/starmetal-core/src/registry/hex.rs",
       "source_ids": [
         "hex-registry-v2",
         "hex-package-proto",
@@ -568,34 +568,34 @@
         "official-prose",
         "official-protobuf"
       ],
-      "generated_by": "depot-schema-manager",
-      "validated_by": "crates/depot-core/tests/schema_validation.rs; tests/conformance",
-      "blake3": "355e3a55164d0c7fe32c70d80d13e91c058ab06294f54b02b9c206a871c2ca0a"
+      "generated_by": "starmetal-schema-manager",
+      "validated_by": "crates/starmetal-core/tests/schema_validation.rs; tests/conformance",
+      "blake3": "0548b52d721cc36ed6055b32f6a4944bd14105fc4aa81ffdff6130be3ebcc9d7"
     },
     {
-      "id": "depot-config",
-      "registry": "depot",
-      "path": "depot/config.schema.json",
-      "schema_kind": "depot-owned-json-schema",
-      "source_type": "depot_core::config::Config",
-      "source_file": "crates/depot-core/src/config.rs",
+      "id": "starmetal-config",
+      "registry": "starmetal",
+      "path": "starmetal/config.schema.json",
+      "schema_kind": "starmetal-owned-json-schema",
+      "source_type": "starmetal_core::config::Config",
+      "source_file": "crates/starmetal-core/src/config.rs",
       "source_ids": [
-        "depot-config"
+        "starmetal-config"
       ],
       "source_kinds": [
-        "depot-rust-type"
+        "starmetal-rust-type"
       ],
-      "generated_by": "depot-schema-manager",
-      "validated_by": "crates/depot-core/tests/schema_validation.rs",
-      "blake3": "345c93af08ae619d062e2a870c8248db89e43f945460caae5b1c8fe797cb6fea"
+      "generated_by": "starmetal-schema-manager",
+      "validated_by": "crates/starmetal-core/tests/schema_validation.rs",
+      "blake3": "a06af409871cbb52e9ef1b72bff90591cdb9c098b4d42fafd6228f9f7f32a95c"
     },
     {
       "id": "nuget-v3-service-index",
       "registry": "nuget",
       "path": "registries/nuget-service-index.schema.json",
-      "schema_kind": "depot-derived-json-schema",
-      "source_type": "depot_core::registry::nuget::NugetServiceIndex",
-      "source_file": "crates/depot-core/src/registry/nuget.rs",
+      "schema_kind": "starmetal-derived-json-schema",
+      "source_type": "starmetal_core::registry::nuget::NugetServiceIndex",
+      "source_file": "crates/starmetal-core/src/registry/nuget.rs",
       "source_ids": [
         "nuget-v3-overview",
         "nuget-v3-service-index"
@@ -603,17 +603,17 @@
       "source_kinds": [
         "official-prose"
       ],
-      "generated_by": "depot-schema-manager",
-      "validated_by": "crates/depot-core/tests/schema_validation.rs",
-      "blake3": "67f222bfdcd663355173033209c267f5bcafe4410b3ddd61b6ddf4e3ed3fd98c"
+      "generated_by": "starmetal-schema-manager",
+      "validated_by": "crates/starmetal-core/tests/schema_validation.rs",
+      "blake3": "e897ac1d43408c0c6536921fc1cc81c9978d37fef7d5d333203785801c631a50"
     },
     {
       "id": "nuget-v3-package-base-address",
       "registry": "nuget",
       "path": "registries/nuget-package-base-address.schema.json",
-      "schema_kind": "depot-derived-json-schema",
-      "source_type": "depot_core::registry::nuget::NugetPackageVersions",
-      "source_file": "crates/depot-core/src/registry/nuget.rs",
+      "schema_kind": "starmetal-derived-json-schema",
+      "source_type": "starmetal_core::registry::nuget::NugetPackageVersions",
+      "source_file": "crates/starmetal-core/src/registry/nuget.rs",
       "source_ids": [
         "nuget-v3-overview",
         "nuget-v3-package-base-address"
@@ -621,17 +621,17 @@
       "source_kinds": [
         "official-prose"
       ],
-      "generated_by": "depot-schema-manager",
-      "validated_by": "crates/depot-core/tests/schema_validation.rs",
-      "blake3": "142c07ec6c54a32e39a16887c273fbc4d6dd6fcb55f98e865c8f86768ccd948c"
+      "generated_by": "starmetal-schema-manager",
+      "validated_by": "crates/starmetal-core/tests/schema_validation.rs",
+      "blake3": "07dcbc58858dd1cc26cb795aa8943d87877c22ceed9ab2e4fcbdfb35fb9d76df"
     },
     {
       "id": "nuget-v3-registration",
       "registry": "nuget",
       "path": "registries/nuget-registration.schema.json",
-      "schema_kind": "depot-derived-json-schema",
-      "source_type": "depot_core::registry::nuget::NugetRegistrationIndex",
-      "source_file": "crates/depot-core/src/registry/nuget.rs",
+      "schema_kind": "starmetal-derived-json-schema",
+      "source_type": "starmetal_core::registry::nuget::NugetRegistrationIndex",
+      "source_file": "crates/starmetal-core/src/registry/nuget.rs",
       "source_ids": [
         "nuget-v3-overview",
         "nuget-v3-registration",
@@ -641,17 +641,17 @@
         "official-prose",
         "official-xml-schema"
       ],
-      "generated_by": "depot-schema-manager",
-      "validated_by": "crates/depot-core/tests/schema_validation.rs",
-      "blake3": "6702c92b3ec374067ddf3505aeef2087999516c750b302a263ad1ebe6299343b"
+      "generated_by": "starmetal-schema-manager",
+      "validated_by": "crates/starmetal-core/tests/schema_validation.rs",
+      "blake3": "316f54649aad6280488e1d608ec5236857e260d8066757a03143bb7d5b9434d0"
     },
     {
       "id": "pub-package",
       "registry": "pub",
       "path": "registries/pub-package.schema.json",
-      "schema_kind": "depot-derived-json-schema",
-      "source_type": "depot_core::registry::pubdev::PubPackage",
-      "source_file": "crates/depot-core/src/registry/pubdev.rs",
+      "schema_kind": "starmetal-derived-json-schema",
+      "source_type": "starmetal_core::registry::pubdev::PubPackage",
+      "source_file": "crates/starmetal-core/src/registry/pubdev.rs",
       "source_ids": [
         "pub-hosted-repository-v2",
         "pub-dev-supported-api",
@@ -661,26 +661,26 @@
         "official-prose",
         "official-dart-source"
       ],
-      "generated_by": "depot-schema-manager",
-      "validated_by": "crates/depot-core/tests/schema_validation.rs",
-      "blake3": "a1ed02f7ee42f38d379b8496fca5dee585572bceb62875cdfd948041230ef832"
+      "generated_by": "starmetal-schema-manager",
+      "validated_by": "crates/starmetal-core/tests/schema_validation.rs",
+      "blake3": "09c21f235dbfd5fc8ec090a10dd8e67c35153e9809a4b194c0612186023c257a"
     },
     {
-      "id": "depot-lockfile",
-      "registry": "depot",
-      "path": "depot/lockfile.schema.json",
-      "schema_kind": "depot-owned-json-schema",
-      "source_type": "depot_core::lockfile::LockFile",
-      "source_file": "crates/depot-core/src/lockfile.rs",
+      "id": "starmetal-lockfile",
+      "registry": "starmetal",
+      "path": "starmetal/lockfile.schema.json",
+      "schema_kind": "starmetal-owned-json-schema",
+      "source_type": "starmetal_core::lockfile::LockFile",
+      "source_file": "crates/starmetal-core/src/lockfile.rs",
       "source_ids": [
-        "depot-lockfile"
+        "starmetal-lockfile"
       ],
       "source_kinds": [
-        "depot-rust-type"
+        "starmetal-rust-type"
       ],
-      "generated_by": "depot-schema-manager",
-      "validated_by": "crates/depot-core/tests/schema_validation.rs",
-      "blake3": "b7a115df91ab29d0d472107c93c663cf5c009522a79ac7c94a4287407995aeef"
+      "generated_by": "starmetal-schema-manager",
+      "validated_by": "crates/starmetal-core/tests/schema_validation.rs",
+      "blake3": "0da8663cc10eb70870c3baf3c8f4d80d745e5fb170321d0ee443d5739fac75cb"
     }
   ]
 }

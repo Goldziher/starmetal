@@ -1,6 +1,6 @@
 use tokio::process::Command;
 
-use depot_integration_tests::TestServer;
+use starmetal_integration_tests::TestServer;
 
 #[tokio::test]
 #[ignore] // requires network
@@ -97,7 +97,7 @@ async fn cargo_nonexistent_crate_returns_404() {
     let client = reqwest::Client::new();
     let response = client
         .get(format!(
-            "{}/cargo/th/is/this-crate-does-not-exist-depot-test",
+            "{}/cargo/th/is/this-crate-does-not-exist-starmetal-test",
             server.base_url()
         ))
         .send()
@@ -141,7 +141,7 @@ async fn cargo_short_crate_name_index() {
 
 /// Create a temp Cargo project that depends on a crate from our registry,
 /// then run `cargo fetch` to verify the full sparse index + download flow.
-async fn cargo_fetch_from_depot(
+async fn cargo_fetch_from_starmetal(
     base_url: &str,
     crate_name: &str,
     version: &str,
@@ -149,15 +149,15 @@ async fn cargo_fetch_from_depot(
     let tmp = tempfile::tempdir().expect("tempdir");
     let cargo_home = tempfile::tempdir().expect("cargo home tempdir");
 
-    // Write a minimal Cargo.toml pointing to our depot as a registry
+    // Write a minimal Cargo.toml pointing to our starmetal as a registry
     let cargo_toml = format!(
         r#"[package]
-name = "depot-test-project"
+name = "starmetal-test-project"
 version = "0.0.0"
 edition = "2021"
 
 [dependencies]
-{crate_name} = {{ version = "={version}", registry = "depot" }}
+{crate_name} = {{ version = "={version}", registry = "starmetal" }}
 "#
     );
     std::fs::write(tmp.path().join("Cargo.toml"), cargo_toml).unwrap();
@@ -168,7 +168,7 @@ edition = "2021"
     let cargo_dir = tmp.path().join(".cargo");
     std::fs::create_dir_all(&cargo_dir).unwrap();
     let config_toml = format!(
-        r#"[registries.depot]
+        r#"[registries.starmetal]
 index = "sparse+{base_url}/cargo/"
 "#
     );
@@ -191,7 +191,8 @@ index = "sparse+{base_url}/cargo/"
 async fn cargo_fetch_crate_via_sparse_index() {
     let server = TestServer::start().await;
 
-    let (output, _tmp) = cargo_fetch_from_depot(&server.base_url(), "once_cell", "1.19.0").await;
+    let (output, _tmp) =
+        cargo_fetch_from_starmetal(&server.base_url(), "once_cell", "1.19.0").await;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -209,10 +210,10 @@ async fn cargo_fetch_crate_via_sparse_index() {
 async fn cargo_fetch_cached_on_second_request() {
     let server = TestServer::start().await;
 
-    let (out1, _tmp1) = cargo_fetch_from_depot(&server.base_url(), "once_cell", "1.19.0").await;
+    let (out1, _tmp1) = cargo_fetch_from_starmetal(&server.base_url(), "once_cell", "1.19.0").await;
     assert!(out1.status.success(), "first cargo fetch failed");
 
-    let (out2, _tmp2) = cargo_fetch_from_depot(&server.base_url(), "once_cell", "1.19.0").await;
+    let (out2, _tmp2) = cargo_fetch_from_starmetal(&server.base_url(), "once_cell", "1.19.0").await;
     assert!(out2.status.success(), "second cargo fetch (cached) failed");
 
     server.shutdown();

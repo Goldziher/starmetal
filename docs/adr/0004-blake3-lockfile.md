@@ -39,7 +39,7 @@ Starmetal lock files are TOML and ecosystem-agnostic:
 [metadata]
 schema_version = 1
 generated_at = "2026-06-28T00:00:00Z"
-depot_version = "0.1.0"
+starmetal_version = "0.1.0"
 
 [[packages]]
 ecosystem = "pypi"

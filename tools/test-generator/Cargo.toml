@@ -1,5 +1,5 @@
 [package]
-name = "depot-test-generator"
+name = "starmetal-test-generator"
 version.workspace = true
 edition = "2024"
 publish = false

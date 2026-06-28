@@ -34,7 +34,7 @@ The pressure test starts the image with a named volume, warms the PyPI route, fe
 through Starmetal, verifies the OpenDAL filesystem writes and Blake3 sidecar, and sends concurrent
 requests against cached metadata and artifact routes.
 
-With no extra args, the image runs `sm serve`, reads `/etc/starmetal/depot.toml`, listens on
+With no extra args, the image runs `sm serve`, reads `/etc/starmetal/starmetal.toml`, listens on
 `0.0.0.0:8080`, and uses OpenDAL filesystem storage rooted at `/var/lib/starmetal`.
 
 ```sh
@@ -59,7 +59,7 @@ repository.
 ```sh
 docker run --rm \
   --publish 8080:8080 \
-  --volume "$PWD/depot.toml:/etc/starmetal/depot.toml:ro" \
+  --volume "$PWD/starmetal.toml:/etc/starmetal/starmetal.toml:ro" \
   --volume starmetal-data:/var/lib/starmetal \
   starmetal:local
 ```
@@ -75,7 +75,7 @@ docker build \
 ## Build From Source
 
 ```sh
-cargo build --release -p depot-cli
+cargo build --release -p starmetal-cli
 ```
 
 For development workflows, prefer the Taskfile:
@@ -153,13 +153,13 @@ task test:e2e:pub
 ## Start the Server
 
 ```sh
-sm --config depot.toml serve
+sm --config starmetal.toml serve
 ```
 
 For a release binary:
 
 ```sh
-./target/release/sm --config depot.toml serve
+./target/release/sm --config starmetal.toml serve
 ```
 
 Starmetal serves HTTP. Put it behind a private network boundary or a TLS-terminating reverse proxy. Do

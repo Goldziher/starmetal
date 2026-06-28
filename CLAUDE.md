@@ -1,7 +1,7 @@
 <!--
 🤖 AI-RULEZ :: GENERATED FILE — DO NOT EDIT DIRECTLY
 Project: starmetal
-Generated: 2026-06-28 16:08:54
+Generated: 2026-06-28 18:36:47
 Source: .ai-rulez/config.toml
 Target: CLAUDE.md
 Content: rules=39, sections=0, agents=9
@@ -46,8 +46,8 @@ INSTRUCTIONS FOR AI AGENTS
    c. Commit both .ai-rulez/ and generated files
 
 Documentation: https://github.com/Goldziher/ai-rulez
-Content-Hash: blake3:ef7d981f7bfa455782977393d7c0e62734f7db3b5e09a4a56f69d7ccc3cc471f
-Source-Hash: blake3:0f1a1056416e1f72cc6a846e44c3f53e280100f5f8ded58d31b07254aa0f5605
+Content-Hash: blake3:53d5af6303d59fd38798b0424463eefa6d00592b724919d9dc33347e560b2f11
+Source-Hash: blake3:894687f422d4f1ba1124a0b2ec1953ddde476dbd488caae6a90e968420a1a551
 -->
 
 # starmetal
@@ -156,8 +156,8 @@ Zero tolerance for critical/high CVEs. Automate dependency update PRs where poss
 
 **Priority:** high
 
-- Each crate converts external errors into `DepotError` at the boundary using `From` impls or `.map_err()`.
-- HTTP handlers map `DepotError` variants to appropriate status codes.
+- Each crate converts external errors into `StarmetalError` at the boundary using `From` impls or `.map_err()`.
+- HTTP handlers map `StarmetalError` variants to appropriate status codes.
 - Use `thiserror` for all error enums.
 - Never use `.unwrap()` or `.expect()` in library crates. The CLI binary may use `.unwrap_or_else()` with proper error messages for startup code only.
 
@@ -177,20 +177,20 @@ Briefly explain your reasoning for non-obvious decisions. State trade-offs when 
 
 **Priority:** high
 
-- All protocol adapters are gated behind feature flags in `depot-adapters`.
-- All storage backends are gated behind feature flags in `depot-storage`.
+- All protocol adapters are gated behind feature flags in `starmetal-adapters`.
+- All storage backends are gated behind feature flags in `starmetal-storage`.
 - Feature flags are additive — combining features must never break builds.
 - Use `#[cfg(feature = "...")]` on modules, not on individual functions.
-- When adding a new adapter or backend, add corresponding feature flags and update `depot-cli`'s `full` feature.
+- When adding a new adapter or backend, add corresponding feature flags and update `starmetal-cli`'s `full` feature.
 
 ### hexagonal-boundaries
 
 **Priority:** critical
 
-- `depot-core` must NEVER depend on axum, tower, opendal, reqwest, or any framework crate. All I/O goes through port traits.
+- `starmetal-core` must NEVER depend on axum, tower, opendal, reqwest, or any framework crate. All I/O goes through port traits.
 - Protocol adapters must NEVER access storage directly — always go through `PackageService`.
 - Adapters must NOT share protocol-specific logic with each other. Shared behavior belongs in `PackageService`.
-- New dependencies in `depot-core` require justification — keep it framework-free.
+- New dependencies in `starmetal-core` require justification — keep it framework-free.
 
 ### incremental-approach
 
@@ -349,19 +349,19 @@ All code lives under `crates/` — there is no top-level `src/`.
 
 | Crate | Role |
 |-------|------|
-| `depot-core` | Domain types, port traits (`PackageService`, `StoragePort`, `UpstreamClient`), policy engine, lock file, config |
-| `depot-service` | Application service layer. `CachingPackageService` implements pull-through caching, blake3 integrity verification (sidecar `.blake3` files), and policy enforcement. Sits between adapters and core. |
-| `depot-storage` | OpenDAL-backed `StoragePort` implementation. Feature-gated backends: `backend-fs`, `backend-s3`, `backend-gcs`, `backend-memory` |
-| `depot-adapters` | Inbound protocol adapters (axum routers) + outbound upstream clients. Feature-gated: `pypi`, `npm`, `cargo-registry`, `hex`. Each adapter defines a state trait (`HasPypiState`, `HasNpmState`, `HasCargoState`, `HasHexState`) for accessing `PackageService` + ecosystem-specific upstream client. |
-| `depot-server` | Axum app assembly, Tower middleware stack (tracing, CORS, auth, compression), shared `AppState` |
-| `depot-cli` | Binary crate. Clap CLI with commands: `serve`, `sync`, `lock`, `config` |
+| `starmetal-core` | Domain types, port traits (`PackageService`, `StoragePort`, `UpstreamClient`), policy engine, lock file, config |
+| `starmetal-service` | Application service layer. `CachingPackageService` implements pull-through caching, blake3 integrity verification (sidecar `.blake3` files), and policy enforcement. Sits between adapters and core. |
+| `starmetal-storage` | OpenDAL-backed `StoragePort` implementation. Feature-gated backends: `backend-fs`, `backend-s3`, `backend-gcs`, `backend-memory` |
+| `starmetal-adapters` | Inbound protocol adapters (axum routers) + outbound upstream clients. Feature-gated: `pypi`, `npm`, `cargo-registry`, `hex`. Each adapter defines a state trait (`HasPypiState`, `HasNpmState`, `HasCargoState`, `HasHexState`) for accessing `PackageService` + ecosystem-specific upstream client. |
+| `starmetal-server` | Axum app assembly, Tower middleware stack (tracing, CORS, auth, compression), shared `AppState` |
+| `starmetal-cli` | Binary crate. Clap CLI with commands: `serve`, `sync`, `lock`, `config` |
 | `tests/integration` | Integration test crate with 31 tests covering pip, npm, cargo, and mix client workflows |
 
 ## Dependency Flow
 
-`depot-cli → depot-server → depot-adapters → depot-core`
-`→ depot-service  → depot-core`
-`→ depot-storage  → depot-core`
+`starmetal-cli → starmetal-server → starmetal-adapters → starmetal-core`
+`→ starmetal-service  → starmetal-core`
+`→ starmetal-storage  → starmetal-core`
 
 The core crate has zero framework dependencies — all I/O goes through port traits.
 
@@ -392,7 +392,7 @@ Architecture Decision Records are in `docs/adr/`. Read them before making archit
 cargo build --workspace
 cargo check --workspace
 cargo test --workspace
-cargo test -p depot-core
+cargo test -p starmetal-core
 cargo clippy --workspace
 cargo fmt --check
 ```
@@ -435,7 +435,7 @@ When a task aligns with a specialized agent listed below, delegate to that agent
 
 - **cli-engineer**: CLI binary and user-facing command specialist
 - **code-reviewer**: Use when reviewing code changes for quality, security, and convention compliance
-- **core-architect**: Domain modeling and core business logic specialist for depot-core
+- **core-architect**: Domain modeling and core business logic specialist for starmetal-core
 - **docs-writer**: Use when writing or updating documentation, READMEs, or changelogs
 - **infra-engineer**: Storage, middleware, and server infrastructure specialist
 - **protocol-engineer**: Registry protocol adapter specialist for PyPI, npm, Cargo, and Hex

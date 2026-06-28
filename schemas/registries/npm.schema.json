@@ -88,7 +88,7 @@
       "type": "object"
     }
   },
-  "$id": "https://schemas.depot.local/registries/npm.schema.json",
+  "$id": "https://schemas.starmetal.local/registries/npm.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "Starmetal-derived JSON Schema for npm registry package metadata.",
   "properties": {
@@ -136,10 +136,10 @@
   ],
   "title": "npm Registry Packument",
   "type": "object",
-  "x-depot-source": {
-    "generated_by": "depot-schema-manager",
-    "schema_kind": "depot-derived-json-schema",
-    "source_file": "crates/depot-core/src/registry/npm.rs",
+  "x-starmetal-source": {
+    "generated_by": "starmetal-schema-manager",
+    "schema_kind": "starmetal-derived-json-schema",
+    "source_file": "crates/starmetal-core/src/registry/npm.rs",
     "source_ids": [
       "npm-package-metadata",
       "npm-types"
@@ -148,7 +148,7 @@
       "official-prose",
       "official-typescript"
     ],
-    "source_type": "depot_core::registry::npm::NpmPackument",
-    "validated_by": "crates/depot-core/tests/schema_validation.rs; tests/conformance"
+    "source_type": "starmetal_core::registry::npm::NpmPackument",
+    "validated_by": "crates/starmetal-core/tests/schema_validation.rs; tests/conformance"
   }
 }

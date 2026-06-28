@@ -11,7 +11,7 @@ must share behavior rather than duplicating config, storage, or service construc
 
 ## Decision
 
-`depot-ops` is the shared local operations layer for `depot-cli` and the stdio MCP server.
+`starmetal-ops` is the shared local operations layer for `starmetal-cli` and the stdio MCP server.
 
 Implemented CLI surface:
 
@@ -41,11 +41,11 @@ MCP runs over stdio. Read tools are available by default. Mutating tools require
 
 ## Implemented
 
-- Config lookup through defaults, `DEPOT_CONFIG`, local `depot.toml`, explicit config path, and CLI
+- Config lookup through defaults, `STARMETAL_CONFIG`, local `starmetal.toml`, explicit config path, and CLI
   overrides.
 - `--no-config` local workflows.
 - Human output plus `--output json` for stable machine-readable output.
-- Shared runtime construction through `DepotRuntime`.
+- Shared runtime construction through `StarmetalRuntime`.
 - MCP tools backed by the same operations as CLI commands.
 
 ## Deferred
@@ -58,6 +58,6 @@ MCP runs over stdio. Read tools are available by default. Mutating tools require
 
 ## Consequences
 
-- CLI and MCP stay aligned through `depot-ops`.
+- CLI and MCP stay aligned through `starmetal-ops`.
 - Starmetal can be operated locally without a config file.
 - Remote admin behavior needs a separate ADR.

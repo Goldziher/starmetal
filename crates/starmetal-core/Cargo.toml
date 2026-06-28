@@ -1,0 +1,27 @@
+[package]
+name = "starmetal-core"
+description = "Core domain types, port traits, and business logic for Starmetal"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = []
+encryption = []
+
+[dependencies]
+ahash.workspace = true
+async-trait.workspace = true
+blake3.workspace = true
+bytes.workspace = true
+memchr.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+jsonschema.workspace = true
+tempfile.workspace = true

@@ -147,89 +147,89 @@ tasks:
   test:generate:
     desc: Generate integration tests from fixtures
     cmds:
-      - cargo run -p depot-test-generator -- --fixtures crates/depot-core/testing_data --output crates/depot-core/tests/generated_tests.rs
+      - cargo run -p starmetal-test-generator -- --fixtures crates/starmetal-core/testing_data --output crates/starmetal-core/tests/generated_tests.rs
       - cargo fmt --all
 
   schema:fetch:
     desc: Download pinned official registry schema/spec artifacts
     cmds:
-      - cargo run -p depot-schema-manager -- fetch
+      - cargo run -p starmetal-schema-manager -- fetch
 
   schema:generate:
-    desc: Generate Depot JSON schemas and schema manifest
+    desc: Generate Starmetal JSON schemas and schema manifest
     cmds:
-      - cargo run -p depot-schema-manager -- generate
+      - cargo run -p starmetal-schema-manager -- generate
 
   schema:refresh:
     desc: Download upstream schema/spec artifacts and regenerate schemas
     cmds:
-      - cargo run -p depot-schema-manager -- refresh
+      - cargo run -p starmetal-schema-manager -- refresh
 
   schema:check:
     desc: Verify fetched schema/spec artifacts and generated schemas are current
     cmds:
-      - cargo run -p depot-schema-manager -- fetch --check
-      - cargo run -p depot-schema-manager -- generate --check
+      - cargo run -p starmetal-schema-manager -- fetch --check
+      - cargo run -p starmetal-schema-manager -- generate --check
 
   schema:check-live:
     desc: Compare fetched schema/spec artifacts with current upstream sources
     cmds:
-      - cargo run -p depot-schema-manager -- fetch --check --live
+      - cargo run -p starmetal-schema-manager -- fetch --check --live
 
   schema:validate:
     desc: Validate schema files against representative fixtures
     cmds:
-      - cargo test -p depot-core --test schema_validation
+      - cargo test -p starmetal-core --test schema_validation
 
   conformance:
     desc: Run fixture-based registry conformance tests
     cmds:
-      - cargo test -p depot-conformance-tests
+      - cargo test -p starmetal-conformance-tests
 
   test:e2e:
     desc: Run live native-client E2E tests for all registries
     cmds:
-      - cargo test -p depot-integration-tests -- --ignored --test-threads=1
+      - cargo test -p starmetal-integration-tests -- --ignored --test-threads=1
 
   test:e2e:pypi:
     desc: Run live PyPI/pip E2E tests
     cmds:
-      - cargo test -p depot-integration-tests --test pypi_pip -- --ignored --test-threads=1
+      - cargo test -p starmetal-integration-tests --test pypi_pip -- --ignored --test-threads=1
 
   test:e2e:npm:
     desc: Run live npm E2E tests
     cmds:
-      - cargo test -p depot-integration-tests --test npm -- --ignored --test-threads=1
+      - cargo test -p starmetal-integration-tests --test npm -- --ignored --test-threads=1
 
   test:e2e:cargo:
     desc: Run live Cargo E2E tests
     cmds:
-      - cargo test -p depot-integration-tests --test cargo_registry -- --ignored --test-threads=1
+      - cargo test -p starmetal-integration-tests --test cargo_registry -- --ignored --test-threads=1
 
   test:e2e:hex:
     desc: Run live Hex/mix E2E tests
     cmds:
-      - cargo test -p depot-integration-tests --test hex -- --ignored --test-threads=1
+      - cargo test -p starmetal-integration-tests --test hex -- --ignored --test-threads=1
 
   test:e2e:maven:
     desc: Run live Maven E2E tests
     cmds:
-      - cargo test -p depot-integration-tests --test maven -- --ignored --test-threads=1
+      - cargo test -p starmetal-integration-tests --test maven -- --ignored --test-threads=1
 
   test:e2e:rubygems:
     desc: Run live RubyGems/Bundler E2E tests
     cmds:
-      - cargo test -p depot-integration-tests --test rubygems -- --ignored --test-threads=1
+      - cargo test -p starmetal-integration-tests --test rubygems -- --ignored --test-threads=1
 
   test:e2e:nuget:
     desc: Run live NuGet/dotnet E2E tests
     cmds:
-      - cargo test -p depot-integration-tests --test nuget -- --ignored --test-threads=1
+      - cargo test -p starmetal-integration-tests --test nuget -- --ignored --test-threads=1
 
   test:e2e:pub:
     desc: Run live pub.dev/dart E2E tests
     cmds:
-      - cargo test -p depot-integration-tests --test pubdev -- --ignored --test-threads=1
+      - cargo test -p starmetal-integration-tests --test pubdev -- --ignored --test-threads=1
 
   fmt:check:
     desc: Check Rust formatting
@@ -249,16 +249,16 @@ tasks:
   feature:check:
     desc: Check representative feature flag combinations
     cmds:
-      - cargo check -p depot-cli --no-default-features --features backend-memory
-      - cargo check -p depot-cli --no-default-features --features pypi,backend-memory
-      - cargo check -p depot-cli --no-default-features --features npm,backend-memory
-      - cargo check -p depot-cli --no-default-features --features cargo-registry,backend-memory
-      - cargo check -p depot-cli --no-default-features --features hex,backend-memory
-      - cargo check -p depot-cli --no-default-features --features maven,backend-memory
-      - cargo check -p depot-cli --no-default-features --features rubygems,backend-memory
-      - cargo check -p depot-cli --no-default-features --features nuget,backend-memory
-      - cargo check -p depot-cli --no-default-features --features pub,backend-memory
-      - cargo check -p depot-cli --all-features
+      - cargo check -p starmetal-cli --no-default-features --features backend-memory
+      - cargo check -p starmetal-cli --no-default-features --features pypi,backend-memory
+      - cargo check -p starmetal-cli --no-default-features --features npm,backend-memory
+      - cargo check -p starmetal-cli --no-default-features --features cargo-registry,backend-memory
+      - cargo check -p starmetal-cli --no-default-features --features hex,backend-memory
+      - cargo check -p starmetal-cli --no-default-features --features maven,backend-memory
+      - cargo check -p starmetal-cli --no-default-features --features rubygems,backend-memory
+      - cargo check -p starmetal-cli --no-default-features --features nuget,backend-memory
+      - cargo check -p starmetal-cli --no-default-features --features pub,backend-memory
+      - cargo check -p starmetal-cli --all-features
 
   deny:
     desc: Run cargo-deny policy checks

@@ -9,10 +9,10 @@ You are the quality assurance specialist for Starmetal. Your scope spans the ent
 
 ## Responsibilities
 
-- Write and maintain unit tests for `depot-core` (integrity, policy, lockfile, config)
-- Write integration tests for `depot-storage` using in-memory OpenDAL backend
-- Write integration tests for `depot-adapters` using mock HTTP servers (wiremock)
-- Write end-to-end tests for `depot-server` with real package manager clients
+- Write and maintain unit tests for `starmetal-core` (integrity, policy, lockfile, config)
+- Write integration tests for `starmetal-storage` using in-memory OpenDAL backend
+- Write integration tests for `starmetal-adapters` using mock HTTP servers (wiremock)
+- Write end-to-end tests for `starmetal-server` with real package manager clients
 - Maintain CI pipeline configuration
 - Ensure feature flag combinations are tested
 - Maintain pre-commit hook configuration (`.pre-commit-config.yaml`)

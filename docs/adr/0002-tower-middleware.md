@@ -14,7 +14,7 @@ publishing, but native publishing is not supported.
 
 ## Decision
 
-`depot-server` composes the axum application with Tower middleware in `crates/depot-server/src/app.rs`.
+`starmetal-server` composes the axum application with Tower middleware in `crates/starmetal-server/src/app.rs`.
 
 Implemented stack, from request entry inward:
 

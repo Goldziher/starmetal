@@ -1,6 +1,6 @@
 use tokio::process::Command;
 
-use depot_integration_tests::TestServer;
+use starmetal_integration_tests::TestServer;
 
 async fn ensure_mix_hex_package(hex_home: &std::path::Path, mix_home: &std::path::Path) {
     let install = Command::new("mix")
@@ -97,7 +97,7 @@ async fn hex_nonexistent_package_returns_404() {
     let client = reqwest::Client::new();
     let response = client
         .get(format!(
-            "{}/hex/api/packages/this-does-not-exist-depot-test",
+            "{}/hex/api/packages/this-does-not-exist-starmetal-test",
             server.base_url()
         ))
         .send()
@@ -240,7 +240,7 @@ async fn mix_hex_package_fetch_cached() {
         .expect("failed to run mix");
     assert!(out1.status.success(), "first mix fetch failed");
 
-    // Second fetch — hits depot cache
+    // Second fetch — hits starmetal cache
     let out2 = Command::new("mix")
         .args([
             "hex.package",
@@ -278,7 +278,7 @@ async fn mix_hex_package_fetch_nonexistent_fails() {
         .args([
             "hex.package",
             "fetch",
-            "this-package-does-not-exist-depot-test",
+            "this-package-does-not-exist-starmetal-test",
             "0.0.1",
             "--output",
             &tmp.path().join("out.tar").to_string_lossy(),

@@ -8,7 +8,7 @@ This directory contains Starmetal's registry schema evidence and generated JSON 
 - `manifest.json`: generated provenance, hashes, source links, and schema ownership metadata.
 - `upstream/`: fetched official machine-readable artifacts such as protobuf, XSD, and OpenAPI files.
 - `registries/`: Starmetal-derived JSON Schemas for registry-facing payloads.
-- `depot/`: Starmetal-owned JSON Schemas for config and lockfile formats.
+- `starmetal/`: Starmetal-owned JSON Schemas for config and lockfile formats.
 
 ## Registry Sources
 

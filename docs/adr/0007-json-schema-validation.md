@@ -25,7 +25,7 @@ schemas/
 ├── manifest.json
 ├── upstream/
 ├── registries/
-└── depot/
+└── starmetal/
 ```
 
 Implemented tooling:

@@ -5,7 +5,6 @@
 .DS_Store
 
 target
-depot-data
 starmetal-data
 
 *.log

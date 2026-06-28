@@ -1,6 +1,6 @@
 use tokio::process::Command;
 
-use depot_integration_tests::TestServer;
+use starmetal_integration_tests::TestServer;
 
 /// Check that pip is available, skip test if not.
 async fn require_pip() -> String {
@@ -17,7 +17,7 @@ async fn require_pip() -> String {
 /// Helper: run pip install into a temp dir via --target.
 ///
 /// Uses `tokio::process::Command` so the async runtime can serve HTTP
-/// requests from the depot server while pip is running.
+/// requests from the starmetal server while pip is running.
 async fn pip_install(
     pip: &str,
     index_url: &str,
@@ -99,7 +99,7 @@ async fn pip_install_cached_on_second_request() {
     let out1 = pip_install(&pip, &index_url, "six==1.16.0", tmp1.path(), cache1.path()).await;
     assert!(out1.status.success(), "first pip install failed");
 
-    // Second install — should hit depot's cache (we can't easily prove this
+    // Second install — should hit starmetal's cache (we can't easily prove this
     // from pip's output alone, but we verify it still works, which confirms
     // the cached data is valid and serveable)
     let out2 = pip_install(&pip, &index_url, "six==1.16.0", tmp2.path(), cache2.path()).await;
@@ -123,7 +123,7 @@ async fn pip_install_nonexistent_package_fails() {
     let output = pip_install(
         &pip,
         &index_url,
-        "this-package-does-not-exist-depot-test",
+        "this-package-does-not-exist-starmetal-test",
         tmp.path(),
         cache.path(),
     )
@@ -241,7 +241,7 @@ async fn http_nonexistent_package_returns_404() {
     let client = reqwest::Client::new();
     let response = client
         .get(format!(
-            "{}/pypi/simple/this-package-does-not-exist-depot-test/",
+            "{}/pypi/simple/this-package-does-not-exist-starmetal-test/",
             server.base_url()
         ))
         .send()

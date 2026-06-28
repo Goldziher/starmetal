@@ -64,7 +64,7 @@
       "type": "string"
     }
   },
-  "$id": "https://schemas.depot.local/registries/cargo.schema.json",
+  "$id": "https://schemas.starmetal.local/registries/cargo.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "Starmetal-derived JSON Schema for one Cargo sparse index JSONL entry.",
   "properties": {
@@ -142,17 +142,17 @@
   ],
   "title": "Cargo Sparse Index Entry",
   "type": "object",
-  "x-depot-source": {
-    "generated_by": "depot-schema-manager",
-    "schema_kind": "depot-derived-json-schema",
-    "source_file": "crates/depot-core/src/registry/cargo.rs",
+  "x-starmetal-source": {
+    "generated_by": "starmetal-schema-manager",
+    "schema_kind": "starmetal-derived-json-schema",
+    "source_file": "crates/starmetal-core/src/registry/cargo.rs",
     "source_ids": [
       "cargo-registry-index"
     ],
     "source_kinds": [
       "official-prose"
     ],
-    "source_type": "depot_core::registry::cargo::CargoIndexEntry",
-    "validated_by": "crates/depot-core/tests/schema_validation.rs; tests/conformance"
+    "source_type": "starmetal_core::registry::cargo::CargoIndexEntry",
+    "validated_by": "crates/starmetal-core/tests/schema_validation.rs; tests/conformance"
   }
 }

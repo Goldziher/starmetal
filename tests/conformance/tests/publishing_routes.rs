@@ -4,21 +4,21 @@ use ahash::AHashMap;
 use axum::Router;
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
-use depot_adapters::cargo::upstream::CargoUpstreamClient;
-use depot_adapters::hex::upstream::HexUpstreamClient;
-use depot_adapters::maven::upstream::MavenUpstreamClient;
-use depot_adapters::npm::upstream::NpmUpstreamClient;
-use depot_adapters::nuget::upstream::NuGetUpstreamClient;
-use depot_adapters::pubdev::upstream::PubUpstreamClient;
-use depot_adapters::pypi::upstream::PypiUpstreamClient;
-use depot_adapters::rubygems::upstream::RubyGemsUpstreamClient;
-use depot_adapters::{cargo, hex, maven, npm, nuget, pubdev, pypi, rubygems};
-use depot_core::config::Config;
-use depot_core::package::Ecosystem;
-use depot_core::policy::PolicyConfig;
-use depot_core::ports::{PackageService, PublishingService, UpstreamClient};
-use depot_service::CachingPackageService;
-use depot_storage::OpenDalStorage;
+use starmetal_adapters::cargo::upstream::CargoUpstreamClient;
+use starmetal_adapters::hex::upstream::HexUpstreamClient;
+use starmetal_adapters::maven::upstream::MavenUpstreamClient;
+use starmetal_adapters::npm::upstream::NpmUpstreamClient;
+use starmetal_adapters::nuget::upstream::NuGetUpstreamClient;
+use starmetal_adapters::pubdev::upstream::PubUpstreamClient;
+use starmetal_adapters::pypi::upstream::PypiUpstreamClient;
+use starmetal_adapters::rubygems::upstream::RubyGemsUpstreamClient;
+use starmetal_adapters::{cargo, hex, maven, npm, nuget, pubdev, pypi, rubygems};
+use starmetal_core::config::Config;
+use starmetal_core::package::Ecosystem;
+use starmetal_core::policy::PolicyConfig;
+use starmetal_core::ports::{PackageService, PublishingService, UpstreamClient};
+use starmetal_service::CachingPackageService;
+use starmetal_storage::OpenDalStorage;
 use tower::ServiceExt;
 
 #[derive(Clone)]
@@ -43,9 +43,9 @@ impl PublishRouteState {
         config
             .publishing
             .tokens
-            .push(depot_core::publishing::PublishTokenConfig {
+            .push(starmetal_core::publishing::PublishTokenConfig {
                 token: "publish-token".to_string(),
-                scopes: vec![depot_core::publishing::TokenScope::Publish],
+                scopes: vec![starmetal_core::publishing::TokenScope::Publish],
                 ecosystems: Vec::new(),
                 packages: Vec::new(),
             });
@@ -347,7 +347,7 @@ async fn npm_publish_route_serves_published_packument_and_tarball() {
         router.clone(),
         Request::builder()
             .uri("/sample")
-            .header(header::HOST, "depot.test")
+            .header(header::HOST, "starmetal.test")
             .body(Body::empty())
             .unwrap(),
     )
@@ -357,7 +357,7 @@ async fn npm_publish_route_serves_published_packument_and_tarball() {
     assert_eq!(packument["dist-tags"]["latest"], "1.0.0");
     assert_eq!(
         packument["versions"]["1.0.0"]["dist"]["tarball"],
-        "http://depot.test/npm/sample/-/sample-1.0.0.tgz"
+        "http://starmetal.test/npm/sample/-/sample-1.0.0.tgz"
     );
 
     let (status, body) = response(
@@ -376,7 +376,7 @@ async fn npm_publish_route_serves_published_packument_and_tarball() {
 async fn pypi_legacy_upload_route_serves_published_simple_project_and_artifact() {
     let state = PublishRouteState::new();
     let router = pypi::router().with_state(state);
-    let boundary = "depot-boundary";
+    let boundary = "starmetal-boundary";
     let body = format!(
         "--{boundary}\r\nContent-Disposition: form-data; name=\"name\"\r\n\r\nsample\r\n\
 --{boundary}\r\nContent-Disposition: form-data; name=\"version\"\r\n\r\n1.0.0\r\n\
@@ -625,7 +625,7 @@ async fn nuget_publish_route_serves_flat_container_registration_and_checksum() {
         router.clone(),
         Request::builder()
             .uri("/v3/index.json")
-            .header(header::HOST, "depot.test")
+            .header(header::HOST, "starmetal.test")
             .body(Body::empty())
             .unwrap(),
     )
@@ -727,7 +727,7 @@ async fn pub_publish_route_serves_package_metadata_version_and_archive() {
         router.clone(),
         Request::builder()
             .uri("/api/packages/sample_pub")
-            .header(header::HOST, "depot.test")
+            .header(header::HOST, "starmetal.test")
             .body(Body::empty())
             .unwrap(),
     )
@@ -738,14 +738,14 @@ async fn pub_publish_route_serves_package_metadata_version_and_archive() {
     assert_eq!(package["versions"][0]["version"], "1.0.0");
     assert_eq!(
         package["versions"][0]["archive_url"],
-        "http://depot.test/pub/api/archives/sample_pub-1.0.0.tar.gz"
+        "http://starmetal.test/pub/api/archives/sample_pub-1.0.0.tar.gz"
     );
 
     let (status, body) = response(
         router.clone(),
         Request::builder()
             .uri("/api/packages/sample_pub/versions/1.0.0")
-            .header(header::HOST, "depot.test")
+            .header(header::HOST, "starmetal.test")
             .body(Body::empty())
             .unwrap(),
     )

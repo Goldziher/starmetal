@@ -1,6 +1,6 @@
 use tokio::process::Command;
 
-use depot_integration_tests::TestServer;
+use starmetal_integration_tests::TestServer;
 
 async fn require_dotnet() -> String {
     if let Ok(output) = Command::new("dotnet").arg("--version").output().await
@@ -25,7 +25,7 @@ async fn dotnet_restore(
 <configuration>
   <packageSources>
     <clear />
-    <add key="depot" value="{nuget_index_url}" allowInsecureConnections="true" />
+    <add key="starmetal" value="{nuget_index_url}" allowInsecureConnections="true" />
   </packageSources>
 </configuration>
 "#
@@ -33,7 +33,7 @@ async fn dotnet_restore(
     )
     .expect("failed to write nuget.config");
     std::fs::write(
-        project_dir.join("depot-nuget-e2e.csproj"),
+        project_dir.join("starmetal-nuget-e2e.csproj"),
         r#"<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -58,7 +58,7 @@ async fn dotnet_restore(
 
 #[tokio::test]
 #[ignore] // requires network + dotnet
-async fn dotnet_restores_package_through_depot() {
+async fn dotnet_restores_package_through_starmetal() {
     let dotnet = require_dotnet().await;
     let server = TestServer::start_all_enabled().await;
     let project = tempfile::tempdir().expect("project tempdir");
@@ -124,7 +124,7 @@ async fn nuget_serves_v3_resources() {
 
 #[tokio::test]
 #[ignore] // requires network + dotnet
-async fn dotnet_restore_works_from_depot_cache() {
+async fn dotnet_restore_works_from_starmetal_cache() {
     let dotnet = require_dotnet().await;
     let server = TestServer::start_all_enabled().await;
 
