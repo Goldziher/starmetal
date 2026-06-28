@@ -3,7 +3,7 @@
 
 <img src="docs/media/starmetal-banner.svg" alt="StarMetal - armored registry proxy" width="820">
 
-**Multi-language, high-performance, self-hosted package registry and registry proxy.**
+**High-performance, self-hosted multi-language package registry and pull-through registry proxy for private software supply chains.**
 
 Starmetal gives teams one controlled path for package-manager traffic across ecosystems. It speaks
 native registry protocols, proxies upstream reads, stores artifacts behind a common service layer,

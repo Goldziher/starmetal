@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "starmetal"
 version = "0.0.1"
-description = "Multi-language, high-performance, self-hosted package registry and registry proxy."
+description = "High-performance, self-hosted multi-language package registry and pull-through registry proxy for private software supply chains."
 readme = "README.md"
 requires-python = ">=3.9"
 license = "BUSL-1.1"
@@ -13,13 +13,11 @@ authors = [
   { name = "Na'aman Hirschfeld" }
 ]
 keywords = [
-  "cargo",
-  "npm",
   "package-registry",
-  "pypi",
+  "package-cache",
   "registry-proxy",
   "self-hosted",
-  "supply-chain-security"
+  "supply-chain"
 ]
 classifiers = [
   "Development Status :: 2 - Pre-Alpha",

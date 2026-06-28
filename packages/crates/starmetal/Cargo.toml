@@ -4,12 +4,12 @@
 name = "starmetal"
 version = "0.0.1"
 edition = "2024"
-description = "Multi-language, high-performance, self-hosted package registry and registry proxy."
+description = "High-performance, self-hosted multi-language package registry and pull-through registry proxy for private software supply chains."
 license = "BUSL-1.1"
 repository = "https://github.com/Goldziher/starmetal"
 homepage = "https://github.com/Goldziher/starmetal"
 readme = "README.md"
-keywords = ["package-registry", "registry-proxy", "self-hosted", "supply-chain"]
+keywords = ["package-registry", "registry-proxy", "package-cache", "self-hosted", "supply-chain"]
 categories = ["command-line-utilities", "development-tools"]
 
 [[bin]]
