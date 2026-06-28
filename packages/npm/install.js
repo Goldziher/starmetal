@@ -35,7 +35,7 @@ function getPlatformTriple() {
 
   if (type === "Darwin") {
     if (isAppleSilicon()) return "aarch64-apple-darwin";
-    if (arch === "x64") return "x86_64-apple-darwin";
+    if (arch === "x64") throw new Error("macOS Intel is not supported by StarMetal release binaries");
     throw new Error(`Unsupported macOS architecture: ${arch}`);
   }
 

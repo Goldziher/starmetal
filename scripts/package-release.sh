@@ -9,7 +9,7 @@ fi
 TRIPLE="$1"
 
 case "$TRIPLE" in
-x86_64-unknown-linux-gnu | aarch64-unknown-linux-gnu | x86_64-apple-darwin | aarch64-apple-darwin)
+x86_64-unknown-linux-gnu | aarch64-unknown-linux-gnu | aarch64-apple-darwin)
   BINEXT=""
   ARCHIVE="starmetal-${TRIPLE}.tar.gz"
   ;;

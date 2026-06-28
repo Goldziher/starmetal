@@ -54,7 +54,7 @@ def _platform_triple() -> str:
         if _is_apple_silicon(machine):
             return "aarch64-apple-darwin"
         if machine in {"amd64", "x86_64"}:
-            return "x86_64-apple-darwin"
+            raise RuntimeError("macOS Intel is not supported by StarMetal release binaries")
         raise RuntimeError(f"Unsupported macOS architecture: {machine}")
 
     raise RuntimeError(f"Unsupported platform: {system} {machine}")

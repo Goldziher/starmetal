@@ -243,10 +243,6 @@ jobs:
             os: ubuntu-24.04-arm
             archive: starmetal-aarch64-unknown-linux-gnu.tar.gz
             binary: sm
-          - triple: x86_64-apple-darwin
-            os: macos-15-intel
-            archive: starmetal-x86_64-apple-darwin.tar.gz
-            binary: sm
           - triple: aarch64-apple-darwin
             os: macos-15
             archive: starmetal-aarch64-apple-darwin.tar.gz
@@ -325,7 +321,6 @@ jobs:
           expected=(
             "starmetal-x86_64-unknown-linux-gnu.tar.gz"
             "starmetal-aarch64-unknown-linux-gnu.tar.gz"
-            "starmetal-x86_64-apple-darwin.tar.gz"
             "starmetal-aarch64-apple-darwin.tar.gz"
             "starmetal-x86_64-pc-windows-msvc.zip"
           )
@@ -425,7 +420,6 @@ jobs:
           required=(
             "starmetal-x86_64-unknown-linux-gnu.tar.gz"
             "starmetal-aarch64-unknown-linux-gnu.tar.gz"
-            "starmetal-x86_64-apple-darwin.tar.gz"
             "starmetal-aarch64-apple-darwin.tar.gz"
             "starmetal-x86_64-pc-windows-msvc.zip"
             "starmetal_${version}_checksums.txt"
