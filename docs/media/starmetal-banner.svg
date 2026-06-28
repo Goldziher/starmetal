@@ -11,20 +11,18 @@
       <stop offset="54%" stop-color="#111827" stop-opacity="0.22"/>
       <stop offset="100%" stop-color="#02030a" stop-opacity="0"/>
     </radialGradient>
-    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#ffe8a3"/>
-      <stop offset="44%" stop-color="#d69b2c"/>
-      <stop offset="100%" stop-color="#6f3f13"/>
-    </linearGradient>
-    <linearGradient id="steel" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#f0f3f8"/>
-      <stop offset="42%" stop-color="#9aa5b5"/>
-      <stop offset="100%" stop-color="#303949"/>
-    </linearGradient>
     <linearGradient id="name" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#f4f7fb"/>
-      <stop offset="45%" stop-color="#aab4c4"/>
-      <stop offset="100%" stop-color="#4b5568"/>
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="28%" stop-color="#dce4ef"/>
+      <stop offset="48%" stop-color="#8f9caf"/>
+      <stop offset="62%" stop-color="#f6f9fd"/>
+      <stop offset="100%" stop-color="#556174"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="48%" stop-color="#ffffff" stop-opacity="0.28"/>
+      <stop offset="52%" stop-color="#ffffff" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
     </linearGradient>
     <linearGradient id="rule" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0%" stop-color="#6b7280" stop-opacity="0"/>
@@ -35,61 +33,49 @@
     <clipPath id="frame">
       <rect width="1200" height="340" rx="18"/>
     </clipPath>
+    <clipPath id="panel">
+      <rect x="118" y="54" width="964" height="224" rx="10"/>
+    </clipPath>
   </defs>
   <g clip-path="url(#frame)">
     <rect width="1200" height="340" fill="url(#bg)"/>
     <rect width="1200" height="340" fill="url(#nebula)"/>
     <rect width="1200" height="340" fill="#01030a" opacity="0.22"/>
 
-    <g fill="#d8dde8" opacity="0.76">
+    <g fill="#d8dde8" opacity="0.78">
       <circle cx="72" cy="52" r="1.3"/><circle cx="143" cy="133" r="1"/><circle cx="221" cy="73" r="1.2"/>
       <circle cx="319" cy="114" r="1"/><circle cx="401" cy="45" r="1.3"/><circle cx="487" cy="104" r="1"/>
       <circle cx="572" cy="58" r="1.2"/><circle cx="666" cy="92" r="1"/><circle cx="736" cy="42" r="1.3"/>
       <circle cx="831" cy="118" r="1"/><circle cx="921" cy="54" r="1"/><circle cx="1036" cy="86" r="1.3"/>
       <circle cx="1128" cy="142" r="1"/><circle cx="96" cy="232" r="1"/><circle cx="1080" cy="222" r="1.2"/>
+      <circle cx="178" cy="291" r="1"/><circle cx="258" cy="38" r="0.9"/><circle cx="360" cy="264" r="1"/>
+      <circle cx="538" cy="284" r="0.9"/><circle cx="624" cy="35" r="0.9"/><circle cx="756" cy="286" r="1"/>
+      <circle cx="867" cy="258" r="0.9"/><circle cx="973" cy="286" r="1"/><circle cx="1142" cy="244" r="1"/>
     </g>
     <g stroke="#b9c0cf" stroke-width="2" stroke-linecap="square" opacity="0.42">
       <path d="M164 48h20M174 38v20"/><path d="M1010 76h22M1021 65v22"/><path d="M286 194h16M294 186v16"/>
     </g>
 
     <rect x="118" y="54" width="964" height="224" rx="10" fill="#060b15" opacity="0.72" stroke="#27324f" stroke-width="2"/>
-    <rect x="260" y="252" width="680" height="3" fill="url(#rule)"/>
+    <g clip-path="url(#panel)" opacity="0.26" stroke-linecap="square">
+      <g stroke="#6b7ca3" stroke-width="1">
+        <path d="M118 84H1082M118 116H1082M118 148H1082M118 180H1082M118 212H1082M118 244H1082"/>
+        <path d="M168 54V278M232 54V278M296 54V278M360 54V278M424 54V278M488 54V278M552 54V278M616 54V278M680 54V278M744 54V278M808 54V278M872 54V278M936 54V278M1000 54V278"/>
+      </g>
+      <g stroke="#334364" stroke-width="1">
+        <path d="M74 278L298 54M154 278L378 54M234 278L458 54M314 278L538 54M394 278L618 54M474 278L698 54M554 278L778 54M634 278L858 54M714 278L938 54M794 278L1018 54M874 278L1098 54"/>
+        <path d="M326 54L550 278M406 54L630 278M486 54L710 278M566 54L790 278M646 54L870 278M726 54L950 278M806 54L1030 278M886 54L1110 278"/>
+      </g>
+    </g>
+    <rect x="260" y="220" width="680" height="3" fill="url(#rule)"/>
 
-    <g transform="translate(501 34) scale(0.56)" shape-rendering="crispEdges">
-      <rect x="144" y="0" width="64" height="32" fill="url(#steel)"/>
-      <rect x="112" y="32" width="128" height="32" fill="#c4cad4"/>
-      <rect x="80" y="64" width="192" height="32" fill="#8d98a8"/>
-      <rect x="48" y="96" width="256" height="32" fill="#667184"/>
-      <rect x="16" y="128" width="320" height="32" fill="#485367"/>
-      <rect x="48" y="160" width="256" height="32" fill="#333d4f"/>
-      <rect x="80" y="192" width="192" height="32" fill="#1d2636"/>
-      <rect x="112" y="224" width="128" height="16" fill="#0d1422"/>
-
-      <rect x="144" y="64" width="64" height="32" fill="url(#gold)"/>
-      <rect x="112" y="96" width="128" height="32" fill="#d69b2c"/>
-      <rect x="80" y="128" width="192" height="32" fill="#b87419"/>
-      <rect x="112" y="160" width="128" height="32" fill="#8c4f17"/>
-      <rect x="144" y="192" width="64" height="32" fill="#593011"/>
-
-      <rect x="16" y="96" width="64" height="32" fill="#edf1f7"/>
-      <rect x="272" y="96" width="64" height="32" fill="#edf1f7"/>
-      <rect x="48" y="64" width="64" height="32" fill="#c4cad4"/>
-      <rect x="240" y="64" width="64" height="32" fill="#c4cad4"/>
-      <rect x="48" y="160" width="64" height="32" fill="#303949"/>
-      <rect x="240" y="160" width="64" height="32" fill="#303949"/>
-
-      <rect x="144" y="96" width="32" height="32" fill="#fff7e7"/>
-      <rect x="176" y="128" width="32" height="32" fill="#e9c46a"/>
-      <rect x="208" y="96" width="32" height="32" fill="#b87419"/>
-      <rect x="112" y="160" width="32" height="32" fill="#4a260d"/>
+    <g transform="skewX(-7 600 175)">
+      <text x="600" y="186" fill="#03050c" opacity="0.9" font-family="'Arial Black', Impact, sans-serif" font-size="90" font-weight="900" text-anchor="middle" letter-spacing="1">StarMetal</text>
+      <text x="600" y="179" fill="url(#name)" stroke="#202838" stroke-width="2" font-family="'Arial Black', Impact, sans-serif" font-size="90" font-weight="900" text-anchor="middle" letter-spacing="1">StarMetal</text>
+      <text x="600" y="165" fill="url(#sheen)" font-family="'Arial Black', Impact, sans-serif" font-size="90" font-weight="900" text-anchor="middle" letter-spacing="1">StarMetal</text>
     </g>
 
-    <g transform="skewX(-8 600 209)">
-      <text x="600" y="222" fill="#060913" opacity="0.86" font-family="'Arial Black', Impact, sans-serif" font-size="78" font-weight="900" text-anchor="middle" letter-spacing="1">StarMetal</text>
-      <text x="600" y="216" fill="url(#name)" font-family="'Arial Black', Impact, sans-serif" font-size="78" font-weight="900" text-anchor="middle" letter-spacing="1">StarMetal</text>
-    </g>
-
-    <text x="600" y="291" fill="#a9b1c0" font-family="'Courier New', monospace" font-size="24" font-weight="700" text-anchor="middle" letter-spacing="5">ARMORED REGISTRY PROXY</text>
+    <text x="600" y="257" fill="#b8bfcc" font-family="'Courier New', monospace" font-size="24" font-weight="700" text-anchor="middle" letter-spacing="5">ARMORED REGISTRY PROXY</text>
     <rect width="1200" height="340" rx="18" fill="none" stroke="#25304d" stroke-width="2" opacity="0.72"/>
   </g>
 </svg>
