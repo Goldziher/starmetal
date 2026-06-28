@@ -48,5 +48,5 @@ jobs:
           sudo apt-get install -y maven
           python -m pip install --upgrade pip
           gem install bundler
-      - uses: go-task/setup-task@v1
+      - uses: go-task/setup-task@v2
       - run: task ci:live-e2e
