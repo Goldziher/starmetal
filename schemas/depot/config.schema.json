@@ -349,7 +349,7 @@
   },
   "$id": "https://schemas.depot.local/depot/config.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Depot-owned JSON Schema for depot.toml.",
+  "description": "Starmetal-owned JSON Schema for depot.toml.",
   "properties": {
     "auth": {
       "$ref": "#/$defs/AuthConfig",
@@ -477,7 +477,7 @@
       "type": "object"
     }
   },
-  "title": "Depot Configuration",
+  "title": "Starmetal Configuration",
   "type": "object",
   "x-depot-source": {
     "generated_by": "depot-schema-manager",

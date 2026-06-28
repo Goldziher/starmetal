@@ -1,6 +1,6 @@
 [package]
 name = "depot-adapters"
-description = "Protocol adapters (PyPI, npm, Cargo, Hex) for depot"
+description = "Protocol adapters (PyPI, npm, Cargo, Hex) for Starmetal"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

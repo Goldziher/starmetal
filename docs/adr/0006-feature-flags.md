@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-Depot compiles optional protocol adapters and storage backends. Private MVP defaults should keep the
+Starmetal compiles optional protocol adapters and storage backends. Private MVP defaults should keep the
 core four read adapters available while letting operators opt into beta adapters.
 
 Feature availability is not the same as a support claim.

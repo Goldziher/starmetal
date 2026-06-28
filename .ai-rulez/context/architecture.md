@@ -4,7 +4,7 @@ priority: critical
 
 # Architecture
 
-Depot is a self-hosted, armored universal package registry built with hexagonal architecture.
+Starmetal is a self-hosted, armored universal package registry built with hexagonal architecture.
 
 ## Crate Structure
 

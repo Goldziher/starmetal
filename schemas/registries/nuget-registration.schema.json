@@ -179,7 +179,7 @@
   },
   "$id": "https://schemas.depot.local/registries/nuget-registration.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Depot-derived JSON Schema for NuGet V3 registration metadata.",
+  "description": "Starmetal-derived JSON Schema for NuGet V3 registration metadata.",
   "properties": {
     "@context": {
       "default": null

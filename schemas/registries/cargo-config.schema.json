@@ -1,7 +1,7 @@
 {
   "$id": "https://schemas.depot.local/registries/cargo-config.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Depot-derived JSON Schema for Cargo sparse registry config.json.",
+  "description": "Starmetal-derived JSON Schema for Cargo sparse registry config.json.",
   "properties": {
     "api": {
       "default": null,

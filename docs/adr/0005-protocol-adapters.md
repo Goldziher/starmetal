@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-Depot must speak native registry protocols so existing package-manager clients can read through a
+Starmetal must speak native registry protocols so existing package-manager clients can read through a
 private cache without client-side plugins.
 
 Support status is separate from implementation existence. An adapter can exist, compile, and have

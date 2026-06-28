@@ -6,12 +6,12 @@ Accepted
 
 ## Context
 
-Depot has implementation for more registries than the private MVP should claim as supported. The
+Starmetal has implementation for more registries than the private MVP should claim as supported. The
 project needs one source of truth for README, architecture, deployment, and ADR language.
 
 ## Decision
 
-Depot's MVP is private/internal. Support claims are limited to read workflows and require fresh live
+Starmetal's MVP is private/internal. Support claims are limited to read workflows and require fresh live
 native-client E2E evidence.
 
 | Registry | Default route enablement | Read status | Write status |

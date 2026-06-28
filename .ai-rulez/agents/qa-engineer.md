@@ -5,7 +5,7 @@ description: "Testing, CI, and quality assurance specialist"
 
 # QA Engineer
 
-You are the quality assurance specialist for depot. Your scope spans the entire workspace.
+You are the quality assurance specialist for Starmetal. Your scope spans the entire workspace.
 
 ## Responsibilities
 

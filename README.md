@@ -1,11 +1,11 @@
 <!-- markdownlint-disable MD013 MD033 MD041 -->
 <div align="center">
 
-<img src="docs/media/depot-banner.svg" alt="Depot — armored package cache" width="820">
+<img src="docs/media/starmetal-banner.svg" alt="Starmetal — SM package registry mark" width="820">
 
 **Multi-language, high-performance, self-hosted package registry and registry proxy.**
 
-Depot gives teams one controlled path for package-manager traffic across ecosystems. It speaks
+Starmetal gives teams one controlled path for package-manager traffic across ecosystems. It speaks
 native registry protocols, proxies upstream reads, stores artifacts behind a common service layer,
 verifies cached bytes with Blake3, and applies policy before dependencies reach clients.
 
@@ -15,7 +15,7 @@ publishing is experimental and disabled by default.
 
 PyPI · npm · Cargo · Hex · Maven · RubyGems · NuGet · pub.dev · Blake3 integrity · OpenDAL storage · CLI + MCP ops
 
-[![CI](https://img.shields.io/github/actions/workflow/status/Goldziher/depot/ci.yaml?style=flat-square)](https://github.com/Goldziher/depot/actions/workflows/ci.yaml)
+[![CI](https://img.shields.io/github/actions/workflow/status/Goldziher/starmetal/ci.yaml?style=flat-square)](https://github.com/Goldziher/starmetal/actions/workflows/ci.yaml)
 [![Rust 2024](https://img.shields.io/badge/rust-2024-orange?style=flat-square)](https://www.rust-lang.org/)
 [![License: BUSL-1.1](https://img.shields.io/badge/license-BUSL--1.1-blue?style=flat-square)](LICENSE)
 
@@ -28,17 +28,17 @@ PyPI · npm · Cargo · Hex · Maven · RubyGems · NuGet · pub.dev · Blake3 i
 ## Why It Exists
 
 Modern teams pull dependencies from several registries, each with different protocols, metadata
-formats, auth expectations, and client behavior. Depot puts those workflows behind one self-hosted
+formats, auth expectations, and client behavior. Starmetal puts those workflows behind one self-hosted
 service boundary so operators can centralize caching, integrity checks, policy, storage, and
 observability without asking developers to stop using native package-manager clients.
 
 ## What It Does
 
-Depot sits between package-manager clients and upstream registries:
+Starmetal sits between package-manager clients and upstream registries:
 
 | Capability | Current shape |
 |---|---|
-| Registry proxy | Speaks native package-manager routes and rewrites upstream metadata for Depot URLs |
+| Registry proxy | Speaks native package-manager routes and rewrites upstream metadata for Starmetal URLs |
 | Pull-through cache | Fetches from upstream on miss, stores artifacts, and serves cache hits |
 | Integrity | Stores Blake3 sidecars and re-verifies cached artifacts before serving |
 | Policy | Blocks packages, licenses, and vulnerability severities through shared service checks |
@@ -46,7 +46,7 @@ Depot sits between package-manager clients and upstream registries:
 | Storage | OpenDAL-backed filesystem, S3, GCS, and memory backends |
 | Operations | CLI plus stdio MCP tools over the same local operations layer |
 
-Depot is built for private/internal deployments first. It is not yet a public internet-facing
+Starmetal is built for private/internal deployments first. It is not yet a public internet-facing
 registry product, and support claims are gated on live native-client E2E.
 
 ## Registry Support
@@ -79,17 +79,20 @@ task setup
 # Build and run tests
 task ci
 
-# Start Depot with defaults on 127.0.0.1:8080
-cargo run -p depot-cli -- serve
+# Install the local sm binary
+cargo install --path crates/depot-cli --bin sm
+
+# Start Starmetal with defaults on 127.0.0.1:8080
+sm serve
 
 # Write a starter config
-cargo run -p depot-cli -- config init
+sm config init
 
 # Inspect registries without a config file
-cargo run -p depot-cli -- --no-config --storage-backend memory registry status
+sm --no-config --storage-backend memory registry status
 
 # Fetch one artifact through the cache path
-cargo run -p depot-cli -- package fetch pypi six 1.16.0 six-1.16.0.tar.gz
+sm package fetch pypi six 1.16.0 six-1.16.0.tar.gz
 ```
 
 Run live native-client E2E before treating an MVP read workflow as ready:
@@ -105,19 +108,19 @@ task test:e2e:hex
 
 ## Configuration
 
-Depot defaults to loopback binding and filesystem storage. A minimal private deployment usually
+Starmetal defaults to loopback binding and filesystem storage. A minimal private deployment usually
 starts from:
 
 ```toml
 [server]
 bind = "127.0.0.1:8080"
-public_base_url = "https://depot.internal.example.com"
+public_base_url = "https://starmetal.internal.example.com"
 cors_allowed_origins = []
 max_upload_bytes = 536870912
 
 [storage]
 backend = "fs"
-path = "/var/lib/depot"
+path = "/var/lib/starmetal"
 
 [auth]
 enabled = true
@@ -130,27 +133,28 @@ require explicit `allow_private_network` and `allow_insecure` settings. See
 
 ## CLI and MCP
 
-The CLI and MCP server share the same local operations layer. Both can run without `depot.toml`
-using built-in defaults plus explicit flags.
+The CLI command is `sm`. Config lookup still supports `DEPOT_CONFIG` and `depot.toml` for
+compatibility; the CLI and MCP server can run without a config file using built-in defaults plus
+explicit flags.
 
 Common CLI operations:
 
 ```bash
-depot config show
-depot config validate
-depot registry status
-depot package list pypi
-depot package versions npm is-odd
-depot package metadata cargo once_cell 1.19.0
-depot package fetch npm is-odd 3.0.1 is-odd-3.0.1.tgz --output ./is-odd.tgz
-depot cache delete-artifact npm is-odd 3.0.1 is-odd-3.0.1.tgz --yes
+sm config show
+sm config validate
+sm registry status
+sm package list pypi
+sm package versions npm is-odd
+sm package metadata cargo once_cell 1.19.0
+sm package fetch npm is-odd 3.0.1 is-odd-3.0.1.tgz --output ./is-odd.tgz
+sm cache delete-artifact npm is-odd 3.0.1 is-odd-3.0.1.tgz --yes
 ```
 
 Use `--output json` for machine-readable output. MCP runs over stdio:
 
 ```bash
-depot mcp serve
-depot mcp serve --allow-writes
+sm mcp serve
+sm mcp serve --allow-writes
 ```
 
 MCP read tools are always available. Mutating tools, including experimental local publish, yank,
@@ -158,7 +162,7 @@ unyank, and cache delete, require `--allow-writes`.
 
 ## Architecture
 
-Depot uses hexagonal architecture: protocol adapters and storage backends sit outside a shared
+Starmetal uses hexagonal architecture: protocol adapters and storage backends sit outside a shared
 service/core boundary.
 
 | Crate | Role |
@@ -193,7 +197,7 @@ package-manager CLIs.
 
 ## Schemas
 
-Schema provenance, fetched upstream artifacts, Depot-derived JSON Schemas, and grammar fixtures live
+Schema provenance, fetched upstream artifacts, Starmetal-derived JSON Schemas, and grammar fixtures live
 under [`schemas/`](schemas/):
 
 - [`schemas/registries/`](schemas/registries/) - derived registry schemas where the protocol is JSON-like

@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-Depot serves several native registry protocols through one HTTP server. Cross-cutting behavior must
+Starmetal serves several native registry protocols through one HTTP server. Cross-cutting behavior must
 be applied consistently while adapters remain focused on protocol translation.
 
 The private MVP is read-focused. Write routes exist for experimental local publishing, but native

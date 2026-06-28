@@ -240,7 +240,7 @@ kind = "official-prose"
 url = "https://blog.rubygems.org/2023/02/22/dependency-api-deprecation.html"
 official = true
 fetched = false
-description = "Official notice that the legacy Dependency API was deprecated and disabled; Depot should not model it as an active primary protocol."
+description = "Official notice that the legacy Dependency API was deprecated and disabled; Starmetal should not model it as an active primary protocol."
 
 [[source]]
 id = "rubygems-gem-validator-schema"
@@ -370,7 +370,7 @@ kind = "depot-rust-type"
 url = "crates/depot-core/src/config.rs"
 official = false
 fetched = false
-description = "Depot-owned configuration Rust type."
+description = "Starmetal-owned configuration Rust type."
 
 [[source]]
 id = "depot-lockfile"
@@ -379,4 +379,4 @@ kind = "depot-rust-type"
 url = "crates/depot-core/src/lockfile.rs"
 official = false
 fetched = false
-description = "Depot-owned lockfile Rust type."
+description = "Starmetal-owned lockfile Rust type."

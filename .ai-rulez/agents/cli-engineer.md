@@ -15,8 +15,8 @@ You are the CLI specialist for `depot-cli`. Your scope is:
 - Implement clap-derived CLI commands: `serve`, `sync`, `lock`, `config`
 - Wire up the full application: create storage backend, upstream clients, `PackageService`, `AppState`, and start the server
 - Handle config loading, validation, and env var overrides
-- Implement `depot sync` for pre-syncing packages from upstream
-- Implement `depot lock verify` and `depot lock update` for lock file management
+- Implement `sm sync` for pre-syncing packages from upstream
+- Implement `sm lock verify` and `sm lock update` for lock file management
 - Maintain the example config file
 
 ## Constraints

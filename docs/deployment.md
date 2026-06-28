@@ -32,7 +32,7 @@ task sccache:stats
 Generate a starter config:
 
 ```sh
-cargo run -p depot-cli -- config init
+sm config init
 ```
 
 Private MVP baseline:
@@ -45,7 +45,7 @@ bind = "127.0.0.1:8080"
 backend = "fs"
 
 [storage.options]
-root = "./depot-data"
+root = "./starmetal-data"
 
 [auth]
 enabled = false
@@ -93,16 +93,16 @@ task test:e2e:pub
 ## Start the Server
 
 ```sh
-cargo run -p depot-cli -- --config depot.toml serve
+sm --config depot.toml serve
 ```
 
 For a release binary:
 
 ```sh
-./target/release/depot-cli --config depot.toml serve
+./target/release/sm --config depot.toml serve
 ```
 
-Depot serves HTTP. Put it behind a private network boundary or a TLS-terminating reverse proxy. Do
+Starmetal serves HTTP. Put it behind a private network boundary or a TLS-terminating reverse proxy. Do
 not expose the MVP server directly to the public internet.
 
 ## Authentication
@@ -172,7 +172,7 @@ These live tests require network access and native package-manager CLIs.
 
 Use these route bases when configuring private clients:
 
-| Client | Depot URL |
+| Client | Starmetal URL |
 |--------|-----------|
 | pip | `http://<host>:8080/pypi/simple/` |
 | npm | `http://<host>:8080/npm` |

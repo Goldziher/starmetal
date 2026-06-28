@@ -2,8 +2,8 @@
 # Documentation: https://github.com/Goldziher/ai-rulez
 
 version = '4.0'
-name = 'depot'
-description = 'Self-hosted armored universal package registry'
+name = 'starmetal'
+description = 'Multi-language high-performance self-hosted package registry and registry proxy'
 gitignore = true
 presets = ['claude', 'codex']
 builtins = ['rust', 'default-commands']

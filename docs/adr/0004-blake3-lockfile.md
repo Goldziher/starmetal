@@ -1,4 +1,4 @@
-# ADR-0004: Blake3 Integrity and Depot Lock File Format
+# ADR-0004: Blake3 Integrity and Starmetal Lock File Format
 
 ## Status
 
@@ -6,22 +6,22 @@ Accepted
 
 ## Context
 
-Package ecosystems use different integrity algorithms. Depot needs one internal cache integrity
+Package ecosystems use different integrity algorithms. Starmetal needs one internal cache integrity
 mechanism while preserving upstream hashes where registries provide them.
 
-Depot also has a TOML lock file format, but lock verification and update CLI workflows are not part
+Starmetal also has a TOML lock file format, but lock verification and update CLI workflows are not part
 of the private MVP.
 
 ## Decision
 
-Depot uses Blake3 as its canonical stored-artifact integrity hash.
+Starmetal uses Blake3 as its canonical stored-artifact integrity hash.
 
 Implemented cache behavior in `CachingPackageService`:
 
-- On artifact fetch, Depot verifies supported upstream hashes when present.
-- Depot computes a Blake3 hash for stored artifact bytes.
-- Depot stores the hash as a `.blake3` sidecar next to the artifact.
-- On cache read, Depot verifies the sidecar before serving bytes.
+- On artifact fetch, Starmetal verifies supported upstream hashes when present.
+- Starmetal computes a Blake3 hash for stored artifact bytes.
+- Starmetal stores the hash as a `.blake3` sidecar next to the artifact.
+- On cache read, Starmetal verifies the sidecar before serving bytes.
 - Cached artifacts without a sidecar fail closed.
 
 Supported upstream hash evidence:
@@ -33,7 +33,7 @@ Supported upstream hash evidence:
 | `sha1` | Maven checksum sidecars |
 | `sha512` | NuGet package hashes |
 
-Depot lock files are TOML and ecosystem-agnostic:
+Starmetal lock files are TOML and ecosystem-agnostic:
 
 ```toml
 [metadata]
@@ -60,8 +60,8 @@ pinned = true
 
 ## Deferred
 
-- `depot lock verify`.
-- `depot lock update`.
+- `sm lock verify`.
+- `sm lock update`.
 - Full sync workflows based on lock files.
 - Replacing ecosystem-native lock files.
 
@@ -69,4 +69,4 @@ pinned = true
 
 - Stored artifacts have one uniform internal integrity check.
 - Upstream integrity remains available for provenance and ecosystem-specific responses.
-- Lock files describe Depot registry state, not application dependency resolution.
+- Lock files describe Starmetal registry state, not application dependency resolution.

@@ -32,7 +32,7 @@ impl DepotMcp {
             Ok(())
         } else {
             Err(McpError::invalid_request(
-                "mutating Depot MCP tools require mcp serve --allow-writes",
+                "mutating Starmetal MCP tools require sm mcp serve --allow-writes",
                 None,
             ))
         }
@@ -77,12 +77,12 @@ struct PublishParams {
 
 #[tool_router]
 impl DepotMcp {
-    #[tool(description = "Return the effective redacted Depot configuration")]
+    #[tool(description = "Return the effective redacted Starmetal configuration")]
     async fn config_show(&self) -> Result<CallToolResult, McpError> {
         json_result(self.runtime.config.redacted_value())
     }
 
-    #[tool(description = "Return Depot registry, storage, and bind status")]
+    #[tool(description = "Return Starmetal registry, storage, and bind status")]
     async fn registry_status(&self) -> Result<CallToolResult, McpError> {
         json_result(self.runtime.status())
     }
@@ -126,7 +126,7 @@ impl DepotMcp {
         json_result(metadata)
     }
 
-    #[tool(description = "Fetch an artifact through Depot cache integrity checks")]
+    #[tool(description = "Fetch an artifact through Starmetal cache integrity checks")]
     async fn package_fetch(
         &self,
         params: Parameters<ArtifactParams>,
@@ -222,7 +222,7 @@ impl DepotMcp {
 impl ServerHandler for DepotMcp {
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
-            "Depot package registry operations. Mutating tools require --allow-writes.",
+            "Starmetal package registry operations. Mutating tools require sm mcp serve --allow-writes.",
         )
     }
 }

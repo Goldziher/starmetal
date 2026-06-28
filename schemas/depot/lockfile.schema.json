@@ -93,7 +93,7 @@
   },
   "$id": "https://schemas.depot.local/depot/lockfile.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Depot-owned JSON Schema for depot-lock.toml.",
+  "description": "Starmetal-owned JSON Schema for depot-lock.toml.",
   "properties": {
     "metadata": {
       "$ref": "#/$defs/LockMetadata"
@@ -109,7 +109,7 @@
   "required": [
     "metadata"
   ],
-  "title": "Depot Lock File",
+  "title": "Starmetal Lock File",
   "type": "object",
   "x-depot-source": {
     "generated_by": "depot-schema-manager",

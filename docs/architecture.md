@@ -2,7 +2,7 @@
 
 ## Overview
 
-Depot is a private/internal package registry cache. It speaks native package registry protocols,
+Starmetal is a private/internal package registry cache. It speaks native package registry protocols,
 stores artifacts through OpenDAL, verifies cached bytes with Blake3 sidecars, and applies policy in
 the service layer.
 
@@ -147,7 +147,7 @@ sequenceDiagram
     UpstreamClient-->>Service: version list
     Service-->>Adapter: VersionMetadata
     Adapter->>UpstreamClient: read cached native payload
-    Adapter-->>Client: Native response with Depot URLs
+    Adapter-->>Client: Native response with Starmetal URLs
 
     Client->>Adapter: Artifact download
     Adapter->>Service: get_artifact(artifact_id)
@@ -181,7 +181,7 @@ compiled does not mean enabled or MVP-supported.
 
 ## Publishing Scope
 
-Native publishing is outside MVP. Existing write routes and `depot package publish` are experimental
+Native publishing is outside MVP. Existing write routes and `sm package publish` are experimental
 local publishing surfaces:
 
 - Disabled by default through `[publishing] enabled = false`.

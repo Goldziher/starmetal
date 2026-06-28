@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 340" width="1200" height="340" role="img" aria-label="Starmetal — forged star metal mark">
+  <title>Starmetal — forged star metal mark</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#050a12"/>
+      <stop offset="52%" stop-color="#08131c"/>
+      <stop offset="100%" stop-color="#160f09"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffe8a3"/>
+      <stop offset="44%" stop-color="#fbbf24"/>
+      <stop offset="100%" stop-color="#b45309"/>
+    </linearGradient>
+    <linearGradient id="steel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="42%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#334155"/>
+    </linearGradient>
+    <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#67e8f9"/>
+      <stop offset="100%" stop-color="#0e7490"/>
+    </linearGradient>
+    <radialGradient id="heat" cx="50%" cy="48%" r="56%">
+      <stop offset="0%" stop-color="#facc15" stop-opacity="0.42"/>
+      <stop offset="42%" stop-color="#f97316" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="#020617" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="frame">
+      <rect width="1200" height="340" rx="18"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#frame)" shape-rendering="crispEdges">
+    <rect width="1200" height="340" fill="url(#bg)"/>
+    <rect width="1200" height="340" fill="url(#heat)"/>
+
+    <g opacity="0.18">
+      <path d="M0 74H1200M0 122H1200M0 170H1200M0 218H1200M0 266H1200" stroke="#64748b" stroke-width="2"/>
+      <path d="M120 0V340M216 0V340M312 0V340M408 0V340M504 0V340M600 0V340M696 0V340M792 0V340M888 0V340M984 0V340M1080 0V340" stroke="#f59e0b" stroke-width="2"/>
+    </g>
+
+    <rect x="72" y="52" width="1056" height="236" rx="10" fill="#07111b" stroke="#204354" stroke-width="4"/>
+    <rect x="104" y="250" width="992" height="16" fill="#172554"/>
+    <rect x="160" y="234" width="880" height="16" fill="#334155"/>
+
+    <!-- Meteor trail and scattered ore -->
+    <rect x="154" y="102" width="80" height="16" fill="#fbbf24"/>
+    <rect x="234" y="118" width="96" height="16" fill="#f59e0b"/>
+    <rect x="330" y="134" width="80" height="16" fill="#92400e"/>
+    <rect x="174" y="118" width="24" height="24" fill="#67e8f9"/>
+    <rect x="978" y="94" width="40" height="40" fill="#fbbf24"/>
+    <rect x="946" y="134" width="24" height="24" fill="#94a3b8"/>
+    <rect x="1018" y="166" width="24" height="24" fill="#38bdf8"/>
+
+    <!-- Forged eight-point star ingot -->
+    <g transform="translate(432 52)">
+      <rect x="144" y="0" width="64" height="32" fill="url(#steel)"/>
+      <rect x="112" y="32" width="128" height="32" fill="#cbd5e1"/>
+      <rect x="80" y="64" width="192" height="32" fill="#94a3b8"/>
+      <rect x="48" y="96" width="256" height="32" fill="#64748b"/>
+      <rect x="16" y="128" width="320" height="32" fill="#475569"/>
+      <rect x="48" y="160" width="256" height="32" fill="#334155"/>
+      <rect x="80" y="192" width="192" height="32" fill="#1e293b"/>
+      <rect x="112" y="224" width="128" height="16" fill="#0f172a"/>
+
+      <rect x="144" y="64" width="64" height="32" fill="url(#gold)"/>
+      <rect x="112" y="96" width="128" height="32" fill="#fbbf24"/>
+      <rect x="80" y="128" width="192" height="32" fill="#f59e0b"/>
+      <rect x="112" y="160" width="128" height="32" fill="#d97706"/>
+      <rect x="144" y="192" width="64" height="32" fill="#92400e"/>
+
+      <rect x="16" y="96" width="64" height="32" fill="#f8fafc"/>
+      <rect x="272" y="96" width="64" height="32" fill="#f8fafc"/>
+      <rect x="48" y="64" width="64" height="32" fill="#cbd5e1"/>
+      <rect x="240" y="64" width="64" height="32" fill="#cbd5e1"/>
+      <rect x="48" y="160" width="64" height="32" fill="#334155"/>
+      <rect x="240" y="160" width="64" height="32" fill="#334155"/>
+
+      <rect x="144" y="96" width="32" height="32" fill="#fff7ed"/>
+      <rect x="176" y="128" width="32" height="32" fill="#fde68a"/>
+      <rect x="208" y="96" width="32" height="32" fill="#f59e0b"/>
+      <rect x="112" y="160" width="32" height="32" fill="#78350f"/>
+    </g>
+
+    <!-- Pixel sparks around the star metal -->
+    <rect x="386" y="84" width="16" height="16" fill="#fde68a"/>
+    <rect x="402" y="116" width="16" height="16" fill="#38bdf8"/>
+    <rect x="786" y="84" width="16" height="16" fill="#fde68a"/>
+    <rect x="770" y="132" width="16" height="16" fill="#67e8f9"/>
+    <rect x="360" y="196" width="16" height="16" fill="#f59e0b"/>
+    <rect x="824" y="204" width="16" height="16" fill="#f8fafc"/>
+
+    <!-- SM mark built into the base plate -->
+    <g transform="translate(470 244)">
+      <rect x="0" y="0" width="32" height="12" fill="url(#cyan)"/>
+      <rect x="0" y="12" width="12" height="12" fill="url(#cyan)"/>
+      <rect x="0" y="24" width="32" height="12" fill="url(#cyan)"/>
+      <rect x="20" y="36" width="12" height="12" fill="url(#cyan)"/>
+      <rect x="0" y="48" width="32" height="12" fill="url(#cyan)"/>
+
+      <rect x="72" y="0" width="12" height="60" fill="url(#gold)"/>
+      <rect x="84" y="12" width="12" height="12" fill="url(#gold)"/>
+      <rect x="96" y="24" width="12" height="12" fill="url(#gold)"/>
+      <rect x="108" y="12" width="12" height="12" fill="url(#gold)"/>
+      <rect x="120" y="0" width="12" height="60" fill="url(#gold)"/>
+    </g>
+
+    <text x="600" y="314" fill="#94a3b8" font-family="'Courier New', monospace" font-size="20" text-anchor="middle" letter-spacing="4">STARMETAL</text>
+    <rect x="72" y="52" width="1056" height="236" rx="10" fill="none" stroke="url(#cyan)" stroke-opacity="0.35" stroke-width="2"/>
+  </g>
+</svg>

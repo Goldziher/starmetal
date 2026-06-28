@@ -1,12 +1,16 @@
 [package]
 name = "depot-cli"
-description = "CLI binary for the depot package registry"
+description = "sm CLI binary for the Starmetal package registry"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [package.metadata.cargo-machete]
 ignored = ["depot-adapters", "depot-storage", "serde"]
+
+[[bin]]
+name = "sm"
+path = "src/main.rs"
 
 [features]
 default = ["full"]

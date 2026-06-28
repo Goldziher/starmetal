@@ -66,7 +66,7 @@
   },
   "$id": "https://schemas.depot.local/registries/cargo.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Depot-derived JSON Schema for one Cargo sparse index JSONL entry.",
+  "description": "Starmetal-derived JSON Schema for one Cargo sparse index JSONL entry.",
   "properties": {
     "cksum": {
       "type": "string"

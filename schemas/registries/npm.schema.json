@@ -90,7 +90,7 @@
   },
   "$id": "https://schemas.depot.local/registries/npm.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Depot-derived JSON Schema for npm registry package metadata.",
+  "description": "Starmetal-derived JSON Schema for npm registry package metadata.",
   "properties": {
     "description": {
       "default": null,

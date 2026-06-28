@@ -6,12 +6,12 @@ Accepted
 
 ## Context
 
-Depot needs filesystem storage for private MVP deployments and object-store options for later
+Starmetal needs filesystem storage for private MVP deployments and object-store options for later
 production hardening. The service layer should not know which backend stores artifacts.
 
 ## Decision
 
-Depot uses Apache OpenDAL behind `StoragePort`.
+Starmetal uses Apache OpenDAL behind `StoragePort`.
 
 Implemented storage backends:
 

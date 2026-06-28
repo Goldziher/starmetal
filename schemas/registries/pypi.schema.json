@@ -82,7 +82,7 @@
   },
   "$id": "https://schemas.depot.local/registries/pypi.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Depot-derived JSON Schema for a PEP 691 Simple API project detail response.",
+  "description": "Starmetal-derived JSON Schema for a PEP 691 Simple API project detail response.",
   "properties": {
     "files": {
       "items": {

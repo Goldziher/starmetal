@@ -11,9 +11,9 @@ mod mcp;
 
 #[derive(Parser)]
 #[command(
-    name = "depot",
-    bin_name = "depot",
-    about = "Self-hosted armored universal package registry",
+    name = "sm",
+    bin_name = "sm",
+    about = "Starmetal package registry and registry proxy",
     version,
     propagate_version = true
 )]
@@ -85,7 +85,7 @@ enum Commands {
         action: CacheAction,
     },
 
-    /// Run the Depot MCP server.
+    /// Run the Starmetal MCP server.
     Mcp {
         #[command(subcommand)]
         action: McpAction,
@@ -94,7 +94,7 @@ enum Commands {
     /// Sync packages from upstream registries.
     Sync,
 
-    /// Manage the depot lock file.
+    /// Manage the Starmetal lock file.
     Lock {
         #[command(subcommand)]
         action: LockAction,
@@ -605,14 +605,14 @@ mod tests {
 
     #[test]
     fn parses_standard_version_and_help_flags() {
-        assert!(Cli::try_parse_from(["depot", "--version"]).is_err());
-        assert!(Cli::try_parse_from(["depot", "--help"]).is_err());
+        assert!(Cli::try_parse_from(["sm", "--version"]).is_err());
+        assert!(Cli::try_parse_from(["sm", "--help"]).is_err());
     }
 
     #[test]
     fn parses_no_config_registry_status() {
         let cli = Cli::try_parse_from([
-            "depot",
+            "sm",
             "--no-config",
             "--storage-backend",
             "memory",
@@ -632,9 +632,8 @@ mod tests {
 
     #[test]
     fn parses_storage_options_as_key_value() {
-        let cli =
-            Cli::try_parse_from(["depot", "--storage-option", "root=./data", "config", "show"])
-                .expect("cli should parse");
+        let cli = Cli::try_parse_from(["sm", "--storage-option", "root=./data", "config", "show"])
+            .expect("cli should parse");
         assert_eq!(
             cli.storage_options,
             vec![("root".to_string(), "./data".to_string())]
@@ -644,7 +643,7 @@ mod tests {
     #[test]
     fn parses_explicit_publish_command() {
         let cli = Cli::try_parse_from([
-            "depot",
+            "sm",
             "package",
             "publish",
             "npm",

@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-Depot needs local operator workflows for private deployments and agent integrations. CLI and MCP
+Starmetal needs local operator workflows for private deployments and agent integrations. CLI and MCP
 must share behavior rather than duplicating config, storage, or service construction.
 
 ## Decision
@@ -17,27 +17,27 @@ Implemented CLI surface:
 
 | Command | Status |
 |---------|--------|
-| `depot serve` | Implemented |
-| `depot config show` | Implemented |
-| `depot config validate` | Implemented |
-| `depot config init` | Implemented |
-| `depot registry list` | Implemented |
-| `depot registry status` | Implemented |
-| `depot package list` | Implemented |
-| `depot package versions` | Implemented |
-| `depot package metadata` | Implemented |
-| `depot package fetch` | Implemented |
-| `depot package publish` | Experimental local publishing |
-| `depot package yank` | Experimental local publishing |
-| `depot package unyank` | Experimental local publishing |
-| `depot cache delete-artifact` | Implemented local cache operation |
-| `depot mcp serve` | Implemented stdio MCP |
-| `depot sync` | Not implemented in MVP |
-| `depot lock verify` | Not implemented in MVP |
-| `depot lock update` | Not implemented in MVP |
+| `sm serve` | Implemented |
+| `sm config show` | Implemented |
+| `sm config validate` | Implemented |
+| `sm config init` | Implemented |
+| `sm registry list` | Implemented |
+| `sm registry status` | Implemented |
+| `sm package list` | Implemented |
+| `sm package versions` | Implemented |
+| `sm package metadata` | Implemented |
+| `sm package fetch` | Implemented |
+| `sm package publish` | Experimental local publishing |
+| `sm package yank` | Experimental local publishing |
+| `sm package unyank` | Experimental local publishing |
+| `sm cache delete-artifact` | Implemented local cache operation |
+| `sm mcp serve` | Implemented stdio MCP |
+| `sm sync` | Not implemented in MVP |
+| `sm lock verify` | Not implemented in MVP |
+| `sm lock update` | Not implemented in MVP |
 
 MCP runs over stdio. Read tools are available by default. Mutating tools require
-`depot mcp serve --allow-writes`.
+`sm mcp serve --allow-writes`.
 
 ## Implemented
 

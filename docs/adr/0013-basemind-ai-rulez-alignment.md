@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-Depot uses AI-Rulez to generate assistant instructions. The generated `AGENTS.md` file says not to
+Starmetal uses AI-Rulez to generate assistant instructions. The generated `AGENTS.md` file says not to
 edit it directly. `.ai-rulez/config.toml` enables the `basemind` marketplace plugin from
 `Goldziher/basemind`.
 

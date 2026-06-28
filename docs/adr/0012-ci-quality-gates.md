@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-Depot's private MVP readiness depends on generated schemas, offline conformance, Rust correctness,
+Starmetal's private MVP readiness depends on generated schemas, offline conformance, Rust correctness,
 and live native-client behavior. These checks have different cost profiles and should be separated.
 
 ## Decision

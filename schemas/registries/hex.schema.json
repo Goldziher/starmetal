@@ -95,7 +95,7 @@
   },
   "$id": "https://schemas.depot.local/registries/hex.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Depot-derived JSON Schema for the Hex package HTTP API response; official registry resources use protobuf.",
+  "description": "Starmetal-derived JSON Schema for the Hex package HTTP API response; official registry resources use protobuf.",
   "properties": {
     "docs_html_url": {
       "default": null,

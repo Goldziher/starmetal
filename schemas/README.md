@@ -1,18 +1,18 @@
 # Schemas
 
-This directory contains Depot's registry schema evidence and generated JSON Schema artifacts.
+This directory contains Starmetal's registry schema evidence and generated JSON Schema artifacts.
 
 ## Files
 
 - `sources.toml`: manually reviewed list of official source documents and downloadable artifacts.
 - `manifest.json`: generated provenance, hashes, source links, and schema ownership metadata.
 - `upstream/`: fetched official machine-readable artifacts such as protobuf, XSD, and OpenAPI files.
-- `registries/`: Depot-derived JSON Schemas for registry-facing payloads.
-- `depot/`: Depot-owned JSON Schemas for config and lockfile formats.
+- `registries/`: Starmetal-derived JSON Schemas for registry-facing payloads.
+- `depot/`: Starmetal-owned JSON Schemas for config and lockfile formats.
 
 ## Registry Sources
 
-| Registry | Official source format | Depot artifact |
+| Registry | Official source format | Starmetal artifact |
 |----------|------------------------|----------------|
 | PyPI | PyPA Simple Repository API and PyPI API prose specs | Derived JSON Schema for PEP 691 project JSON |
 | npm | npm registry docs and npm-maintained TypeScript definitions | Derived flexible JSON Schema for packuments |
@@ -48,11 +48,11 @@ No registry adapter should be documented as supported unless it has:
 - Official source linkage in `sources.toml`.
 - Schema/protocol provenance in `manifest.json`.
 - Fixture-based conformance tests under `tests/conformance`.
-- Route-level behavior coverage for Depot-served metadata where the adapter exists.
+- Route-level behavior coverage for Starmetal-served metadata where the adapter exists.
 
 Runtime schema validation is optional and explicit. These artifacts are required for documentation,
 test-time validation, and adapter conformance.
 
-Generated JSON Schemas under `schemas/registries/` are Depot-derived unless the manifest explicitly
+Generated JSON Schemas under `schemas/registries/` are Starmetal-derived unless the manifest explicitly
 states otherwise. Official upstream artifacts are stored under `schemas/upstream/` in their native
 formats, such as protobuf, XSD, OpenAPI, Ruby source, Dart source, or JSON Schema.

@@ -1,6 +1,6 @@
 [package]
 name = "depot-core"
-description = "Core domain types, port traits, and business logic for depot"
+description = "Core domain types, port traits, and business logic for Starmetal"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

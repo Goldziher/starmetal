@@ -1,7 +1,7 @@
 <!--
 🤖 AI-RULEZ :: GENERATED FILE — DO NOT EDIT DIRECTLY
-Project: depot
-Generated: 2026-06-28 14:12:05
+Project: starmetal
+Generated: 2026-06-28 16:08:54
 Source: .ai-rulez/config.toml
 Target: AGENTS.md
 Content: rules=39, sections=0, agents=9
@@ -46,13 +46,13 @@ INSTRUCTIONS FOR AI AGENTS
    c. Commit both .ai-rulez/ and generated files
 
 Documentation: https://github.com/Goldziher/ai-rulez
-Content-Hash: blake3:02efc0f4e234ac843a92b739386a8521442649e1872a2b3acd7878a33c5feddc
-Source-Hash: blake3:ee1b77539ffc9a77af4659af1bb7782210397f42610e869d338cdeab3c3d2526
+Content-Hash: blake3:ef7d981f7bfa455782977393d7c0e62734f7db3b5e09a4a56f69d7ccc3cc471f
+Source-Hash: blake3:0f1a1056416e1f72cc6a846e44c3f53e280100f5f8ded58d31b07254aa0f5605
 -->
 
-# depot
+# starmetal
 
-Self-hosted armored universal package registry
+Multi-language high-performance self-hosted package registry and registry proxy
 
 ## Rules
 
@@ -341,7 +341,7 @@ Verify assumptions before taking action. Check current state (branch, working di
 
 ### architecture
 
-Depot is a self-hosted, armored universal package registry built with hexagonal architecture.
+Starmetal is a self-hosted, armored universal package registry built with hexagonal architecture.
 
 ## Crate Structure
 

@@ -7,7 +7,7 @@ pub async fn run(runtime: DepotRuntime) -> depot_core::error::Result<()> {
     let listener = tokio::net::TcpListener::bind(&bind).await.map_err(|err| {
         depot_core::error::DepotError::Config(format!("failed to bind {bind}: {err}"))
     })?;
-    tracing::info!("depot listening on {}", bind);
+    tracing::info!("starmetal listening on {}", bind);
     axum::serve(listener, app)
         .await
         .map_err(|err| depot_core::error::DepotError::Config(format!("server error: {err}")))

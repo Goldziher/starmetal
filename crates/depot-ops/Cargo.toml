@@ -1,6 +1,6 @@
 [package]
 name = "depot-ops"
-description = "Shared local operator API for Depot CLI and MCP frontends"
+description = "Shared local operator API for Starmetal CLI and MCP frontends"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -14,7 +14,7 @@ experimental plumbing for internal validation and operator workflows.
 
 ## Decision
 
-Depot separates three concepts:
+Starmetal separates three concepts:
 
 | Concept | MVP position |
 |---------|--------------|
@@ -31,7 +31,7 @@ Implemented local publishing behavior:
 - Versions are immutable by default unless `allow_overwrite = true`.
 - Shadowing upstream package versions is blocked by default unless `allow_shadowing = true`.
 - CLI and MCP can publish one explicit artifact when publishing is enabled.
-- MCP mutating tools require `depot mcp serve --allow-writes`.
+- MCP mutating tools require `sm mcp serve --allow-writes`.
 - Native upload routes call `PublishingService` when publishing is enabled, but these routes are
   experimental and do not create an MVP support claim.
 

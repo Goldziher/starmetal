@@ -26,7 +26,7 @@
   },
   "$id": "https://schemas.depot.local/registries/nuget-service-index.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Depot-derived JSON Schema for the NuGet V3 service index response.",
+  "description": "Starmetal-derived JSON Schema for the NuGet V3 service index response.",
   "properties": {
     "resources": {
       "items": {

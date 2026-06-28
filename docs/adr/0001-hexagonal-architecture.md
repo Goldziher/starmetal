@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-Depot is a private/internal MVP for a package registry cache. It must isolate package protocol
+Starmetal is a private/internal MVP for a package registry cache. It must isolate package protocol
 details, storage backends, policy checks, integrity verification, and operator workflows so each can
 move independently.
 
@@ -16,7 +16,7 @@ adapters. Native publishing is outside MVP.
 
 ## Decision
 
-Depot uses hexagonal architecture.
+Starmetal uses hexagonal architecture.
 
 Implemented ports in `depot-core`:
 

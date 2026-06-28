@@ -286,7 +286,7 @@
       "fetched": false,
       "path": null,
       "blake3": null,
-      "description": "Official notice that the legacy Dependency API was deprecated and disabled; Depot should not model it as an active primary protocol."
+      "description": "Official notice that the legacy Dependency API was deprecated and disabled; Starmetal should not model it as an active primary protocol."
     },
     {
       "id": "rubygems-gem-validator-schema",
@@ -440,7 +440,7 @@
       "fetched": false,
       "path": null,
       "blake3": null,
-      "description": "Depot-owned configuration Rust type."
+      "description": "Starmetal-owned configuration Rust type."
     },
     {
       "id": "depot-lockfile",
@@ -451,7 +451,7 @@
       "fetched": false,
       "path": null,
       "blake3": null,
-      "description": "Depot-owned lockfile Rust type."
+      "description": "Starmetal-owned lockfile Rust type."
     }
   ],
   "schemas": [
@@ -477,7 +477,7 @@
       ],
       "generated_by": "depot-schema-manager",
       "validated_by": "crates/depot-core/tests/schema_validation.rs; tests/conformance",
-      "blake3": "8ae0d4d6916d45d3213ac8987c8d1d064db4fc7c22e31040fc1156419c1b5d74"
+      "blake3": "cf75f71c610b6e54f28beda8236ed1820a0f1d55176835468899b575f848e199"
     },
     {
       "id": "pypi-simple-index",
@@ -497,7 +497,7 @@
       ],
       "generated_by": "depot-schema-manager",
       "validated_by": "crates/depot-core/tests/schema_validation.rs; tests/conformance",
-      "blake3": "fc4bafe03398c29c722edf9f9fee522e0043712b15165c89ab14220fdcd3d0e5"
+      "blake3": "db2da510feb11a8a632cb705c34a7ea7dd4e423d71646edc7516320fd706691a"
     },
     {
       "id": "npm-packument",
@@ -516,7 +516,7 @@
       ],
       "generated_by": "depot-schema-manager",
       "validated_by": "crates/depot-core/tests/schema_validation.rs; tests/conformance",
-      "blake3": "1486ae56b139a037c6523b90030bcd22c29370b5793b59a2677f48af0ca1e85a"
+      "blake3": "ac21c728f78df2b699ff01e915a23c6e66b99a31722b62b06884aac21d7c42d0"
     },
     {
       "id": "cargo-sparse-index-entry",
@@ -533,7 +533,7 @@
       ],
       "generated_by": "depot-schema-manager",
       "validated_by": "crates/depot-core/tests/schema_validation.rs; tests/conformance",
-      "blake3": "e288ec4e380acd0e20b03e96716c81455609f753305100abdcd8aee3aae3fbb5"
+      "blake3": "881df2ae5a888fa8b81e34aef8336fa6f7f4b5173bc61b7206b0f597bd734a95"
     },
     {
       "id": "cargo-config",
@@ -550,7 +550,7 @@
       ],
       "generated_by": "depot-schema-manager",
       "validated_by": "crates/depot-core/tests/schema_validation.rs; tests/conformance",
-      "blake3": "ee3da725b27f30b0eae3d4e5e5f73d3e0f4dfb750d9da5ba38e50a2976887160"
+      "blake3": "10931816a6fe08daa73eb4ec98cdcfed65c508df72930ce3702aba712f0870ea"
     },
     {
       "id": "hex-package-http-api",
@@ -570,7 +570,7 @@
       ],
       "generated_by": "depot-schema-manager",
       "validated_by": "crates/depot-core/tests/schema_validation.rs; tests/conformance",
-      "blake3": "54ced73fe9b04f36c9a80ba28c02f6fbfc289c979b2eb2151897139d60b5b4bc"
+      "blake3": "355e3a55164d0c7fe32c70d80d13e91c058ab06294f54b02b9c206a871c2ca0a"
     },
     {
       "id": "depot-config",
@@ -587,7 +587,7 @@
       ],
       "generated_by": "depot-schema-manager",
       "validated_by": "crates/depot-core/tests/schema_validation.rs",
-      "blake3": "510454ec204eed5ff2c9e41ff06cf0bbe2ff7abf8d764700d06834f9d9436305"
+      "blake3": "345c93af08ae619d062e2a870c8248db89e43f945460caae5b1c8fe797cb6fea"
     },
     {
       "id": "nuget-v3-service-index",
@@ -605,7 +605,7 @@
       ],
       "generated_by": "depot-schema-manager",
       "validated_by": "crates/depot-core/tests/schema_validation.rs",
-      "blake3": "92a3a497e046e52d84b304a33dacb8e917e246d2ffd90bdb8017ef2060f0cff1"
+      "blake3": "67f222bfdcd663355173033209c267f5bcafe4410b3ddd61b6ddf4e3ed3fd98c"
     },
     {
       "id": "nuget-v3-package-base-address",
@@ -623,7 +623,7 @@
       ],
       "generated_by": "depot-schema-manager",
       "validated_by": "crates/depot-core/tests/schema_validation.rs",
-      "blake3": "5a5b00f2799167e73b93ac3fd26545dc6c4f89b2783701e21f7dda1201ac7b15"
+      "blake3": "142c07ec6c54a32e39a16887c273fbc4d6dd6fcb55f98e865c8f86768ccd948c"
     },
     {
       "id": "nuget-v3-registration",
@@ -643,7 +643,7 @@
       ],
       "generated_by": "depot-schema-manager",
       "validated_by": "crates/depot-core/tests/schema_validation.rs",
-      "blake3": "6daeedbd4c13877def313d1ba95dd7a34a029254787030bd2620bd74d47d648a"
+      "blake3": "6702c92b3ec374067ddf3505aeef2087999516c750b302a263ad1ebe6299343b"
     },
     {
       "id": "pub-package",
@@ -663,7 +663,7 @@
       ],
       "generated_by": "depot-schema-manager",
       "validated_by": "crates/depot-core/tests/schema_validation.rs",
-      "blake3": "b3f9d98cebae02856a0b77317575a71a4e3c4cffd0546e1a1e9fe8cda90dfcfc"
+      "blake3": "a1ed02f7ee42f38d379b8496fca5dee585572bceb62875cdfd948041230ef832"
     },
     {
       "id": "depot-lockfile",
@@ -680,7 +680,7 @@
       ],
       "generated_by": "depot-schema-manager",
       "validated_by": "crates/depot-core/tests/schema_validation.rs",
-      "blake3": "7e8bfd8dfe310b615263b2827e749d3ef43d1e288aa402f9fdfd3085e550638e"
+      "blake3": "b7a115df91ab29d0d472107c93c663cf5c009522a79ac7c94a4287407995aeef"
     }
   ]
 }

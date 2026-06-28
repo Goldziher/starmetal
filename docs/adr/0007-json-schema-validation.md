@@ -6,8 +6,8 @@ Accepted
 
 ## Context
 
-Depot models registries whose official contracts come from prose specs, protobuf files, XML Schema,
-OpenAPI, source code, and examples. JSON Schema files in this repo are usually Depot-derived
+Starmetal models registries whose official contracts come from prose specs, protobuf files, XML Schema,
+OpenAPI, source code, and examples. JSON Schema files in this repo are usually Starmetal-derived
 validation artifacts, not upstream authority.
 
 Schema evidence supports implementation and documentation. It does not by itself make a registry
@@ -33,7 +33,7 @@ Implemented tooling:
 | Command | Purpose |
 |---------|---------|
 | `task schema:fetch` | Download pinned official artifacts |
-| `task schema:generate` | Generate Depot schemas and manifest |
+| `task schema:generate` | Generate Starmetal schemas and manifest |
 | `task schema:check` | Verify committed artifacts and generated schemas are current |
 | `task schema:check-live` | Compare fetched artifacts with mutable live upstream sources |
 | `task schema:validate` | Validate schemas against representative fixtures |
@@ -54,7 +54,7 @@ Registry source treatment:
 
 ## Implemented
 
-- `schemars` generation for Depot-owned Rust types.
+- `schemars` generation for Starmetal-owned Rust types.
 - `jsonschema` fixture validation in tests.
 - Manifest provenance with content hashes.
 - Offline schema and conformance tasks.

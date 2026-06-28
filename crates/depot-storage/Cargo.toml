@@ -1,6 +1,6 @@
 [package]
 name = "depot-storage"
-description = "Storage backends for depot, built on OpenDAL"
+description = "Storage backends for Starmetal, built on OpenDAL"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

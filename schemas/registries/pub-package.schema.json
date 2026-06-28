@@ -92,7 +92,7 @@
   },
   "$id": "https://schemas.depot.local/registries/pub-package.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Depot-derived JSON Schema for Hosted Pub Repository package metadata.",
+  "description": "Starmetal-derived JSON Schema for Hosted Pub Repository package metadata.",
   "properties": {
     "latest": {
       "anyOf": [
