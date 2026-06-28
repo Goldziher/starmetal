@@ -29,6 +29,8 @@ jobs:
           components: rustfmt
       - uses: Swatinem/rust-cache@v2
       - uses: go-task/setup-task@v2
+        with:
+          version: 3.51.1
       - run: task fmt:check
 
   clippy:
@@ -42,6 +44,8 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - uses: go-task/setup-task@v2
+        with:
+          version: 3.51.1
       - run: task clippy
 
   test:
@@ -53,6 +57,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: go-task/setup-task@v2
+        with:
+          version: 3.51.1
       - run: task test:all
 
   schema:
@@ -64,6 +70,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: go-task/setup-task@v2
+        with:
+          version: 3.51.1
       - run: task schema:check
       - run: task schema:validate
 
@@ -76,6 +84,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: go-task/setup-task@v2
+        with:
+          version: 3.51.1
       - run: task conformance
 
   build-release:
@@ -97,6 +107,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: go-task/setup-task@v2
+        with:
+          version: 3.51.1
       - run: task feature:check
 
   release-packages:
@@ -111,6 +123,8 @@ jobs:
           node-version: "22"
       - uses: astral-sh/setup-uv@v7
       - uses: go-task/setup-task@v2
+        with:
+          version: 3.51.1
       - run: task release:namespaces
 
   docker:
@@ -121,6 +135,8 @@ jobs:
       - uses: actions/checkout@v6
       - uses: docker/setup-buildx-action@v3
       - uses: go-task/setup-task@v2
+        with:
+          version: 3.51.1
       - run: task docker:integration
       - run: ./scripts/publish-docker-ghcr.sh --dry-run
 
@@ -137,4 +153,6 @@ jobs:
           cargo install cargo-deny --version 0.19.6 --locked
           cargo install cargo-audit --version 0.22.1 --locked
       - uses: go-task/setup-task@v2
+        with:
+          version: 3.51.1
       - run: task security
