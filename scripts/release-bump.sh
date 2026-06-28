@@ -42,7 +42,7 @@ perl -0pi -e \
   packages/pypi/src/starmetal/__init__.py
 
 cargo metadata --format-version 1 --no-deps >/dev/null
-(cd packages/crates/starmetal && cargo metadata --format-version 1 --no-deps >/dev/null)
+(cd packages/crates/starmetal && cargo generate-lockfile)
 
 echo "Synced StarMetal release version to $VERSION"
 echo "Release tag: v$VERSION"

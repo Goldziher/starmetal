@@ -2,7 +2,7 @@
 
 [package]
 name = "starmetal"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2024"
 description = "High-performance, self-hosted multi-language package registry and pull-through registry proxy for private software supply chains."
 license = "MIT"

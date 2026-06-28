@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="0.0.1"
+VERSION="${VERSION:-}"
 PACKAGE_NAME="starmetal"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -17,12 +17,19 @@ SKIP_CARGO="false"
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/release-namespaces.sh [--dry-run|--publish] [--yes] [--skip-npm] [--skip-pypi] [--skip-cargo]
+Usage: scripts/release-namespaces.sh [--dry-run|--publish] [options]
 
-Publishes the StarMetal v0.0.1 namespace packages:
-  npm:       starmetal@0.0.1, exposing the sm command
-  PyPI:      starmetal==0.0.1, exposing the sm command
-  crates.io: starmetal 0.0.1, exposing the sm binary
+Options:
+  --version <version>
+  --yes
+  --skip-npm
+  --skip-pypi
+  --skip-cargo
+
+Publishes the StarMetal namespace packages for the current workspace version:
+  npm:       starmetal, exposing the sm command
+  PyPI:      starmetal, exposing the sm command
+  crates.io: starmetal, exposing the sm binary
 
 Credentials:
   npm:   run npm login before publishing, or let the script prompt via npm login
@@ -31,24 +38,38 @@ Credentials:
 USAGE
 }
 
-for arg in "$@"; do
-  case "$arg" in
+while [[ $# -gt 0 ]]; do
+  case "$1" in
   --dry-run) MODE="dry-run" ;;
   --publish) MODE="publish" ;;
   --yes) YES="true" ;;
   --skip-npm) SKIP_NPM="true" ;;
   --skip-pypi) SKIP_PYPI="true" ;;
   --skip-cargo) SKIP_CARGO="true" ;;
+  --version)
+    shift
+    if [[ $# -eq 0 || "$1" == --* ]]; then
+      echo "--version requires a value" >&2
+      usage >&2
+      exit 2
+    fi
+    VERSION="${1#v}"
+    ;;
+  --version=*)
+    VERSION="${1#--version=}"
+    VERSION="${VERSION#v}"
+    ;;
   -h | --help)
     usage
     exit 0
     ;;
   *)
-    echo "unknown argument: $arg" >&2
+    echo "unknown argument: $1" >&2
     usage >&2
     exit 2
     ;;
   esac
+  shift
 done
 
 require_cmd() {
@@ -78,6 +99,15 @@ read_pypi_version() {
 read_crate_version() {
   grep -E '^version = "' "$CRATE_MANIFEST" | head -1 | cut -d'"' -f2
 }
+
+if [[ -z "$VERSION" ]]; then
+  VERSION="$(read_root_version)"
+fi
+
+if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]]; then
+  echo "invalid version: $VERSION" >&2
+  exit 1
+fi
 
 assert_version() {
   local label="$1"

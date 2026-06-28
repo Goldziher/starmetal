@@ -1,4 +1,4 @@
-const VERSION: &str = "0.0.1";
+const VERSION: &str = "0.1.0";
 
 fn main() {
     let mut args = std::env::args().skip(1);

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "starmetal"
-version = "0.0.1"
+version = "0.1.0"
 description = "High-performance, self-hosted multi-language package registry and pull-through registry proxy for private software supply chains."
 readme = "README.md"
 requires-python = ">=3.10"

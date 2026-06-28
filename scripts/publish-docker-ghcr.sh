@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="${VERSION:-0.0.1}"
+VERSION="${VERSION:-}"
 GHCR_REGISTRY="${GHCR_REGISTRY:-ghcr.io}"
 GHCR_OWNER="${GHCR_OWNER:-goldziher}"
 IMAGE_NAME="${IMAGE_NAME:-starmetal}"
@@ -14,7 +14,7 @@ Usage: scripts/publish-docker-ghcr.sh [--dry-run|--push]
 Builds the StarMetal Docker image and optionally pushes it to GitHub Container Registry.
 
 Optional:
-  VERSION=0.0.1
+  VERSION=<workspace version>
   GHCR_REGISTRY=ghcr.io
   GHCR_OWNER=goldziher
   IMAGE_NAME=starmetal
@@ -41,6 +41,14 @@ for arg in "$@"; do
 done
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [[ -z "$VERSION" ]]; then
+  VERSION="$(grep -E '^version = "' "${REPO_ROOT}/Cargo.toml" | head -1 | cut -d'"' -f2)"
+fi
+if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]]; then
+  echo "invalid version: $VERSION" >&2
+  exit 1
+fi
+
 if [[ -z "${DOCKER_IMAGE:-}" ]]; then
   DOCKER_IMAGE="${GHCR_REGISTRY}/${GHCR_OWNER,,}/${IMAGE_NAME}"
 fi
