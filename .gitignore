@@ -1,5 +1,12 @@
 /target
 .agents/
+packages/crates/starmetal/target/
+packages/pypi/.venv/
+packages/pypi/uv.lock
+packages/npm/*.tgz
+packages/**/__pycache__/
+packages/pypi/dist/
+packages/pypi/*.egg-info/
 
 # BEGIN ai-rulez (DO NOT EDIT - managed by ai-rulez)
 .claude/

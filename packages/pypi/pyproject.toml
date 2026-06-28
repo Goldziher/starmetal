@@ -1,0 +1,42 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "starmetal"
+version = "0.0.1"
+description = "Multi-language, high-performance, self-hosted package registry and registry proxy."
+readme = "README.md"
+requires-python = ">=3.9"
+license = "BUSL-1.1"
+authors = [
+  { name = "Na'aman Hirschfeld" }
+]
+keywords = [
+  "cargo",
+  "npm",
+  "package-registry",
+  "pypi",
+  "registry-proxy",
+  "self-hosted",
+  "supply-chain-security"
+]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Software Development :: Build Tools"
+]
+
+[project.urls]
+Homepage = "https://github.com/Goldziher/starmetal"
+Repository = "https://github.com/Goldziher/starmetal.git"
+Issues = "https://github.com/Goldziher/starmetal/issues"
+
+[project.scripts]
+sm = "starmetal.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/starmetal"]

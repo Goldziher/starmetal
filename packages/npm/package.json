@@ -1,0 +1,39 @@
+{
+  "name": "starmetal",
+  "version": "0.0.1",
+  "description": "StarMetal is a multi-language, high-performance, self-hosted package registry and registry proxy.",
+  "keywords": [
+    "cargo",
+    "npm",
+    "package-registry",
+    "pypi",
+    "registry-proxy",
+    "self-hosted",
+    "supply-chain-security"
+  ],
+  "homepage": "https://github.com/Goldziher/starmetal#readme",
+  "bugs": {
+    "url": "https://github.com/Goldziher/starmetal/issues"
+  },
+  "license": "BUSL-1.1",
+  "author": "Na'aman Hirschfeld",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Goldziher/starmetal.git"
+  },
+  "bin": {
+    "sm": "bin/sm.js"
+  },
+  "files": [
+    "README.md",
+    "bin/",
+    "index.js"
+  ],
+  "main": "index.js",
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

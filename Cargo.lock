@@ -700,7 +700,7 @@ checksum = "a4ae5f15dda3c708c0ade84bfee31ccab44a3da4f88015ed22f63732abe300c8"
 
 [[package]]
 name = "depot-adapters"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "ahash",
  "async-trait",
@@ -726,7 +726,7 @@ dependencies = [
 
 [[package]]
 name = "depot-cli"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "axum",
  "clap",
@@ -745,7 +745,7 @@ dependencies = [
 
 [[package]]
 name = "depot-conformance-tests"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "ahash",
  "async-trait",
@@ -766,7 +766,7 @@ dependencies = [
 
 [[package]]
 name = "depot-core"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "ahash",
  "async-trait",
@@ -785,7 +785,7 @@ dependencies = [
 
 [[package]]
 name = "depot-integration-tests"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "ahash",
  "axum",
@@ -803,7 +803,7 @@ dependencies = [
 
 [[package]]
 name = "depot-ops"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "ahash",
  "bytes",
@@ -820,7 +820,7 @@ dependencies = [
 
 [[package]]
 name = "depot-schema-manager"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "blake3",
  "clap",
@@ -835,7 +835,7 @@ dependencies = [
 
 [[package]]
 name = "depot-server"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "axum",
  "depot-adapters",
@@ -849,7 +849,7 @@ dependencies = [
 
 [[package]]
 name = "depot-service"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "ahash",
  "async-trait",
@@ -867,7 +867,7 @@ dependencies = [
 
 [[package]]
 name = "depot-storage"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -881,7 +881,7 @@ dependencies = [
 
 [[package]]
 name = "depot-test-generator"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "clap",
  "serde",

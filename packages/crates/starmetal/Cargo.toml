@@ -1,0 +1,17 @@
+[workspace]
+
+[package]
+name = "starmetal"
+version = "0.0.1"
+edition = "2024"
+description = "Multi-language, high-performance, self-hosted package registry and registry proxy."
+license = "BUSL-1.1"
+repository = "https://github.com/Goldziher/starmetal"
+homepage = "https://github.com/Goldziher/starmetal"
+readme = "README.md"
+keywords = ["package-registry", "registry-proxy", "self-hosted", "supply-chain"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "sm"
+path = "src/main.rs"

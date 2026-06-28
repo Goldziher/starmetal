@@ -19,7 +19,7 @@ PyPI · npm · Cargo · Hex · Maven · RubyGems · NuGet · pub.dev · Blake3 i
 [![Rust 2024](https://img.shields.io/badge/rust-2024-orange?style=flat-square)](https://www.rust-lang.org/)
 [![License: BUSL-1.1](https://img.shields.io/badge/license-BUSL--1.1-blue?style=flat-square)](LICENSE)
 
-[Quick Start](#quick-start) · [Registry Support](#registry-support) · [Docker](#docker) · [Deployment](#deployment) · [Architecture](#architecture) · [ADRs](#adrs)
+[Quick Start](#quick-start) · [Registry Support](#registry-support) · [Docker](#docker) · [Deployment](#deployment) · [Release](docs/release.md) · [Architecture](#architecture) · [ADRs](#adrs)
 
 </div>
 

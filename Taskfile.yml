@@ -95,6 +95,21 @@ tasks:
     cmds:
       - docker run --rm --publish 8080:8080 --volume starmetal-data:/var/lib/starmetal starmetal:local
 
+  docker:publish:gcr:
+    desc: Build and push the Starmetal image to GCP Artifact Registry
+    cmds:
+      - ./scripts/publish-docker-gcr.sh --push
+
+  release:namespaces:
+    desc: Dry-run the v0.0.1 npm, PyPI, and crates.io namespace packages
+    cmds:
+      - ./scripts/release-namespaces.sh --dry-run
+
+  release:namespaces:publish:
+    desc: Publish the v0.0.1 npm, PyPI, and crates.io namespace packages
+    cmds:
+      - ./scripts/release-namespaces.sh --publish
+
   setup:ai-rulez:
     desc: Generate AI assistant configuration files
     cmds:
