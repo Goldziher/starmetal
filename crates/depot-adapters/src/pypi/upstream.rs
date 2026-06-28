@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use ahash::AHashMap;
 use async_trait::async_trait;
 use bytes::Bytes;
+use depot_core::config::DEFAULT_MAX_UPSTREAM_BYTES;
 use depot_core::error::{DepotError, Result};
 use depot_core::package::{ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata};
 use depot_core::ports::UpstreamClient;
@@ -22,6 +23,7 @@ use super::models;
 pub struct PypiUpstreamClient {
     client: reqwest::Client,
     base_url: String,
+    max_response_bytes: u64,
     /// Cache of filename -> absolute download URL, populated during fetch_versions
     /// and fetch_metadata calls so that fetch_artifact can resolve download URLs.
     url_cache: Arc<RwLock<AHashMap<String, (Instant, String)>>>,
@@ -37,6 +39,10 @@ impl PypiUpstreamClient {
     /// The base URL should be the root of a PEP 503/691 simple repository
     /// (e.g., `https://pypi.org`).
     pub fn new(base_url: String) -> Self {
+        Self::with_max_response_bytes(base_url, DEFAULT_MAX_UPSTREAM_BYTES)
+    }
+
+    pub fn with_max_response_bytes(base_url: String, max_response_bytes: u64) -> Self {
         let client = reqwest::Client::builder()
             .connect_timeout(std::time::Duration::from_secs(30))
             .timeout(std::time::Duration::from_secs(60))
@@ -45,6 +51,7 @@ impl PypiUpstreamClient {
         Self {
             client,
             base_url,
+            max_response_bytes,
             url_cache: Arc::new(RwLock::new(AHashMap::new())),
             project_cache: Arc::new(RwLock::new(AHashMap::new())),
         }
@@ -111,15 +118,19 @@ impl PypiUpstreamClient {
         let project: PypiProject = if content_type.contains("application/vnd.pypi.simple.v1+json")
             || content_type.contains("application/json")
         {
-            response
-                .json()
-                .await
-                .map_err(|err| DepotError::Upstream(err.to_string()))?
+            crate::upstream_http::json_limited(
+                response,
+                self.max_response_bytes,
+                "PyPI project metadata",
+            )
+            .await?
         } else {
-            let html = response
-                .text()
-                .await
-                .map_err(|err| DepotError::Upstream(err.to_string()))?;
+            let html = crate::upstream_http::text_limited(
+                response,
+                self.max_response_bytes,
+                "PyPI project metadata",
+            )
+            .await?;
             parse_pep503_html(&normalized, &url, &html)
         };
 
@@ -306,9 +317,11 @@ impl UpstreamClient for PypiUpstreamClient {
             )));
         }
 
-        response
-            .bytes()
-            .await
-            .map_err(|err| DepotError::Upstream(err.to_string()))
+        crate::upstream_http::bytes_limited(
+            response,
+            self.max_response_bytes,
+            "PyPI artifact download",
+        )
+        .await
     }
 }

@@ -6,54 +6,62 @@ Accepted
 
 ## Context
 
-Depot supports multiple protocol adapters and storage backends. Not every deployment needs all of them. Compiling unused adapters increases binary size and build time, and pulls in unnecessary dependencies.
+Depot compiles optional protocol adapters and storage backends. Private MVP defaults should keep the
+core four read adapters available while letting operators opt into beta adapters.
+
+Feature availability is not the same as a support claim.
 
 ## Decision
 
-We use Cargo feature flags to control which components are compiled:
+Cargo feature flags gate adapters and storage backends.
 
-### `depot-adapters`
+Implemented `depot-adapters` features:
 
-- `pypi` (default) — PyPI PEP 503 adapter
-- `npm` (default) — npm registry adapter
-- `cargo-registry` (default) — Cargo sparse index adapter
-- `hex` (default) — Hex.pm adapter
-- `maven` — Maven Central-compatible repository adapter
-- `rubygems` — RubyGems/Bundler Compact Index adapter
-- `nuget` — NuGet V3 adapter
-- `pub` — Hosted Pub Repository adapter
+| Feature | Default in `depot-adapters` | MVP position |
+|---------|-----------------------------|--------------|
+| `pypi` | Yes | Read candidate after live E2E |
+| `npm` | Yes | Read candidate after live E2E |
+| `cargo-registry` | Yes | Read candidate after live E2E |
+| `hex` | Yes | Read candidate after live E2E |
+| `maven` | No | Opt-in beta |
+| `rubygems` | No | Opt-in beta |
+| `nuget` | No | Opt-in beta |
+| `pub` | No | Opt-in beta |
 
-### `depot-storage`
+Implemented `depot-storage` features:
 
-- `backend-fs` (default) — local filesystem via OpenDAL
-- `backend-s3` — S3-compatible storage
-- `backend-gcs` — Google Cloud Storage
-- `backend-memory` — in-memory (testing)
+| Feature | Purpose |
+|---------|---------|
+| `backend-fs` | Default filesystem storage |
+| `backend-s3` | S3-compatible object storage |
+| `backend-gcs` | Google Cloud Storage |
+| `backend-memory` | Tests and local workflows |
 
-### `depot-core`
+`depot-cli` defaults to `full`, which compiles all adapters plus filesystem storage. Runtime config
+still disables Maven, RubyGems, NuGet, and pub.dev upstreams by default.
 
-- `encryption` — at-rest encryption support
-
-### `depot-cli`
-
-- `full` (default) — all adapters + `backend-fs`
-- `pypi`, `npm`, `cargo-registry`, `hex`, `maven`, `rubygems`, `nuget`, `pub` — pass-through adapter features
-- `backend-fs`, `backend-s3`, `backend-gcs`, `backend-memory` — pass-through storage features
-
-### `depot-ops`
-
-- `pypi`, `npm`, `cargo-registry`, `hex`, `maven`, `rubygems`, `nuget`, `pub` — pass-through adapter features used by CLI and MCP operations
-- `backend-fs`, `backend-s3`, `backend-gcs`, `backend-memory` — pass-through storage features used for local runtime construction
-
-A minimal build (e.g. PyPI-only with S3) would use:
+Example minimal build:
 
 ```sh
 cargo build -p depot-cli --no-default-features --features pypi,backend-s3
 ```
 
+## Implemented
+
+- Adapter module gates in `depot-adapters`.
+- Server route gates in `depot-server`.
+- Runtime construction gates in `depot-ops`.
+- Pass-through CLI features.
+- Additive storage backend features.
+
+## Deferred
+
+- Treating compiled beta adapters as MVP-supported by default.
+- At-rest encryption, despite config and schema fields.
+- Matrix CI for every feature combination.
+
 ## Consequences
 
-- Deployments only compile what they need, reducing binary size and attack surface.
-- Feature flags are additive (Cargo convention) — combining features never breaks builds.
-- CI must test feature combinations to avoid conditional compilation bugs.
-- Default CLI features include all adapters + filesystem storage, so `cargo build` produces a fully-featured binary.
+- Build-time inclusion and runtime enablement must both be documented.
+- Operators can compile a smaller private binary.
+- CI must cover default, full, and representative minimal feature sets before public support claims.

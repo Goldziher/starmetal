@@ -587,7 +587,7 @@
       ],
       "generated_by": "depot-schema-manager",
       "validated_by": "crates/depot-core/tests/schema_validation.rs",
-      "blake3": "fee3b74f9a314ae80c2cbcc800f10fb71774df15615a6df7cf73dc0fa6106c76"
+      "blake3": "510454ec204eed5ff2c9e41ff06cf0bbe2ff7abf8d764700d06834f9d9436305"
     },
     {
       "id": "nuget-v3-service-index",

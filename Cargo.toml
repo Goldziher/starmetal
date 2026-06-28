@@ -106,10 +106,12 @@ tower = { version = "0.5", features = ["full"] }
 tower-http = { version = "0.6", features = [
     "cors",
     "compression-full",
+    "limit",
     "trace",
 ] }
 
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+url = "2"
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }

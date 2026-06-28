@@ -6,107 +6,71 @@ Accepted
 
 ## Context
 
-Depot must serve packages using each ecosystem's native protocol so that existing tools (pip, npm,
-cargo, mix, mvn, bundle, dotnet, and dart pub) work without modification. Each protocol has
-different URL schemes, response formats, authentication conventions, upload formats, and mutation
-semantics.
+Depot must speak native registry protocols so existing package-manager clients can read through a
+private cache without client-side plugins.
+
+Support status is separate from implementation existence. An adapter can exist, compile, and have
+tests while still being a private MVP candidate or opt-in beta.
 
 ## Decision
 
-Each protocol adapter is implemented as an axum `Router` that:
+Each protocol adapter is an axum `Router` in `depot-adapters`.
 
-1. Handles incoming requests in the native protocol format
-2. Translates them into `PackageService` trait calls
-3. Translates native upload and mutation requests into publishing service calls when publishing is
-   supported for that ecosystem
-4. Formats the response back into the native protocol format
+Implemented adapters:
 
-Adapters are mounted under path prefixes:
+| Feature | Prefix | Protocol | MVP position |
+|---------|--------|----------|--------------|
+| `pypi` | `/pypi` | PyPI Simple Repository API, PEP 503/691 | Read candidate after live E2E |
+| `npm` | `/npm` | npm registry API | Read candidate after live E2E |
+| `cargo-registry` | `/cargo` | Cargo sparse index | Read candidate after live E2E |
+| `hex` | `/hex` | Hex API and registry proxy | Read candidate after live E2E |
+| `maven` | `/maven` | Maven repository layout | Opt-in beta |
+| `rubygems` | `/rubygems` | RubyGems Compact Index | Opt-in beta |
+| `nuget` | `/nuget` | NuGet V3 restore API | Opt-in beta |
+| `pub` | `/pub` | Hosted Pub Repository v2 | Opt-in beta |
 
-| Prefix | Protocol | Spec |
-|--------|----------|------|
-| `/pypi` | PEP 503 Simple Repository API | HTML index pages + file downloads |
-| `/npm` | npm registry API | JSON metadata + tarball downloads |
-| `/cargo` | Cargo sparse index | JSON config + version metadata |
-| `/hex` | Hex.pm API | JSON/protobuf metadata + tarball downloads |
-| `/maven` | Maven repository layout | XML metadata + artifact files |
-| `/rubygems` | RubyGems Compact Index/API | Text index + gem downloads |
-| `/nuget` | NuGet V3 | Service index + flat container + registration |
-| `/pub` | Hosted Pub Repository | JSON metadata + archive downloads |
+Each adapter owns:
 
-Each adapter also provides an `UpstreamClient` implementation for fetching from the corresponding public registry.
+- Native route parsing and response formatting.
+- An ecosystem-specific `Has*State` trait.
+- An upstream client when pull-through reads need network access.
+- Schema or protocol provenance for the registry surfaces it models.
 
-## Implementation Notes
+## Implemented
 
-### Adapter State Traits
+- Pull-through read routes for all eight adapters behind feature flags.
+- Runtime default enablement for PyPI, npm, Cargo, and Hex.
+- Runtime default disablement for Maven, RubyGems, NuGet, and pub.dev.
+- Route-level conformance and ignored live E2E tests.
+- Raw upstream response preservation where native fields would be lost by domain conversion.
+- npm packument handling with raw `serde_json::Value`.
+- Hex protobuf registry proxy for mix checksum behavior.
+- Experimental local publish route plumbing when `publishing.enabled = true`.
 
-Each adapter defines its own state trait for accessing both `PackageService` and the ecosystem-specific upstream client:
+## Deferred
 
-- `HasPypiState` — `package_service` + `pypi_upstream`
-- `HasNpmState` — `package_service` + `npm_upstream`
-- `HasCargoState` — `package_service` + `cargo_upstream`
-- `HasHexState` — `package_service` + `hex_upstream`
-- `HasMavenState` — `package_service` + `maven_upstream`
-- `HasRubyGemsState` — `package_service` + `rubygems_upstream`
-- `HasNuGetState` — `package_service` + `nuget_upstream`
-- `HasPubState` — `package_service` + `pub_upstream`
+- Public support claims for read paths before live native-client E2E passes.
+- Native publishing support.
+- Search APIs.
+- Owner, organization, invitation, and admin APIs.
+- Cross-registry sharing of protocol-specific logic.
 
-This lets handlers serve cached upstream data directly (preserving all protocol-specific fields) while still going through `PackageService` for the caching lifecycle.
+## Compatibility Rules
 
-### Serving Cached Upstream Data
+Read compatibility and write compatibility are separate claims.
 
-Adapters call `list_versions` to trigger the caching lifecycle, then serve the upstream client's cached response with URL rewriting rather than reconstructing responses from `VersionMetadata`. This preserves protocol-specific data (npm dependencies, PyPI requires-python, Cargo deps/features) that would be lost in conversion to domain types.
+A read adapter can be documented as MVP-ready only when it has:
 
-### npm Raw JSON
+1. Source linkage in `schemas/sources.toml`.
+2. Fixture or route conformance coverage.
+3. Live native-client E2E evidence for the claimed workflow.
+4. Accurate README and deployment documentation.
 
-The npm adapter stores and serves `serde_json::Value` instead of a typed `NpmPackument` struct. This handles the wide variety of npm field shapes without deserialization failures. When a packument is served, all transitive dependencies are pre-fetched using BFS with a visited set and max depth of 10 levels.
-
-### Hex Protobuf Registry Proxy
-
-The Hex adapter includes a protobuf registry proxy at `/hex/packages/{name}` that proxies the protobuf registry entry from `repo.hex.pm`. This is required for mix checksum verification.
-
-### Registry Schema Provenance
-
-Each adapter owns the registry contract documentation for its ecosystem. Official sources may be
-published as JSON Schema, prose specifications, protobuf definitions, XML Schema, OpenAPI documents,
-or a mix of formats. Adapter documentation must link to the authoritative source used to model each
-schema and explain any Depot interpretation when the upstream contract is incomplete or split across
-multiple documents.
-
-Schema changes for an adapter require conformance tests using representative official responses,
-fixtures, or wire-format samples. Tests must prove that Depot's JSON Schema and adapter behavior
-continue to match the linked source.
-
-### Cache TTL
-
-All upstream client caches use 5-minute TTL via `(Instant, T)` tuples. Cached data is served directly until the TTL expires, then re-fetched from upstream.
-
-### Publishing Responsibilities
-
-Write support is adapter-specific at the protocol edge and shared below that edge:
-
-- Adapters parse native upload, yank, unyank, unlist, relist, and revert requests.
-- Adapters translate successful native parsing into publish-domain requests.
-- `PublishingService` performs shared validation, integrity computation, duplicate and shadowing
-  checks, policy checks, storage writes, metadata/index updates, and optional upstream forwarding.
-- Adapters format ecosystem-native success and failure responses, including client-visible warning
-  payloads where the protocol supports them.
-
-Adapters must not write artifacts, indexes, or forwarding status directly to storage.
-
-Publishing support for a registry cannot be documented as supported until it has official source
-linkage, route-level conformance tests, native-client publish/install E2E tests, and documented
-failure semantics.
+Publishing cannot be documented as supported until a later ADR scopes native publish behavior,
+credential semantics, failure modes, and native publish-then-install E2E evidence.
 
 ## Consequences
 
-- Each adapter is self-contained: protocol-specific types, handlers, and upstream client in one module.
-- Adding a new protocol requires no changes to existing code — only a new module and router registration.
-- Feature flags gate each adapter, so unused protocols are not compiled.
-- Adapters share no protocol-specific logic with each other; all shared behavior goes through `PackageService`.
-- Adapter-owned schemas remain traceable to official registry sources and covered by conformance
-  tests.
-- Read compatibility and write compatibility are separate claims. Pull-through support does not imply
-  publishing support.
-- Supported read adapters pass client-level integration tests. Supported publishing adapters must
-  additionally pass native publish then install/restore/fetch tests.
+- Adapters remain self-contained protocol edges.
+- Shared cache, policy, integrity, and local publish behavior stays in `depot-service`.
+- Feature flags and runtime upstream settings must both be considered when describing support.

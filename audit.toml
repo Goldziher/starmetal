@@ -1,0 +1,9 @@
+# cargo-audit does not consume this file directly; keep it in sync with
+# `task audit` and `.github/workflows/ci.yml`.
+
+[advisories]
+ignore = [
+    # RUSTSEC-2023-0071: rsa is pulled only through optional GCS storage
+    # support via reqsign-google. No fixed upgrade is available.
+    "RUSTSEC-2023-0071",
+]

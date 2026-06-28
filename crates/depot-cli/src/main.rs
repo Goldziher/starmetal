@@ -570,7 +570,7 @@ fn write_artifact_output(path: Option<PathBuf>, data: &[u8]) -> depot_core::erro
     let Some(path) = path else {
         return Ok(());
     };
-    if path == PathBuf::from("-") {
+    if path == std::path::Path::new("-") {
         use std::io::Write;
         std::io::stdout().write_all(data)?;
     } else {

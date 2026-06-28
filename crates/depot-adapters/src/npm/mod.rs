@@ -143,8 +143,8 @@ async fn package_metadata<S: HasNpmState>(
     Path(package): Path<String>,
 ) -> Result<axum::response::Response, (StatusCode, String)> {
     let name = PackageName::new(package);
-    let host = extract_host(&headers);
-    serve_packument(state, &name, &host).await
+    let base_url = crate::public_base_url(state.config(), &headers);
+    serve_packument(state, &name, &base_url).await
 }
 
 /// GET /@{scope}/{name} -- return packument JSON for a scoped package.
@@ -154,16 +154,8 @@ async fn scoped_package_metadata<S: HasNpmState>(
     Path((scope, name)): Path<(String, String)>,
 ) -> Result<axum::response::Response, (StatusCode, String)> {
     let full_name = PackageName::new(format!("@{scope}/{name}"));
-    let host = extract_host(&headers);
-    serve_packument(state, &full_name, &host).await
-}
-
-fn extract_host(headers: &HeaderMap) -> String {
-    headers
-        .get(header::HOST)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("localhost")
-        .to_string()
+    let base_url = crate::public_base_url(state.config(), &headers);
+    serve_packument(state, &full_name, &base_url).await
 }
 
 /// Shared logic for serving packument responses.
@@ -174,7 +166,7 @@ fn extract_host(headers: &HeaderMap) -> String {
 async fn serve_packument<S: HasNpmState>(
     state: S,
     name: &PackageName,
-    host: &str,
+    base_url: &str,
 ) -> Result<axum::response::Response, (StatusCode, String)> {
     let service = state.package_service();
 
@@ -197,7 +189,7 @@ async fn serve_packument<S: HasNpmState>(
             .npm_upstream()
             .get_cached_packument(name)
             .await
-            .unwrap_or(build_local_packument(service.as_ref(), name, host).await?);
+            .unwrap_or(build_local_packument(service.as_ref(), name, base_url).await?);
 
         // Persist to storage — this is now depot's data
         let raw = serde_json::to_vec(&upstream_packument)
@@ -213,8 +205,7 @@ async fn serve_packument<S: HasNpmState>(
     validate_packument_metadata(service.as_ref(), name, &packument)
         .await
         .map_err(|err| map_error(&err))?;
-    let base_url = format!("http://{host}");
-    models::rewrite_packument_tarball_urls(&mut packument, &base_url);
+    models::rewrite_packument_tarball_urls(&mut packument, base_url);
 
     let body = serde_json::to_string(&packument)
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
@@ -224,7 +215,7 @@ async fn serve_packument<S: HasNpmState>(
 async fn build_local_packument(
     service: &dyn PackageService,
     name: &PackageName,
-    host: &str,
+    base_url: &str,
 ) -> Result<serde_json::Value, (StatusCode, String)> {
     let versions = service
         .list_versions(Ecosystem::Npm, name)
@@ -246,7 +237,7 @@ async fn build_local_packument(
                 "version": version.version,
                 "license": metadata.license,
                 "dist": {
-                    "tarball": format!("http://{host}/npm/{}/-/{}", name.as_str(), artifact.filename),
+                    "tarball": format!("{base_url}/npm/{}/-/{}", name.as_str(), artifact.filename),
                 }
             }),
         );
@@ -393,16 +384,8 @@ fn extract_write_token(headers: &HeaderMap) -> Option<String> {
 
 /// Map `DepotError` variants to appropriate HTTP status codes.
 fn map_error(err: &DepotError) -> (StatusCode, String) {
-    match err {
-        DepotError::PackageNotFound { .. }
-        | DepotError::VersionNotFound { .. }
-        | DepotError::ArtifactNotFound(_) => (StatusCode::NOT_FOUND, err.to_string()),
-        DepotError::PolicyViolation(_) => (StatusCode::FORBIDDEN, err.to_string()),
-        DepotError::Adapter(_) => (StatusCode::BAD_REQUEST, err.to_string()),
-        DepotError::Publish(_) => (StatusCode::CONFLICT, err.to_string()),
-        DepotError::Upstream(_) => (StatusCode::BAD_GATEWAY, err.to_string()),
-        _ => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
-    }
+    tracing::warn!(error = %err, "npm adapter request failed");
+    crate::map_public_error(err)
 }
 
 #[cfg(test)]

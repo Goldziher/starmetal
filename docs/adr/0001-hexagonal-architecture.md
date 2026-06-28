@@ -6,27 +6,62 @@ Accepted
 
 ## Context
 
-Depot must support multiple package registry protocols (PyPI, npm, Cargo, Hex) and multiple storage backends (filesystem, S3, GCS). These integrations have different APIs, serialization formats, and behaviors. We need an architecture that isolates the core domain logic from these external concerns.
+Depot is a private/internal MVP for a package registry cache. It must isolate package protocol
+details, storage backends, policy checks, integrity verification, and operator workflows so each can
+move independently.
+
+The MVP support claim is intentionally narrow. PyPI, npm, Cargo, and Hex are read candidates after
+fresh live native-client E2E verification. Maven, RubyGems, NuGet, and pub.dev are opt-in beta read
+adapters. Native publishing is outside MVP.
 
 ## Decision
 
-We adopt a hexagonal (ports and adapters) architecture. The core domain defines trait-based ports:
+Depot uses hexagonal architecture.
 
-- **`PackageService`** (inbound port): the API that protocol adapters call. Defines operations like `list_versions`, `get_artifact`, `get_version_metadata`.
-- **`StoragePort`** (outbound port): abstraction over artifact storage. Implementations live in `depot-storage`.
-- **`UpstreamClient`** (outbound port): abstraction over upstream registry communication. Implementations live in `depot-adapters`.
+Implemented ports in `depot-core`:
 
-The `depot-core` crate has zero dependencies on web frameworks, storage libraries, or HTTP clients. All I/O happens through trait implementations injected at startup.
+| Port | Direction | Purpose |
+|------|-----------|---------|
+| `PackageService` | Inbound | Read package versions, metadata, artifacts, and raw upstream cache data |
+| `PublishingService` | Inbound | Experimental local publish and yank operations |
+| `StoragePort` | Outbound | Store and retrieve opaque bytes by key |
+| `UpstreamClient` | Outbound | Fetch versions, metadata, and artifacts from upstream registries |
 
-## Implementation Notes
+Implemented crate boundaries:
 
-The `depot-service` crate provides the application service layer between adapters and core. `CachingPackageService` implements the `PackageService` port trait with pull-through caching, blake3 integrity verification, and policy enforcement.
+| Crate | Boundary |
+|-------|----------|
+| `depot-core` | Domain types, config, policy, ports, lock file, registry schema types |
+| `depot-service` | `CachingPackageService` and experimental local publishing workflow |
+| `depot-storage` | OpenDAL-backed `StoragePort` implementations |
+| `depot-adapters` | Axum protocol adapters and upstream clients |
+| `depot-server` | Axum app assembly and Tower middleware |
+| `depot-ops` | Shared local operations for CLI and MCP |
+| `depot-cli` | Clap CLI and stdio MCP entry points |
 
-Each protocol adapter defines its own state trait (`HasPypiState`, `HasNpmState`, `HasCargoState`, `HasHexState`) that provides access to both the `PackageService` and the ecosystem-specific upstream client. This allows handlers to serve cached upstream data directly (preserving protocol-specific fields) while still going through `PackageService` for the caching lifecycle.
+`depot-core` remains framework-free. It must not depend on axum, tower, opendal, reqwest, or other
+I/O framework crates.
+
+## Implemented
+
+- Pull-through reads go through `PackageService`.
+- Adapters can access ecosystem upstream clients directly to preserve native response shapes.
+- Storage access is hidden behind `StoragePort`.
+- Local operator commands and MCP tools share `depot-ops`.
+- Experimental local publishing goes through `PublishingService`, not direct adapter storage writes.
+
+## Deferred
+
+- Public support claims for any registry before live native-client E2E evidence.
+- Native publishing support claims.
+- Upstream publish forwarding.
+- Remote administration over HTTP.
+- Database-backed transaction semantics.
+- At-rest encryption.
 
 ## Consequences
 
-- Core business logic (policy enforcement, integrity verification, lock file management) is testable without any I/O.
-- Adding a new protocol or storage backend requires only a new adapter — no core changes.
-- The indirection adds a trait boundary at every I/O point, which has minor ergonomic cost but no meaningful runtime cost (monomorphization or `Arc<dyn Trait>`).
-- The `HasXxxState` adapter traits allow protocol-specific data to flow through without lossy conversion to domain types.
+- Core behavior is testable without network or storage services.
+- Protocol adapters can evolve without changing storage backends.
+- Experimental write behavior stays isolated from MVP read-support claims.
+- New framework dependencies in `depot-core` require a new ADR.

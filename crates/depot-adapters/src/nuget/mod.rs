@@ -44,36 +44,33 @@ pub fn router<S: HasNuGetState>() -> Router<S> {
 }
 
 async fn service_index<S: HasNuGetState>(
-    State(_state): State<S>,
+    State(state): State<S>,
     headers: HeaderMap,
 ) -> Result<Response, (StatusCode, String)> {
-    let host = headers
-        .get(header::HOST)
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or("localhost:8080");
+    let base_url = crate::public_base_url(state.config(), &headers);
     let body = serde_json::json!({
         "version": "3.0.0",
-        "resources": resources(host, _state.config().publishing.enabled)
+        "resources": resources(&base_url, state.config().publishing.enabled)
     });
     Ok(json_response(body))
 }
 
-fn resources(host: &str, publishing_enabled: bool) -> Vec<serde_json::Value> {
+fn resources(base_url: &str, publishing_enabled: bool) -> Vec<serde_json::Value> {
     let mut resources = vec![
         serde_json::json!({
-            "@id": format!("http://{host}/nuget/v3-flatcontainer/"),
+            "@id": format!("{base_url}/nuget/v3-flatcontainer/"),
             "@type": "PackageBaseAddress/3.0.0",
             "comment": "Depot NuGet package base address"
         }),
         serde_json::json!({
-            "@id": format!("http://{host}/nuget/v3/registration/"),
+            "@id": format!("{base_url}/nuget/v3/registration/"),
             "@type": "RegistrationsBaseUrl/3.6.0",
             "comment": "Depot NuGet registration base"
         }),
     ];
     if publishing_enabled {
         resources.push(serde_json::json!({
-            "@id": format!("http://{host}/nuget/api/v2/package"),
+            "@id": format!("{base_url}/nuget/api/v2/package"),
             "@type": "PackagePublish/2.0.0",
             "comment": "Depot NuGet package publish endpoint"
         }));
@@ -233,14 +230,6 @@ fn authorize_publish<S: HasNuGetState>(
 }
 
 fn map_error(err: &DepotError) -> (StatusCode, String) {
-    match err {
-        DepotError::PackageNotFound { .. }
-        | DepotError::VersionNotFound { .. }
-        | DepotError::ArtifactNotFound(_) => (StatusCode::NOT_FOUND, err.to_string()),
-        DepotError::PolicyViolation(_) => (StatusCode::FORBIDDEN, err.to_string()),
-        DepotError::Adapter(_) => (StatusCode::BAD_REQUEST, err.to_string()),
-        DepotError::Publish(_) => (StatusCode::CONFLICT, err.to_string()),
-        DepotError::Upstream(_) => (StatusCode::BAD_GATEWAY, err.to_string()),
-        _ => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
-    }
+    tracing::warn!(error = %err, "NuGet adapter request failed");
+    crate::map_public_error(err)
 }

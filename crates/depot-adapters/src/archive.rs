@@ -87,6 +87,7 @@ pub(crate) fn parse_pub_archive(data: &[u8]) -> Result<ArchiveMetadata> {
     })
 }
 
+#[cfg(feature = "hex")]
 pub(crate) fn parse_hex_tarball(data: &[u8]) -> Result<ArchiveMetadata> {
     let mut archive = tar::Archive::new(Cursor::new(data));
     let metadata = read_tar_entry(&mut archive, "metadata.config")?;
@@ -106,6 +107,7 @@ pub(crate) fn parse_hex_tarball(data: &[u8]) -> Result<ArchiveMetadata> {
     })
 }
 
+#[cfg(any(feature = "hex", feature = "rubygems", feature = "pub"))]
 fn read_tar_entry<R: Read>(archive: &mut tar::Archive<R>, expected_name: &str) -> Result<Vec<u8>> {
     let entries = archive
         .entries()
@@ -151,6 +153,7 @@ fn reject_unsafe_path(path: &str) -> Result<()> {
     Ok(())
 }
 
+#[cfg(any(feature = "hex", feature = "rubygems", feature = "pub"))]
 fn yaml_scalar(text: &str, key: &str) -> Option<String> {
     for line in text.lines() {
         let trimmed = line.trim();
@@ -200,6 +203,7 @@ fn yaml_version(text: &str) -> Option<String> {
     })
 }
 
+#[cfg(any(feature = "hex", feature = "rubygems"))]
 fn yaml_sequence_first(text: &str, key: &str) -> Option<String> {
     let mut in_key = false;
     for line in text.lines() {
@@ -220,6 +224,7 @@ fn yaml_sequence_first(text: &str, key: &str) -> Option<String> {
     None
 }
 
+#[cfg(feature = "hex")]
 fn erlang_binary(text: &str, key: &str) -> Option<String> {
     let marker = format!("{{{key},<<\"");
     let start = text.find(&marker)? + marker.len();
@@ -235,6 +240,7 @@ fn xml_text(text: &str, tag: &str) -> Option<String> {
     Some(text[open_end..close].trim().to_string())
 }
 
+#[cfg(any(feature = "hex", feature = "rubygems", feature = "pub"))]
 fn unquote(value: &str) -> String {
     value
         .trim_matches('"')

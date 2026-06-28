@@ -645,20 +645,38 @@ fn generate_config_test(
             .get("block_unlicensed")
             .and_then(|v| v.as_bool())
         {
-            writeln!(
-                output,
-                "    assert_eq!(config.policies.block_unlicensed, {}, \"fixture '{}' block_unlicensed\");",
-                block, fixture_name
-            )
-            .unwrap();
+            if block {
+                writeln!(
+                    output,
+                    "    assert!(config.policies.block_unlicensed, \"fixture '{}' block_unlicensed\");",
+                    fixture_name
+                )
+                .unwrap();
+            } else {
+                writeln!(
+                    output,
+                    "    assert!(!config.policies.block_unlicensed, \"fixture '{}' block_unlicensed\");",
+                    fixture_name
+                )
+                .unwrap();
+            }
         }
         if let Some(auth) = case.expected.get("auth_enabled").and_then(|v| v.as_bool()) {
-            writeln!(
-                output,
-                "    assert_eq!(config.auth.enabled, {}, \"fixture '{}' auth_enabled\");",
-                auth, fixture_name
-            )
-            .unwrap();
+            if auth {
+                writeln!(
+                    output,
+                    "    assert!(config.auth.enabled, \"fixture '{}' auth_enabled\");",
+                    fixture_name
+                )
+                .unwrap();
+            } else {
+                writeln!(
+                    output,
+                    "    assert!(!config.auth.enabled, \"fixture '{}' auth_enabled\");",
+                    fixture_name
+                )
+                .unwrap();
+            }
         }
     }
 

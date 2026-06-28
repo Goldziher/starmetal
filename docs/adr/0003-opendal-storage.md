@@ -6,14 +6,23 @@ Accepted
 
 ## Context
 
-Depot must store package artifacts on user-chosen backends: local filesystem for small deployments, S3-compatible storage for production, GCS for Google Cloud users. Writing and maintaining separate implementations for each backend is costly and error-prone.
+Depot needs filesystem storage for private MVP deployments and object-store options for later
+production hardening. The service layer should not know which backend stores artifacts.
 
 ## Decision
 
-We use [Apache OpenDAL](https://opendal.apache.org/) as the storage abstraction layer. OpenDAL provides a unified `Operator` API across 30+ storage services. Our `StoragePort` trait wraps an OpenDAL `Operator`, translating between depot's domain types and OpenDAL's API.
+Depot uses Apache OpenDAL behind `StoragePort`.
 
-Storage backends are configured dynamically with an OpenDAL service name and
-string options:
+Implemented storage backends:
+
+| Feature | Backend | Status |
+|---------|---------|--------|
+| `backend-fs` | Local filesystem | Default |
+| `backend-s3` | S3-compatible storage | Available |
+| `backend-gcs` | Google Cloud Storage | Available |
+| `backend-memory` | In-memory storage | Tests and local workflows |
+
+Storage is configured with a backend name plus OpenDAL options:
 
 ```toml
 [storage]
@@ -23,31 +32,39 @@ backend = "fs"
 root = "./depot-data"
 ```
 
-Available services are still controlled by feature flags:
+Artifact keys use:
 
-- `backend-fs` (default) — local filesystem
-- `backend-s3` — S3-compatible (AWS, MinIO, R2)
-- `backend-gcs` — Google Cloud Storage
-- `backend-memory` — in-memory (for testing)
+```text
+<ecosystem>/<name>/<version>/<filename>
+```
 
-Publishing support reserves Depot-owned internal key prefixes for mutable registry state:
+The service also stores implementation metadata under ordinary storage keys:
 
-- `_depot/published/` — locally published package metadata and per-version manifests
-- `_depot/indexes/` — generated native registry indexes and compact metadata
-- `_depot/forwarding/` — upstream forwarding attempts and final status
+| Key pattern | Purpose |
+|-------------|---------|
+| `<artifact>.blake3` | Cache integrity sidecar |
+| `<ecosystem>/<name>/_versions.json` | Cached or locally generated version list |
+| `<ecosystem>/<name>/<version>/_metadata.json` | Cached or locally generated version metadata |
+| `<ecosystem>/<name>/_raw_upstream` | Raw upstream protocol payload for adapters that need it |
+| `_depot/published/<ecosystem>/<name>/<version>.json` | Experimental local publish manifest |
 
-Artifact bytes continue to use ecosystem storage keys so read paths can serve pull-through and
-locally published artifacts through the same service boundary. Internal prefixes must not be exposed
-as registry package names.
+## Implemented
 
-OpenDAL does not provide a database transaction model across all services. Publishing workflows must
-therefore be designed around idempotent writes, deterministic regenerated indexes, and recoverable
-status records instead of assuming atomic multi-object transactions.
+- OpenDAL-backed `StoragePort`.
+- Filesystem, S3, GCS, and memory feature flags.
+- Blake3 sidecar storage for every cached or locally published artifact.
+- Experimental local publish manifests under `_depot/published/`.
+
+## Deferred
+
+- Database-backed metadata indexes.
+- Multi-object transactions.
+- Upstream publish forwarding status storage.
+- General-purpose `_depot/indexes/` registry index storage.
+- Storage-level registry semantics.
 
 ## Consequences
 
-- Adding a new storage backend is typically a feature flag and documentation addition — OpenDAL already supports the runtime option map.
-- We depend on a large external crate, but it's well-maintained (Apache project) and the feature-flag gating keeps binary size manageable.
-- The `StoragePort` trait keeps our core decoupled from OpenDAL, so swapping it out (unlikely) would only affect `depot-storage`.
-- Publishing does not introduce a database as a required dependency. If stronger transactional
-  guarantees are needed later, they require a separate ADR.
+- Storage backends remain opaque byte/key stores.
+- Publishing and cache writes must be idempotent and recoverable without transactions.
+- Registry-specific index behavior belongs above storage, not in storage backends.

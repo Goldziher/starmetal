@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use ahash::AHashMap;
 use bytes::Bytes;
-use depot_core::config::{Config, UpstreamConfig};
+use depot_core::config::{Config, DEFAULT_MAX_UPSTREAM_BYTES, UpstreamConfig};
 use depot_core::error::{DepotError, Result};
 use depot_core::package::{ArtifactId, Ecosystem, PackageName, VersionMetadata};
 use depot_core::ports::{PackageService, PublishingService, StoragePort, UpstreamClient};
@@ -89,6 +89,7 @@ impl DepotRuntime {
 
     pub async fn from_config(config: Config) -> Result<Self> {
         let storage = Arc::new(OpenDalStorage::from_config(&config.storage)?);
+        #[allow(unused_mut)]
         let mut clients: AHashMap<Ecosystem, Arc<dyn UpstreamClient>> = AHashMap::new();
 
         #[cfg(feature = "pypi")]
@@ -246,7 +247,7 @@ impl DepotRuntime {
     }
 
     pub async fn delete_cached_artifact(&self, artifact: &ArtifactId) -> Result<CacheDeleteResult> {
-        let key = artifact.storage_key();
+        let key = artifact.validated_storage_key()?.into_string();
         let sidecar = format!("{key}.blake3");
         let mut deleted_keys = Vec::new();
         for candidate in [&key, &sidecar] {
@@ -286,7 +287,8 @@ pub fn minimal_config() -> &'static str {
     r#"# Depot configuration
 
 [server]
-bind = "0.0.0.0:8080"
+bind = "127.0.0.1:8080"
+max_upload_bytes = 536870912
 
 [storage]
 backend = "fs"
@@ -321,6 +323,9 @@ fn apply_overrides(config: &mut Config, overrides: ConfigOverrides) {
                 enabled: true,
                 url: String::new(),
                 artifact_url: None,
+                allow_insecure: false,
+                allow_private_network: false,
+                max_response_bytes: DEFAULT_MAX_UPSTREAM_BYTES,
             });
         if let Some(enabled) = upstream.enabled {
             entry.enabled = enabled;
@@ -374,9 +379,12 @@ fn register_maven_upstream(
         .upstream
         .get("maven")
         .expect("default maven upstream");
-    let client = Arc::new(depot_adapters::maven::upstream::MavenUpstreamClient::new(
-        upstream_config.url.clone(),
-    ));
+    let client = Arc::new(
+        depot_adapters::maven::upstream::MavenUpstreamClient::with_max_response_bytes(
+            upstream_config.url.clone(),
+            upstream_config.max_response_bytes,
+        ),
+    );
     if upstream_config.enabled {
         clients.insert(Ecosystem::Maven, client.clone());
     }
@@ -393,11 +401,12 @@ fn register_rubygems_upstream(
         .get("rubygems")
         .expect("default rubygems upstream");
     let client = Arc::new(
-        depot_adapters::rubygems::upstream::RubyGemsUpstreamClient::new(
+        depot_adapters::rubygems::upstream::RubyGemsUpstreamClient::with_max_response_bytes(
             upstream_config
                 .artifact_url
                 .clone()
                 .unwrap_or_else(|| upstream_config.url.clone()),
+            upstream_config.max_response_bytes,
         ),
     );
     if upstream_config.enabled {
@@ -415,9 +424,12 @@ fn register_nuget_upstream(
         .upstream
         .get("nuget")
         .expect("default nuget upstream");
-    let client = Arc::new(depot_adapters::nuget::upstream::NuGetUpstreamClient::new(
-        upstream_config.url.clone(),
-    ));
+    let client = Arc::new(
+        depot_adapters::nuget::upstream::NuGetUpstreamClient::with_max_response_bytes(
+            upstream_config.url.clone(),
+            upstream_config.max_response_bytes,
+        ),
+    );
     if upstream_config.enabled {
         clients.insert(Ecosystem::NuGet, client.clone());
     }
@@ -430,9 +442,12 @@ fn register_pub_upstream(
     clients: &mut AHashMap<Ecosystem, Arc<dyn UpstreamClient>>,
 ) -> Arc<depot_adapters::pubdev::upstream::PubUpstreamClient> {
     let upstream_config = config.upstream.get("pub").expect("default pub upstream");
-    let client = Arc::new(depot_adapters::pubdev::upstream::PubUpstreamClient::new(
-        upstream_config.url.clone(),
-    ));
+    let client = Arc::new(
+        depot_adapters::pubdev::upstream::PubUpstreamClient::with_max_response_bytes(
+            upstream_config.url.clone(),
+            upstream_config.max_response_bytes,
+        ),
+    );
     if upstream_config.enabled {
         clients.insert(Ecosystem::Pub, client.clone());
     }
@@ -445,9 +460,12 @@ fn register_pypi_upstream(
     clients: &mut AHashMap<Ecosystem, Arc<dyn UpstreamClient>>,
 ) -> Arc<depot_adapters::pypi::upstream::PypiUpstreamClient> {
     let upstream_config = config.upstream.get("pypi").expect("default pypi upstream");
-    let client = Arc::new(depot_adapters::pypi::upstream::PypiUpstreamClient::new(
-        upstream_config.url.clone(),
-    ));
+    let client = Arc::new(
+        depot_adapters::pypi::upstream::PypiUpstreamClient::with_max_response_bytes(
+            upstream_config.url.clone(),
+            upstream_config.max_response_bytes,
+        ),
+    );
     if upstream_config.enabled {
         clients.insert(Ecosystem::PyPI, client.clone());
     }
@@ -460,9 +478,12 @@ fn register_npm_upstream(
     clients: &mut AHashMap<Ecosystem, Arc<dyn UpstreamClient>>,
 ) -> Arc<depot_adapters::npm::upstream::NpmUpstreamClient> {
     let upstream_config = config.upstream.get("npm").expect("default npm upstream");
-    let client = Arc::new(depot_adapters::npm::upstream::NpmUpstreamClient::new(
-        upstream_config.url.clone(),
-    ));
+    let client = Arc::new(
+        depot_adapters::npm::upstream::NpmUpstreamClient::with_max_response_bytes(
+            upstream_config.url.clone(),
+            upstream_config.max_response_bytes,
+        ),
+    );
     if upstream_config.enabled {
         clients.insert(Ecosystem::Npm, client.clone());
     }
@@ -482,10 +503,13 @@ fn register_cargo_upstream(
         .artifact_url
         .clone()
         .unwrap_or_else(|| "https://static.crates.io/crates".to_string());
-    let client = Arc::new(depot_adapters::cargo::upstream::CargoUpstreamClient::new(
-        upstream_config.url.clone(),
-        artifact_url,
-    ));
+    let client = Arc::new(
+        depot_adapters::cargo::upstream::CargoUpstreamClient::with_max_response_bytes(
+            upstream_config.url.clone(),
+            artifact_url,
+            upstream_config.max_response_bytes,
+        ),
+    );
     if upstream_config.enabled {
         clients.insert(Ecosystem::Cargo, client.clone());
     }
@@ -502,10 +526,13 @@ fn register_hex_upstream(
         .artifact_url
         .clone()
         .unwrap_or_else(|| "https://repo.hex.pm".to_string());
-    let client = Arc::new(depot_adapters::hex::upstream::HexUpstreamClient::new(
-        upstream_config.url.clone(),
-        artifact_url,
-    ));
+    let client = Arc::new(
+        depot_adapters::hex::upstream::HexUpstreamClient::with_max_response_bytes(
+            upstream_config.url.clone(),
+            artifact_url,
+            upstream_config.max_response_bytes,
+        ),
+    );
     if upstream_config.enabled {
         clients.insert(Ecosystem::Hex, client.clone());
     }

@@ -8,7 +8,8 @@ use bytes::Bytes;
 use depot_core::error::{DepotError, Result};
 use depot_core::integrity;
 use depot_core::package::{
-    ArtifactDigest, ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata,
+    ArtifactDigest, ArtifactId, Ecosystem, PackageName, StorageKey, VersionInfo, VersionMetadata,
+    decode_storage_segment, validate_storage_segment,
 };
 use depot_core::policy::PolicyConfig;
 use depot_core::ports::{PackageService, PublishingService, StoragePort, UpstreamClient};
@@ -81,20 +82,42 @@ impl CachingPackageService {
         Ok(())
     }
 
-    fn versions_key(ecosystem: Ecosystem, name: &PackageName) -> String {
-        format!("{ecosystem}/{name}/_versions.json")
+    fn versions_key(ecosystem: Ecosystem, name: &PackageName) -> Result<String> {
+        let name = name.storage_segment()?;
+        let ecosystem = ecosystem.to_string();
+        Ok(StorageKey::from_segments(&[&ecosystem, &name, "_versions.json"])?.into_string())
     }
 
-    fn metadata_key(ecosystem: Ecosystem, name: &PackageName, version: &str) -> String {
-        format!("{ecosystem}/{name}/{version}/_metadata.json")
+    fn metadata_key(ecosystem: Ecosystem, name: &PackageName, version: &str) -> Result<String> {
+        let name = name.storage_segment()?;
+        validate_storage_segment("version", version)?;
+        let ecosystem = ecosystem.to_string();
+        Ok(
+            StorageKey::from_segments(&[&ecosystem, &name, version, "_metadata.json"])?
+                .into_string(),
+        )
     }
 
-    fn raw_upstream_key(ecosystem: Ecosystem, name: &PackageName) -> String {
-        format!("{ecosystem}/{name}/_raw_upstream")
+    fn raw_upstream_key(ecosystem: Ecosystem, name: &PackageName) -> Result<String> {
+        let name = name.storage_segment()?;
+        let ecosystem = ecosystem.to_string();
+        Ok(StorageKey::from_segments(&[&ecosystem, &name, "_raw_upstream"])?.into_string())
     }
 
-    fn published_manifest_key(ecosystem: Ecosystem, name: &PackageName, version: &str) -> String {
-        format!("_depot/published/{ecosystem}/{name}/{version}.json")
+    fn published_manifest_key(
+        ecosystem: Ecosystem,
+        name: &PackageName,
+        version: &str,
+    ) -> Result<String> {
+        let name = name.storage_segment()?;
+        validate_storage_segment("version", version)?;
+        let ecosystem = ecosystem.to_string();
+        let manifest = format!("{version}.json");
+        validate_storage_segment("published manifest filename", &manifest)?;
+        Ok(
+            StorageKey::from_segments(&["_depot", "published", &ecosystem, &name, &manifest])?
+                .into_string(),
+        )
     }
 
     async fn load_versions_for_publish(
@@ -102,7 +125,7 @@ impl CachingPackageService {
         ecosystem: Ecosystem,
         name: &PackageName,
     ) -> Result<Vec<VersionInfo>> {
-        let key = Self::versions_key(ecosystem, name);
+        let key = Self::versions_key(ecosystem, name)?;
         if let Some(cached) = self.storage.get(&key).await? {
             return Ok(serde_json::from_slice(&cached)?);
         }
@@ -120,7 +143,7 @@ impl CachingPackageService {
         name: &PackageName,
         versions: &[VersionInfo],
     ) -> Result<()> {
-        let key = Self::versions_key(ecosystem, name);
+        let key = Self::versions_key(ecosystem, name)?;
         self.storage
             .put(&key, Bytes::from(serde_json::to_vec(versions)?))
             .await
@@ -136,7 +159,7 @@ impl PackageService for CachingPackageService {
     ) -> Result<Vec<VersionInfo>> {
         self.check_package_allowed(name)?;
 
-        let key = Self::versions_key(ecosystem, name);
+        let key = Self::versions_key(ecosystem, name)?;
 
         if let Some(cached) = self.storage.get(&key).await? {
             tracing::debug!(ecosystem = %ecosystem, name = %name, "cache hit for versions");
@@ -162,7 +185,7 @@ impl PackageService for CachingPackageService {
     ) -> Result<VersionMetadata> {
         self.check_package_allowed(name)?;
 
-        let key = Self::metadata_key(ecosystem, name, version);
+        let key = Self::metadata_key(ecosystem, name, version)?;
 
         if let Some(cached) = self.storage.get(&key).await? {
             tracing::debug!(ecosystem = %ecosystem, name = %name, version, "cache hit for metadata");
@@ -203,7 +226,7 @@ impl PackageService for CachingPackageService {
             .find(|artifact| artifact.filename == artifact_id.filename)
             .ok_or_else(|| DepotError::ArtifactNotFound(artifact_id.storage_key()))?;
 
-        let key = artifact_id.storage_key();
+        let key = artifact_id.validated_storage_key()?.into_string();
         let hash_key = format!("{key}.blake3");
 
         if let Some(cached) = self.storage.get(&key).await? {
@@ -247,7 +270,7 @@ impl PackageService for CachingPackageService {
                 && !name.is_empty()
                 && seen.insert(name.to_string())
             {
-                packages.push(PackageName::new(name));
+                packages.push(PackageName::new(decode_storage_segment(name)));
             }
         }
 
@@ -260,7 +283,7 @@ impl PackageService for CachingPackageService {
         name: &PackageName,
     ) -> Result<Option<Bytes>> {
         self.check_package_allowed(name)?;
-        let key = Self::raw_upstream_key(ecosystem, name);
+        let key = Self::raw_upstream_key(ecosystem, name)?;
         self.storage.get(&key).await
     }
 
@@ -271,7 +294,7 @@ impl PackageService for CachingPackageService {
         data: Bytes,
     ) -> Result<()> {
         self.check_package_allowed(name)?;
-        let key = Self::raw_upstream_key(ecosystem, name);
+        let key = Self::raw_upstream_key(ecosystem, name)?;
         self.storage.put(&key, data).await
     }
 }
@@ -286,7 +309,7 @@ impl PublishingService for CachingPackageService {
             ));
         }
 
-        let metadata_key = Self::metadata_key(request.ecosystem, &request.name, &request.version);
+        let metadata_key = Self::metadata_key(request.ecosystem, &request.name, &request.version)?;
         if !request.allow_overwrite && self.storage.exists(&metadata_key).await? {
             return Err(DepotError::Publish(format!(
                 "version already exists: {}/{}@{}",
@@ -342,7 +365,7 @@ impl PublishingService for CachingPackageService {
                 version: request.version.clone(),
                 filename: artifact.filename.clone(),
             };
-            let key = artifact_id.storage_key();
+            let key = artifact_id.validated_storage_key()?.into_string();
             let blake3 = integrity::blake3_hex(&artifact.data);
             self.storage
                 .put(&format!("{key}.blake3"), Bytes::from(blake3))
@@ -354,11 +377,10 @@ impl PublishingService for CachingPackageService {
         self.storage
             .put(&metadata_key, metadata_bytes.clone())
             .await?;
+        let published_manifest_key =
+            Self::published_manifest_key(request.ecosystem, &request.name, &request.version)?;
         self.storage
-            .put(
-                &Self::published_manifest_key(request.ecosystem, &request.name, &request.version),
-                metadata_bytes,
-            )
+            .put(&published_manifest_key, metadata_bytes)
             .await?;
 
         let mut versions = self
@@ -389,7 +411,7 @@ impl PublishingService for CachingPackageService {
 
     async fn set_yanked(&self, request: YankRequest) -> Result<VersionMetadata> {
         self.check_package_allowed(&request.name)?;
-        let metadata_key = Self::metadata_key(request.ecosystem, &request.name, &request.version);
+        let metadata_key = Self::metadata_key(request.ecosystem, &request.name, &request.version)?;
         let cached =
             self.storage
                 .get(&metadata_key)
@@ -407,11 +429,10 @@ impl PublishingService for CachingPackageService {
         self.storage
             .put(&metadata_key, metadata_bytes.clone())
             .await?;
+        let published_manifest_key =
+            Self::published_manifest_key(request.ecosystem, &request.name, &request.version)?;
         self.storage
-            .put(
-                &Self::published_manifest_key(request.ecosystem, &request.name, &request.version),
-                metadata_bytes,
-            )
+            .put(&published_manifest_key, metadata_bytes)
             .await?;
 
         let mut versions = self
@@ -771,7 +792,7 @@ mod tests {
             .get_version_metadata(Ecosystem::Npm, &name, "2.0.0")
             .await;
 
-        let key = CachingPackageService::metadata_key(Ecosystem::Npm, &name, "2.0.0");
+        let key = CachingPackageService::metadata_key(Ecosystem::Npm, &name, "2.0.0").unwrap();
         let cached = storage.get(&key).await.unwrap();
         assert!(
             cached.is_none(),
@@ -1035,7 +1056,7 @@ mod tests {
             license: Some("GPL-3.0".to_string()),
             ..test_metadata("cached-pkg", "1.0.0")
         };
-        let key = CachingPackageService::metadata_key(Ecosystem::Npm, &name, "1.0.0");
+        let key = CachingPackageService::metadata_key(Ecosystem::Npm, &name, "1.0.0").unwrap();
         let storage = Arc::new(MockStorage::with_data(vec![(
             &key,
             Bytes::from(serde_json::to_vec(&cached_metadata).unwrap()),

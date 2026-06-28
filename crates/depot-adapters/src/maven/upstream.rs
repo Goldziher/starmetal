@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use bytes::Bytes;
+use depot_core::config::DEFAULT_MAX_UPSTREAM_BYTES;
 use depot_core::error::{DepotError, Result};
 use depot_core::package::{
     ArtifactDigest, ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata,
@@ -9,13 +10,19 @@ use depot_core::ports::UpstreamClient;
 pub struct MavenUpstreamClient {
     client: reqwest::Client,
     base_url: String,
+    max_response_bytes: u64,
 }
 
 impl MavenUpstreamClient {
     pub fn new(base_url: String) -> Self {
+        Self::with_max_response_bytes(base_url, DEFAULT_MAX_UPSTREAM_BYTES)
+    }
+
+    pub fn with_max_response_bytes(base_url: String, max_response_bytes: u64) -> Self {
         Self {
             client: reqwest::Client::new(),
             base_url: base_url.trim_end_matches('/').to_string(),
+            max_response_bytes,
         }
     }
 
@@ -33,10 +40,8 @@ impl MavenUpstreamClient {
                 response.status()
             )));
         }
-        response
-            .bytes()
+        crate::upstream_http::bytes_limited(response, self.max_response_bytes, "Maven artifact")
             .await
-            .map_err(|err| DepotError::Upstream(err.to_string()))
     }
 
     async fn fetch_optional_text(&self, path: &str) -> Result<Option<String>> {
@@ -56,11 +61,9 @@ impl MavenUpstreamClient {
                 response.status()
             )));
         }
-        response
-            .text()
+        crate::upstream_http::text_limited(response, self.max_response_bytes, "Maven metadata")
             .await
             .map(Some)
-            .map_err(|err| DepotError::Upstream(err.to_string()))
     }
 }
 

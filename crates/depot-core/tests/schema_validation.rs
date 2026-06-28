@@ -286,7 +286,7 @@ fn should_validate_config_sample_against_schema() {
     let schema = load_schema("schemas/depot/config.schema.json");
     let sample: Value = serde_json::from_str(
         r#"{
-            "server": { "bind": "0.0.0.0:8080" },
+            "server": { "bind": "127.0.0.1:8080" },
             "storage": { "backend": "fs" }
         }"#,
     )

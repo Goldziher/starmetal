@@ -1,103 +1,134 @@
-# Depot
+<!-- markdownlint-disable MD013 MD033 MD041 -->
+<div align="center">
 
-Self-hosted, armored universal package registry.
+<img src="docs/media/depot-banner.svg" alt="Depot — armored package cache" width="820">
 
-Depot speaks native registry protocols and acts as a pull-through cache between package manager clients and upstream registries. Artifacts are stored with blake3 integrity verification and policy enforcement. Depot also supports local hosted publishing through native upload routes and an explicit operator publish command. At-rest encryption, rate limiting, full sync, lockfile update workflows, and upstream publish forwarding are deferred production-hardening work.
+**Multi-language, high-performance, self-hosted package registry and registry proxy.**
+
+Depot gives teams one controlled path for package-manager traffic across ecosystems. It speaks
+native registry protocols, proxies upstream reads, stores artifacts behind a common service layer,
+verifies cached bytes with Blake3, and applies policy before dependencies reach clients.
+
+Private MVP scope: **PyPI, npm, Cargo, and Hex read workflows** after fresh live E2E. Maven,
+RubyGems, NuGet, and pub.dev are opt-in beta adapters. Native publishing is out of MVP; local
+publishing is experimental and disabled by default.
+
+PyPI · npm · Cargo · Hex · Maven · RubyGems · NuGet · pub.dev · Blake3 integrity · OpenDAL storage · CLI + MCP ops
+
+[![CI](https://img.shields.io/github/actions/workflow/status/Goldziher/depot/ci.yaml?style=flat-square)](https://github.com/Goldziher/depot/actions/workflows/ci.yaml)
+[![Rust 2024](https://img.shields.io/badge/rust-2024-orange?style=flat-square)](https://www.rust-lang.org/)
+[![License: BUSL-1.1](https://img.shields.io/badge/license-BUSL--1.1-blue?style=flat-square)](LICENSE)
+
+[Quick Start](#quick-start) · [Registry Support](#registry-support) · [Deployment](#deployment) · [Architecture](#architecture) · [ADRs](#adrs)
+
+</div>
+
+---
+
+## Why It Exists
+
+Modern teams pull dependencies from several registries, each with different protocols, metadata
+formats, auth expectations, and client behavior. Depot puts those workflows behind one self-hosted
+service boundary so operators can centralize caching, integrity checks, policy, storage, and
+observability without asking developers to stop using native package-manager clients.
+
+## What It Does
+
+Depot sits between package-manager clients and upstream registries:
+
+| Capability | Current shape |
+|---|---|
+| Registry proxy | Speaks native package-manager routes and rewrites upstream metadata for Depot URLs |
+| Pull-through cache | Fetches from upstream on miss, stores artifacts, and serves cache hits |
+| Integrity | Stores Blake3 sidecars and re-verifies cached artifacts before serving |
+| Policy | Blocks packages, licenses, and vulnerability severities through shared service checks |
+| Protocol adapters | Feature-gated routers for PyPI, npm, Cargo, Hex, Maven, RubyGems, NuGet, and pub.dev |
+| Storage | OpenDAL-backed filesystem, S3, GCS, and memory backends |
+| Operations | CLI plus stdio MCP tools over the same local operations layer |
+
+Depot is built for private/internal deployments first. It is not yet a public internet-facing
+registry product, and support claims are gated on live native-client E2E.
 
 ## Registry Support
 
-| Protocol | Spec | Status |
-|----------|------|--------|
-| PyPI | PEP 503/691 Simple Repository API | Working (`pip install` verified) |
-| npm | Registry API | Working (`npm install` verified) |
-| Cargo | Sparse Index (RFC 2789) | Working (`cargo fetch` verified) |
-| Hex | Repository API | Working (`mix hex.package fetch` verified) |
-| Maven | Maven Central-compatible artifact layout | MVP pull-through + local publishing adapter |
-| RubyGems | Bundler Compact Index | MVP pull-through + local publishing adapter |
-| NuGet | V3 restore API | MVP pull-through + local publishing adapter |
-| pub.dev | Hosted Pub Repository v2 | MVP pull-through + local publishing adapter |
+| Registry | Route | Default | Status |
+|---|---:|---:|---|
+| PyPI | `/pypi` | Enabled | Private MVP read candidate after live E2E |
+| npm | `/npm` | Enabled | Private MVP read candidate after live E2E |
+| Cargo | `/cargo` | Enabled | Private MVP read candidate after live E2E |
+| Hex | `/hex` | Enabled | Private MVP read candidate after live E2E |
+| Maven | `/maven` | Disabled | Opt-in beta read adapter |
+| RubyGems | `/rubygems` | Disabled | Opt-in beta read adapter |
+| NuGet | `/nuget` | Disabled | Opt-in beta read adapter |
+| pub.dev | `/pub` | Disabled | Opt-in beta read adapter |
 
-## Requirements
+See [ADR-0011](docs/adr/0011-mvp-support-matrix.md) for the support criteria and promotion gates.
 
-- Rust (edition 2024 — requires Rust 1.85+)
-- [Task](https://taskfile.dev/) (optional, for dev workflow commands)
+## Quick Start
 
-## Getting Started
+Requirements:
+
+- Rust edition 2024, Rust 1.85+
+- [Task](https://taskfile.dev/) for the documented workflow commands
+- [sccache](https://github.com/mozilla/sccache), optional but used automatically by Taskfile cargo commands
 
 ```bash
-# First-time setup (installs hooks, generates AI config)
+# First-time setup: hooks, sccache check, generated AI config
 task setup
 
-# Build
-cargo build --workspace
+# Build and run tests
+task ci
 
-# Run the server
+# Start Depot with defaults on 127.0.0.1:8080
 cargo run -p depot-cli -- serve
 
-# Write a minimal config
+# Write a starter config
 cargo run -p depot-cli -- config init
 
-# Run without a config file and inspect registries
+# Inspect registries without a config file
 cargo run -p depot-cli -- --no-config --storage-backend memory registry status
 
-# Fetch one artifact through Depot's cache path
+# Fetch one artifact through the cache path
 cargo run -p depot-cli -- package fetch pypi six 1.16.0 six-1.16.0.tar.gz
-
-# Publish one explicit local artifact when publishing is enabled in config
-cargo run -p depot-cli -- package publish pypi ./dist/example-0.1.0.tar.gz \
-  --name example --package-version 0.1.0 --license MIT
-
-# Start the stdio MCP server for agent integrations
-cargo run -p depot-cli -- --no-config --storage-backend memory mcp serve
-
-# Run unit and offline conformance tests
-cargo test --workspace
-
-# Run live native-client E2E tests (requires network and package-manager CLIs)
-task test:e2e
-
-# Lint
-cargo clippy --workspace
 ```
 
-## Architecture
+Run live native-client E2E before treating an MVP read workflow as ready:
 
-Depot uses a hexagonal architecture with Tower middleware. The crate structure is:
+```bash
+task test:e2e:pypi
+task test:e2e:npm
+task test:e2e:cargo
+task test:e2e:hex
+```
 
-| Crate | Role |
-|-------|------|
-| `depot-core` | Domain types, port traits, policy engine, lock file, config |
-| `depot-service` | Application service layer (`CachingPackageService`): pull-through caching, blake3 integrity, policy enforcement |
-| `depot-ops` | Shared local operator API used by CLI and MCP |
-| `depot-storage` | OpenDAL-backed `StoragePort` (feature-gated: fs, S3, GCS, memory) |
-| `depot-adapters` | Protocol adapters (axum routers) + upstream clients (feature-gated per ecosystem) |
-| `depot-server` | Axum app assembly, Tower middleware, shared `AppState` |
-| `depot-cli` | Binary crate, Clap CLI, stdio MCP server |
+`task ci:live-e2e` runs the same MVP live gate plus live schema freshness checks.
 
-See the [Architecture Overview](docs/architecture.md) for Mermaid diagrams and detailed component descriptions.
+## Configuration
 
-### ADRs
+Depot defaults to loopback binding and filesystem storage. A minimal private deployment usually
+starts from:
 
-- [0001 — Hexagonal Architecture](docs/adr/0001-hexagonal-architecture.md)
-- [0002 — Tower Middleware](docs/adr/0002-tower-middleware.md)
-- [0003 — OpenDAL Storage](docs/adr/0003-opendal-storage.md)
-- [0004 — Blake3 & Lock File](docs/adr/0004-blake3-lockfile.md)
-- [0005 — Protocol Adapters](docs/adr/0005-protocol-adapters.md)
-- [0006 — Feature Flags](docs/adr/0006-feature-flags.md)
-- [0007 — JSON Schema Validation](docs/adr/0007-json-schema-validation.md)
-- [0008 — Registry Expansion](docs/adr/0008-registry-expansion.md)
-- [0009 — Publishing and Upload Workflows](docs/adr/0009-publishing-upload-workflows.md)
-- [0010 — CLI and MCP Operations](docs/adr/0010-cli-mcp-operations.md)
+```toml
+[server]
+bind = "127.0.0.1:8080"
+public_base_url = "https://depot.internal.example.com"
+cors_allowed_origins = []
+max_upload_bytes = 536870912
 
-### Schemas
+[storage]
+backend = "fs"
+path = "/var/lib/depot"
 
-Schema provenance, fetched upstream artifacts, Depot-derived JSON Schemas, and grammar fixtures are in [`schemas/`](schemas/):
+[auth]
+enabled = true
+tokens = ["replace-with-a-secret-token"]
+```
 
-- [`schemas/registries/`](schemas/registries/) — derived registry schemas where the protocol is JSON-like
-- [`schemas/depot/`](schemas/depot/) — config and lockfile schemas
-- [`schemas/README.md`](schemas/README.md) — source links and registry-by-registry derivation notes
+Upstream URLs must be HTTPS and public by default. Local, private-network, or insecure upstreams
+require explicit `allow_private_network` and `allow_insecure` settings. See
+[docs/deployment.md](docs/deployment.md) for full private-MVP configuration guidance.
 
-## CLI And MCP
+## CLI and MCP
 
 The CLI and MCP server share the same local operations layer. Both can run without `depot.toml`
 using built-in defaults plus explicit flags.
@@ -122,8 +153,68 @@ depot mcp serve
 depot mcp serve --allow-writes
 ```
 
-MCP read tools are always available. Mutating tools, including publish, yank, unyank, and cache
-delete, require `--allow-writes`.
+MCP read tools are always available. Mutating tools, including experimental local publish, yank,
+unyank, and cache delete, require `--allow-writes`.
+
+## Architecture
+
+Depot uses hexagonal architecture: protocol adapters and storage backends sit outside a shared
+service/core boundary.
+
+| Crate | Role |
+|---|---|
+| `depot-core` | Domain types, config, policy, ports, lock file, registry schema types |
+| `depot-service` | Pull-through cache, Blake3 verification, policy checks, experimental local publishing |
+| `depot-storage` | OpenDAL-backed `StoragePort` implementation |
+| `depot-adapters` | Feature-gated protocol routers and upstream clients |
+| `depot-server` | Axum app assembly and Tower middleware |
+| `depot-ops` | Shared local operator API used by CLI and MCP |
+| `depot-cli` | Clap CLI and stdio MCP server |
+
+See [docs/architecture.md](docs/architecture.md) for diagrams and component details.
+
+## Development Gates
+
+Normal PR-safe gate:
+
+```bash
+task fmt:check
+task clippy
+task test:all
+task schema:check
+task schema:validate
+task conformance
+task security
+task ci
+```
+
+Live E2E is intentionally separate from normal PR CI because it requires network access and native
+package-manager CLIs.
+
+## Schemas
+
+Schema provenance, fetched upstream artifacts, Depot-derived JSON Schemas, and grammar fixtures live
+under [`schemas/`](schemas/):
+
+- [`schemas/registries/`](schemas/registries/) - derived registry schemas where the protocol is JSON-like
+- [`schemas/depot/`](schemas/depot/) - config and lockfile schemas
+- [`schemas/README.md`](schemas/README.md) - source links and registry-by-registry derivation notes
+
+## ADRs
+
+- [0001 - Hexagonal Architecture](docs/adr/0001-hexagonal-architecture.md)
+- [0002 - Tower Middleware](docs/adr/0002-tower-middleware.md)
+- [0003 - OpenDAL Storage](docs/adr/0003-opendal-storage.md)
+- [0004 - Blake3 and Lock File](docs/adr/0004-blake3-lockfile.md)
+- [0005 - Protocol Adapters](docs/adr/0005-protocol-adapters.md)
+- [0006 - Feature Flags](docs/adr/0006-feature-flags.md)
+- [0007 - JSON Schema Validation](docs/adr/0007-json-schema-validation.md)
+- [0008 - Registry Expansion, superseded](docs/adr/0008-registry-expansion.md)
+- [0009 - Publishing and Upload Workflows](docs/adr/0009-publishing-upload-workflows.md)
+- [0010 - CLI and MCP Operations](docs/adr/0010-cli-mcp-operations.md)
+- [0011 - Private MVP Support Matrix](docs/adr/0011-mvp-support-matrix.md)
+- [0012 - CI Quality Gates](docs/adr/0012-ci-quality-gates.md)
+- [0013 - Basemind and AI-Rulez Alignment](docs/adr/0013-basemind-ai-rulez-alignment.md)
 
 ## License
 

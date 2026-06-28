@@ -2,7 +2,12 @@
 # Copy to depot.toml or set DEPOT_CONFIG env var
 
 [server]
-bind = "0.0.0.0:8080"
+bind = "127.0.0.1:8080"
+# Set when Depot is behind a reverse proxy so package metadata emits stable URLs.
+# public_base_url = "https://depot.internal.example.com"
+# Empty means browser clients are not allowed cross-origin access.
+cors_allowed_origins = []
+max_upload_bytes = 536870912
 
 [storage]
 backend = "fs"            # fs | s3 | gcs | memory
@@ -16,18 +21,24 @@ path = "/var/lib/depot"
 [upstream.pypi]
 enabled = true
 url = "https://pypi.org"
+max_response_bytes = 536870912
 
 [upstream.npm]
 enabled = true
 url = "https://registry.npmjs.org"
+max_response_bytes = 536870912
 
 [upstream.cargo]
 enabled = true
 url = "https://index.crates.io"
+artifact_url = "https://static.crates.io/crates"
+max_response_bytes = 536870912
 
 [upstream.hex]
 enabled = true
 url = "https://hex.pm"
+artifact_url = "https://repo.hex.pm"
+max_response_bytes = 536870912
 
 [policies]
 block_unlicensed = false

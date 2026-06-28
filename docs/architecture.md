@@ -2,9 +2,20 @@
 
 ## Overview
 
-Depot is a self-hosted, armored universal package registry. It acts as a pull-through cache and policy enforcement layer between package manager clients and upstream registries.
+Depot is a private/internal package registry cache. It speaks native package registry protocols,
+stores artifacts through OpenDAL, verifies cached bytes with Blake3 sidecars, and applies policy in
+the service layer.
 
-## Hexagonal Architecture
+MVP support is read-focused:
+
+- PyPI, npm, Cargo, and Hex are MVP read candidates after fresh live native-client E2E passes.
+- Maven, RubyGems, NuGet, and pub.dev are opt-in beta read adapters.
+- Native publishing is out of MVP.
+- Local publishing is experimental and disabled by default.
+
+See [ADR-0011](adr/0011-mvp-support-matrix.md) for the support matrix.
+
+## Component Model
 
 ```mermaid
 graph TB
@@ -13,147 +24,84 @@ graph TB
         npm_cli[npm]
         cargo_cli[cargo]
         mix[mix]
-        mvn[mvn]
-        bundle[bundle]
-        dotnet[dotnet]
-        dart_pub[dart pub]
+        beta_clients[Maven / Bundler / dotnet / dart pub]
     end
 
-    subgraph "Tower Middleware"
+    subgraph Middleware
         trace[TraceLayer]
         cors[CorsLayer]
-        auth[AuthLayer]
+        auth[Optional bearer auth]
         compress[CompressionLayer]
     end
 
-    subgraph "Inbound Adapters"
-        pypi_adapter[PyPI Adapter<br/>PEP 503/691]
-        npm_adapter[npm Adapter<br/>Registry API]
-        cargo_adapter[Cargo Adapter<br/>Sparse Index]
-        hex_adapter[Hex Adapter<br/>Repository API]
-        maven_adapter[Maven Adapter<br/>Artifact Layout]
-        rubygems_adapter[RubyGems Adapter<br/>Compact Index]
-        nuget_adapter[NuGet Adapter<br/>V3 Restore]
-        pub_adapter[pub.dev Adapter<br/>Hosted Repository v2]
+    subgraph Adapters
+        pypi[PyPI]
+        npm[npm]
+        cargo[Cargo]
+        hex[Hex]
+        beta[Maven / RubyGems / NuGet / pub.dev beta]
     end
 
-    subgraph "Application Service"
-        caching_svc[CachingPackageService<br/>depot-service]
-        policy[Policy Engine]
-        integrity[Blake3 Integrity<br/>sidecar .blake3 files]
-        lockfile[Lock File<br/>deferred CLI workflows]
+    subgraph Service
+        package_service[PackageService]
+        caching[CachingPackageService]
+        publishing[PublishingService experimental]
+        policy[Policy]
+        integrity[Blake3 sidecars]
     end
 
-    subgraph "Core Domain"
-        svc[PackageService trait<br/>depot-core]
+    subgraph Ports
+        storage[StoragePort]
+        upstreams[UpstreamClient]
     end
 
-    subgraph "Outbound Adapters"
-        storage[StoragePort<br/>OpenDAL]
-        upstream_pypi[PyPI Upstream<br/>5min TTL cache]
-        upstream_npm[npm Upstream<br/>5min TTL cache]
-        upstream_cargo[Cargo Upstream<br/>5min TTL cache]
-        upstream_hex[Hex Upstream<br/>5min TTL cache]
-        upstream_more[Maven/RubyGems/NuGet/pub.dev Upstreams]
-    end
-
-    subgraph "Storage Backends"
+    subgraph Backends
         fs[Filesystem]
-        s3[S3 / MinIO]
+        s3[S3-compatible]
         gcs[GCS]
+        memory[Memory]
     end
 
     pip --> trace
     npm_cli --> trace
     cargo_cli --> trace
     mix --> trace
-    mvn --> trace
-    bundle --> trace
-    dotnet --> trace
-    dart_pub --> trace
+    beta_clients --> trace
 
     trace --> cors --> auth --> compress
 
-    compress --> pypi_adapter
-    compress --> npm_adapter
-    compress --> cargo_adapter
-    compress --> hex_adapter
-    compress --> maven_adapter
-    compress --> rubygems_adapter
-    compress --> nuget_adapter
-    compress --> pub_adapter
+    compress --> pypi
+    compress --> npm
+    compress --> cargo
+    compress --> hex
+    compress --> beta
 
-    pypi_adapter --> caching_svc
-    npm_adapter --> caching_svc
-    cargo_adapter --> caching_svc
-    hex_adapter --> caching_svc
-    maven_adapter --> caching_svc
-    rubygems_adapter --> caching_svc
-    nuget_adapter --> caching_svc
-    pub_adapter --> caching_svc
+    pypi --> package_service
+    npm --> package_service
+    cargo --> package_service
+    hex --> package_service
+    beta --> package_service
 
-    pypi_adapter -.-> upstream_pypi
-    npm_adapter -.-> upstream_npm
-    cargo_adapter -.-> upstream_cargo
-    hex_adapter -.-> upstream_hex
-    maven_adapter -.-> upstream_more
-    rubygems_adapter -.-> upstream_more
-    nuget_adapter -.-> upstream_more
-    pub_adapter -.-> upstream_more
+    pypi -. native shape .-> upstreams
+    npm -. native shape .-> upstreams
+    cargo -. native shape .-> upstreams
+    hex -. native shape .-> upstreams
+    beta -. native shape .-> upstreams
 
-    caching_svc --> svc
-    caching_svc --> policy
-    caching_svc --> integrity
-    caching_svc --> lockfile
-    caching_svc --> storage
+    package_service --> caching
+    publishing --> caching
+    caching --> policy
+    caching --> integrity
+    caching --> storage
+    caching --> upstreams
 
     storage --> fs
     storage --> s3
     storage --> gcs
+    storage --> memory
 ```
 
-## Request Flow
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant Adapter
-    participant UpstreamClient
-    participant CachingPackageService
-    participant Storage
-
-    Client->>Adapter: GET /pypi/simple/requests/
-    Adapter->>CachingPackageService: list_versions(PyPI, "requests")
-    CachingPackageService->>UpstreamClient: fetch_versions("requests")
-    UpstreamClient-->>CachingPackageService: version list
-    CachingPackageService-->>Adapter: VersionMetadata
-
-    Note over Adapter,UpstreamClient: Adapter serves cached upstream response directly<br/>with URL rewriting (preserves protocol-specific fields)
-
-    Adapter->>UpstreamClient: get cached response
-    UpstreamClient-->>Adapter: cached response (5min TTL)
-    Adapter-->>Client: PEP 691 JSON (URLs rewritten to depot)
-
-    Client->>Adapter: GET /pypi/artifacts/requests/requests-2.31.0.tar.gz
-    Adapter->>CachingPackageService: get_artifact(PyPI, "requests", ...)
-
-    CachingPackageService->>CachingPackageService: check blocked_packages policy
-    CachingPackageService->>Storage: exists("pypi/requests/...")
-    alt Cached
-        Storage-->>CachingPackageService: artifact data
-        CachingPackageService->>CachingPackageService: verify blake3 from .blake3 sidecar
-    else Not cached
-        CachingPackageService->>UpstreamClient: fetch_artifact(artifact_id)
-        UpstreamClient-->>CachingPackageService: artifact bytes
-        CachingPackageService->>CachingPackageService: compute blake3, store .blake3 sidecar
-        CachingPackageService->>Storage: put(key, data)
-    end
-
-    CachingPackageService-->>Adapter: artifact bytes
-    Adapter-->>Client: artifact response
-```
-
-## Crate Dependencies
+## Crate Boundaries
 
 ```mermaid
 graph LR
@@ -162,8 +110,8 @@ graph LR
     ops --> service[depot-service]
     ops --> storage[depot-storage]
     ops --> adapters[depot-adapters]
-    server --> adapters[depot-adapters]
-    server --> service[depot-service]
+    server --> adapters
+    server --> service
     adapters --> core[depot-core]
     service --> core
     storage --> core
@@ -171,40 +119,96 @@ graph LR
 
 | Crate | Purpose |
 |-------|---------|
-| `depot-core` | Domain types, port traits (`PackageService`, `StoragePort`, `UpstreamClient`), policy engine, lock file, config |
-| `depot-service` | Application service layer. `CachingPackageService`: pull-through caching, blake3 integrity (sidecar `.blake3` files), policy enforcement |
-| `depot-ops` | Shared local operator layer for config resolution, runtime construction, CLI commands, and MCP tools |
-| `depot-storage` | `StoragePort` via OpenDAL — feature-gated backends (fs, S3, GCS, memory) |
-| `depot-adapters` | Protocol adapters (axum routers) + upstream clients — feature-gated per ecosystem. Each adapter defines a state trait (`HasPypiState`, etc.) for accessing `PackageService` + upstream client |
-| `depot-server` | Axum app assembly, Tower middleware stack, shared `AppState` |
-| `depot-cli` | Binary crate, clap CLI and stdio MCP server backed by `depot-ops` |
-| `tests/integration` | Integration test crate with 31 tests covering pip, npm, cargo, and mix client workflows |
+| `depot-core` | Domain types, config, policy, ports, lock file, registry schema types |
+| `depot-service` | Pull-through cache, Blake3 verification, policy checks, experimental local publishing |
+| `depot-storage` | OpenDAL `StoragePort` implementation |
+| `depot-adapters` | Feature-gated protocol routers and upstream clients |
+| `depot-server` | Axum app assembly and Tower middleware |
+| `depot-ops` | Shared local runtime and operator operations |
+| `depot-cli` | Clap CLI and stdio MCP server |
+| `tests/conformance` | Offline schema, protocol, and route conformance tests |
+| `tests/integration` | Ignored live native-client E2E tests |
 
-## Storage Key Scheme
+`depot-core` must stay framework-free. All I/O crosses port traits.
+
+## Request Flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Adapter
+    participant UpstreamClient
+    participant Service as CachingPackageService
+    participant Storage
+
+    Client->>Adapter: Native metadata request
+    Adapter->>Service: list_versions(ecosystem, name)
+    Service->>UpstreamClient: fetch_versions(name)
+    UpstreamClient-->>Service: version list
+    Service-->>Adapter: VersionMetadata
+    Adapter->>UpstreamClient: read cached native payload
+    Adapter-->>Client: Native response with Depot URLs
+
+    Client->>Adapter: Artifact download
+    Adapter->>Service: get_artifact(artifact_id)
+    Service->>Storage: read artifact and .blake3 sidecar
+    alt Cache hit
+        Service->>Service: verify Blake3
+    else Cache miss
+        Service->>UpstreamClient: fetch_artifact(artifact_id)
+        Service->>Service: verify upstream hash when present
+        Service->>Storage: store artifact and .blake3 sidecar
+    end
+    Service-->>Adapter: artifact bytes
+    Adapter-->>Client: native artifact response
+```
+
+## Registry Read Surface
+
+| Registry | Route prefix | Default enabled | Read status |
+|----------|--------------|-----------------|-------------|
+| PyPI | `/pypi` | Yes | MVP read candidate after live E2E |
+| npm | `/npm` | Yes | MVP read candidate after live E2E |
+| Cargo | `/cargo` | Yes | MVP read candidate after live E2E |
+| Hex | `/hex` | Yes | MVP read candidate after live E2E |
+| Maven | `/maven` | No | Opt-in beta |
+| RubyGems | `/rubygems` | No | Opt-in beta |
+| NuGet | `/nuget` | No | Opt-in beta |
+| pub.dev | `/pub` | No | Opt-in beta |
+
+Runtime defaults are defined in `Config::default()`. Full CLI builds compile all adapters, but
+compiled does not mean enabled or MVP-supported.
+
+## Publishing Scope
+
+Native publishing is outside MVP. Existing write routes and `depot package publish` are experimental
+local publishing surfaces:
+
+- Disabled by default through `[publishing] enabled = false`.
+- Require scoped publish, yank, or admin tokens when enabled.
+- Store local metadata and artifacts through `PublishingService`.
+- Do not forward uploads upstream.
+- Do not provide full owner, organization, invitation, search, or admin behavior.
+
+## Storage
+
+Artifact keys use:
 
 ```text
 <ecosystem>/<name>/<version>/<filename>
 ```
 
-Examples:
+Additional service-managed keys include:
 
-- `pypi/requests/2.31.0/requests-2.31.0.tar.gz`
-- `npm/lodash/4.17.21/lodash-4.17.21.tgz`
-- `cargo/serde/1.0.200/serde-1.0.200.crate`
-- `hex/phoenix/1.7.12/phoenix-1.7.12.tar`
+- `<artifact>.blake3`
+- `<ecosystem>/<name>/_versions.json`
+- `<ecosystem>/<name>/<version>/_metadata.json`
+- `<ecosystem>/<name>/_raw_upstream`
+- `_depot/published/<ecosystem>/<name>/<version>.json`
 
-## Registry Protocol Support
+## Schemas
 
-| Protocol | Spec | Endpoints | Format |
-|----------|------|-----------|--------|
-| PyPI | PEP 503/691 | `/pypi/simple/<name>/`, `/pypi/artifacts/<name>/<filename>` | JSON (PEP 691) |
-| npm | Registry API | `/npm/<package>`, `/npm/<package>/-/<filename>` | JSON (raw `serde_json::Value`, BFS dep prefetch) |
-| Cargo | Sparse Index (RFC 2789) | `/cargo/index/<prefix>/<name>`, `/cargo/api/v1/crates/<name>/<version>/download` | NDJSON |
-| Hex | Repository API | `/hex/packages/<name>` (JSON + protobuf registry proxy), `/hex/tarballs/<name>-<version>.tar` | JSON / Protobuf |
-
-## Registry Schemas
-
-Canonical schemas for registry protocols and Depot's own formats live in `schemas/`:
+Schema provenance and generated validation artifacts live in `schemas/`.
 
 ```text
 schemas/
@@ -212,40 +216,32 @@ schemas/
 ├── manifest.json
 ├── upstream/
 ├── registries/
-│   ├── pypi.schema.json
-│   ├── npm.schema.json
-│   ├── cargo.schema.json
-│   ├── hex.schema.json
-│   ├── nuget-*.schema.json
-│   └── pub-package.schema.json
 └── depot/
-    ├── config.schema.json
-    └── lockfile.schema.json
 ```
 
-Registry schemas are Depot's machine-readable representation of each upstream registry contract when
-that contract is JSON-like. The official source for a registry may be JSON Schema, a prose
-specification, protobuf definitions, XML Schema, OpenAPI, implementation source, or a combination of
-formats. `schemas/README.md` records the source linkage, source format, and conformance-test
-expectations for each schema family. `schemas/sources.toml` is the reviewed source index, and
-`schemas/manifest.json` is generated by `tools/schema-manager` with content hashes and ownership
-metadata.
+Use:
 
-Registry types derive `JsonSchema` via `schemars` where possible. Representative fixtures and schema
-files are validated with `jsonschema` in tests. `task schema:check` verifies committed fetched
-artifacts, generated schemas, and manifest hashes without live upstream network drift;
-`task schema:check-live` compares fetched artifacts with current upstream sources when maintainers
-intentionally want that signal. `task conformance` verifies adapter behavior against local registry
-fixtures.
-Runtime upstream-response validation is deferred until needed for production hardening.
+```sh
+task schema:check
+task schema:validate
+task conformance
+```
+
+Runtime upstream-response validation is deferred. Schemas support documentation and tests; they do
+not create support claims without live E2E evidence.
 
 ## ADRs
 
-- [0001 — Hexagonal Architecture](adr/0001-hexagonal-architecture.md)
-- [0002 — Tower Middleware](adr/0002-tower-middleware.md)
-- [0003 — OpenDAL Storage](adr/0003-opendal-storage.md)
-- [0004 — Blake3 & Lock File](adr/0004-blake3-lockfile.md)
-- [0005 — Protocol Adapters](adr/0005-protocol-adapters.md)
-- [0006 — Feature Flags](adr/0006-feature-flags.md)
-- [0007 — JSON Schema Validation](adr/0007-json-schema-validation.md)
-- [0008 — Registry Expansion](adr/0008-registry-expansion.md)
+- [0001 - Hexagonal Architecture](adr/0001-hexagonal-architecture.md)
+- [0002 - Tower Middleware](adr/0002-tower-middleware.md)
+- [0003 - OpenDAL Storage](adr/0003-opendal-storage.md)
+- [0004 - Blake3 and Lock File](adr/0004-blake3-lockfile.md)
+- [0005 - Protocol Adapters](adr/0005-protocol-adapters.md)
+- [0006 - Feature Flags](adr/0006-feature-flags.md)
+- [0007 - JSON Schema Validation](adr/0007-json-schema-validation.md)
+- [0008 - Registry Expansion, superseded](adr/0008-registry-expansion.md)
+- [0009 - Publishing and Upload Workflows](adr/0009-publishing-upload-workflows.md)
+- [0010 - CLI and MCP Operations](adr/0010-cli-mcp-operations.md)
+- [0011 - Private MVP Support Matrix](adr/0011-mvp-support-matrix.md)
+- [0012 - CI Quality Gates](adr/0012-ci-quality-gates.md)
+- [0013 - Basemind and AI-Rulez Alignment](adr/0013-basemind-ai-rulez-alignment.md)

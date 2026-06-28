@@ -59,14 +59,11 @@ async fn config_json<S: HasCargoState>(
     State(state): State<S>,
     headers: HeaderMap,
 ) -> Result<Response, (StatusCode, String)> {
-    let host = headers
-        .get("host")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("localhost:8080");
+    let base_url = crate::public_base_url(state.config(), &headers);
 
-    let dl_base = format!("http://{host}/cargo/crates/{{crate}}/{{version}}/download");
+    let dl_base = format!("{base_url}/cargo/crates/{{crate}}/{{version}}/download");
     let config = if state.config().publishing.enabled {
-        models::build_config_json_with_api(&dl_base, Some(format!("http://{host}/cargo")))
+        models::build_config_json_with_api(&dl_base, Some(format!("{base_url}/cargo")))
     } else {
         models::build_config_json(&dl_base)
     };
@@ -370,14 +367,6 @@ async fn download_crate<S: HasCargoState>(
 
 /// Map `DepotError` variants to appropriate HTTP status codes.
 fn map_error(err: &DepotError) -> (StatusCode, String) {
-    match err {
-        DepotError::PackageNotFound { .. }
-        | DepotError::VersionNotFound { .. }
-        | DepotError::ArtifactNotFound(_) => (StatusCode::NOT_FOUND, err.to_string()),
-        DepotError::PolicyViolation(_) => (StatusCode::FORBIDDEN, err.to_string()),
-        DepotError::Adapter(_) => (StatusCode::BAD_REQUEST, err.to_string()),
-        DepotError::Publish(_) => (StatusCode::CONFLICT, err.to_string()),
-        DepotError::Upstream(_) => (StatusCode::BAD_GATEWAY, err.to_string()),
-        _ => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
-    }
+    tracing::warn!(error = %err, "Cargo adapter request failed");
+    crate::map_public_error(err)
 }

@@ -18,3 +18,8 @@ marketplace = "basemind"
 name = "basemind"
 scope = "project"
 enabled = true
+
+[[mcp_servers]]
+name = "ai-rulez"
+command = "npx"
+args = ["-y", "ai-rulez@latest", "mcp"]

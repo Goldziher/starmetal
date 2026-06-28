@@ -9,6 +9,9 @@ use crate::package::{Ecosystem, PackageName};
 use crate::policy::PolicyConfig;
 use crate::publishing::{PublishMode, PublishTokenConfig, TokenScope};
 
+pub const DEFAULT_MAX_UPLOAD_BYTES: u64 = 512 * 1024 * 1024;
+pub const DEFAULT_MAX_UPSTREAM_BYTES: u64 = 512 * 1024 * 1024;
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Config {
     #[serde(default)]
@@ -31,18 +34,31 @@ pub struct Config {
 pub struct ServerConfig {
     #[serde(default = "default_bind")]
     pub bind: String,
+    #[serde(default)]
+    pub public_base_url: Option<String>,
+    #[serde(default)]
+    pub cors_allowed_origins: Vec<String>,
+    #[serde(default = "default_max_upload_bytes")]
+    pub max_upload_bytes: u64,
 }
 
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
             bind: default_bind(),
+            public_base_url: None,
+            cors_allowed_origins: Vec::new(),
+            max_upload_bytes: default_max_upload_bytes(),
         }
     }
 }
 
 fn default_bind() -> String {
-    "0.0.0.0:8080".into()
+    "127.0.0.1:8080".into()
+}
+
+fn default_max_upload_bytes() -> u64 {
+    DEFAULT_MAX_UPLOAD_BYTES
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -146,10 +162,20 @@ pub struct UpstreamConfig {
     pub url: String,
     #[serde(default)]
     pub artifact_url: Option<String>,
+    #[serde(default)]
+    pub allow_insecure: bool,
+    #[serde(default)]
+    pub allow_private_network: bool,
+    #[serde(default = "default_max_upstream_bytes")]
+    pub max_response_bytes: u64,
 }
 
 fn default_true() -> bool {
     true
+}
+
+fn default_max_upstream_bytes() -> u64 {
+    DEFAULT_MAX_UPSTREAM_BYTES
 }
 
 #[derive(Clone, Default, Serialize, Deserialize, JsonSchema)]
@@ -248,6 +274,32 @@ impl Config {
     }
 
     pub fn validate_mvp(&self) -> Result<()> {
+        if let Some(base_url) = &self.server.public_base_url {
+            validate_public_base_url(base_url)?;
+        }
+
+        if self.server.max_upload_bytes == 0 {
+            return Err(DepotError::Config(
+                "server.max_upload_bytes must be greater than zero".to_string(),
+            ));
+        }
+
+        for origin in &self.server.cors_allowed_origins {
+            validate_public_base_url(origin)?;
+        }
+
+        for (name, upstream) in &self.upstream {
+            validate_upstream_url(name, &upstream.url, upstream)?;
+            if let Some(artifact_url) = &upstream.artifact_url {
+                validate_upstream_url(name, artifact_url, upstream)?;
+            }
+            if upstream.max_response_bytes == 0 {
+                return Err(DepotError::Config(format!(
+                    "upstream.{name}.max_response_bytes must be greater than zero"
+                )));
+            }
+        }
+
         if self.encryption.enabled {
             return Err(DepotError::Config(
                 "at-rest encryption is not implemented in this MVP".to_string(),
@@ -318,6 +370,13 @@ impl Config {
         value
     }
 
+    pub fn authorize_bearer_token(&self, token: &str) -> bool {
+        self.auth
+            .tokens
+            .iter()
+            .any(|allowed| constant_time_eq(allowed.as_bytes(), token.as_bytes()))
+    }
+
     pub fn authorize_publish_token(
         &self,
         token: &str,
@@ -326,7 +385,8 @@ impl Config {
         package: &PackageName,
     ) -> bool {
         self.publishing.tokens.iter().any(|candidate| {
-            candidate.token == token && candidate.allows(scope, ecosystem, package)
+            constant_time_eq(candidate.token.as_bytes(), token.as_bytes())
+                && candidate.allows(scope, ecosystem, package)
         })
     }
 }
@@ -353,6 +413,9 @@ fn default_upstreams() -> HashMap<String, UpstreamConfig> {
             enabled: true,
             url: "https://pypi.org".into(),
             artifact_url: None,
+            allow_insecure: false,
+            allow_private_network: false,
+            max_response_bytes: default_max_upstream_bytes(),
         },
     );
     upstream.insert(
@@ -361,6 +424,9 @@ fn default_upstreams() -> HashMap<String, UpstreamConfig> {
             enabled: true,
             url: "https://registry.npmjs.org".into(),
             artifact_url: None,
+            allow_insecure: false,
+            allow_private_network: false,
+            max_response_bytes: default_max_upstream_bytes(),
         },
     );
     upstream.insert(
@@ -369,6 +435,9 @@ fn default_upstreams() -> HashMap<String, UpstreamConfig> {
             enabled: true,
             url: "https://index.crates.io".into(),
             artifact_url: Some("https://static.crates.io/crates".into()),
+            allow_insecure: false,
+            allow_private_network: false,
+            max_response_bytes: default_max_upstream_bytes(),
         },
     );
     upstream.insert(
@@ -377,6 +446,9 @@ fn default_upstreams() -> HashMap<String, UpstreamConfig> {
             enabled: true,
             url: "https://hex.pm".into(),
             artifact_url: Some("https://repo.hex.pm".into()),
+            allow_insecure: false,
+            allow_private_network: false,
+            max_response_bytes: default_max_upstream_bytes(),
         },
     );
     upstream.insert(
@@ -385,6 +457,9 @@ fn default_upstreams() -> HashMap<String, UpstreamConfig> {
             enabled: false,
             url: "https://repo1.maven.org/maven2".into(),
             artifact_url: None,
+            allow_insecure: false,
+            allow_private_network: false,
+            max_response_bytes: default_max_upstream_bytes(),
         },
     );
     upstream.insert(
@@ -393,6 +468,9 @@ fn default_upstreams() -> HashMap<String, UpstreamConfig> {
             enabled: false,
             url: "https://rubygems.org".into(),
             artifact_url: Some("https://rubygems.org".into()),
+            allow_insecure: false,
+            allow_private_network: false,
+            max_response_bytes: default_max_upstream_bytes(),
         },
     );
     upstream.insert(
@@ -401,6 +479,9 @@ fn default_upstreams() -> HashMap<String, UpstreamConfig> {
             enabled: false,
             url: "https://api.nuget.org/v3/index.json".into(),
             artifact_url: None,
+            allow_insecure: false,
+            allow_private_network: false,
+            max_response_bytes: default_max_upstream_bytes(),
         },
     );
     upstream.insert(
@@ -409,9 +490,90 @@ fn default_upstreams() -> HashMap<String, UpstreamConfig> {
             enabled: false,
             url: "https://pub.dev".into(),
             artifact_url: None,
+            allow_insecure: false,
+            allow_private_network: false,
+            max_response_bytes: default_max_upstream_bytes(),
         },
     );
     upstream
+}
+
+fn validate_public_base_url(value: &str) -> Result<()> {
+    let parsed = url::Url::parse(value)
+        .map_err(|err| DepotError::Config(format!("invalid URL '{value}': {err}")))?;
+    match parsed.scheme() {
+        "http" | "https" => {}
+        scheme => {
+            return Err(DepotError::Config(format!(
+                "URL '{value}' must use http or https, not {scheme}"
+            )));
+        }
+    }
+    if parsed.host_str().is_none() {
+        return Err(DepotError::Config(format!(
+            "URL '{value}' must include a host"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_upstream_url(name: &str, value: &str, config: &UpstreamConfig) -> Result<()> {
+    let parsed = url::Url::parse(value).map_err(|err| {
+        DepotError::Config(format!(
+            "invalid upstream URL for {name} ('{value}'): {err}"
+        ))
+    })?;
+
+    match parsed.scheme() {
+        "https" => {}
+        "http" if config.allow_insecure => {}
+        scheme => {
+            return Err(DepotError::Config(format!(
+                "upstream.{name} URL must use https unless allow_insecure is true; got {scheme}"
+            )));
+        }
+    }
+
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| DepotError::Config(format!("upstream.{name} URL must include a host")))?;
+    if is_private_host(host) && !config.allow_private_network {
+        return Err(DepotError::Config(format!(
+            "upstream.{name} URL points at a private/local host; set allow_private_network = true to permit it"
+        )));
+    }
+
+    Ok(())
+}
+
+fn is_private_host(host: &str) -> bool {
+    if host.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+    match host.parse::<std::net::IpAddr>() {
+        Ok(std::net::IpAddr::V4(ip)) => {
+            ip.is_private()
+                || ip.is_loopback()
+                || ip.is_link_local()
+                || ip.is_unspecified()
+                || ip.is_broadcast()
+        }
+        Ok(std::net::IpAddr::V6(ip)) => {
+            ip.is_loopback() || ip.is_unspecified() || ip.is_unique_local()
+        }
+        Err(_) => false,
+    }
+}
+
+fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
+    let max_len = left.len().max(right.len());
+    let mut diff = left.len() ^ right.len();
+    for index in 0..max_len {
+        let left_byte = left.get(index).copied().unwrap_or(0);
+        let right_byte = right.get(index).copied().unwrap_or(0);
+        diff |= usize::from(left_byte ^ right_byte);
+    }
+    diff == 0
 }
 
 #[cfg(test)]
@@ -609,5 +771,77 @@ scopes = ["publish"]
         let output = toml::to_string_pretty(&config.redacted_value()).unwrap();
         assert!(!output.contains("publish-secret"));
         assert!(output.contains("<redacted>"));
+    }
+
+    #[test]
+    fn startup_validation_rejects_insecure_upstream_by_default() {
+        let config: Config = toml::from_str(
+            r#"
+[upstream.pypi]
+url = "http://pypi.example.test"
+"#,
+        )
+        .unwrap();
+
+        let err = config.validate_mvp().unwrap_err().to_string();
+        assert!(err.contains("allow_insecure"));
+    }
+
+    #[test]
+    fn startup_validation_rejects_private_upstream_by_default() {
+        let config: Config = toml::from_str(
+            r#"
+[upstream.pypi]
+url = "https://127.0.0.1:9000"
+"#,
+        )
+        .unwrap();
+
+        let err = config.validate_mvp().unwrap_err().to_string();
+        assert!(err.contains("private/local host"));
+    }
+
+    #[test]
+    fn startup_validation_allows_explicit_local_insecure_upstream() {
+        let config: Config = toml::from_str(
+            r#"
+[upstream.pypi]
+url = "http://127.0.0.1:9000"
+allow_insecure = true
+allow_private_network = true
+"#,
+        )
+        .unwrap();
+
+        config.validate_mvp().unwrap();
+    }
+
+    #[test]
+    fn startup_validation_rejects_zero_upload_limit() {
+        let config: Config = toml::from_str(
+            r#"
+[server]
+max_upload_bytes = 0
+"#,
+        )
+        .unwrap();
+
+        let err = config.validate_mvp().unwrap_err().to_string();
+        assert!(err.contains("max_upload_bytes"));
+    }
+
+    #[test]
+    fn bearer_token_authorization_uses_exact_match() {
+        let config: Config = toml::from_str(
+            r#"
+[auth]
+enabled = true
+tokens = ["secret-token"]
+"#,
+        )
+        .unwrap();
+
+        assert!(config.authorize_bearer_token("secret-token"));
+        assert!(!config.authorize_bearer_token("secret"));
     }
 }

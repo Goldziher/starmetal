@@ -6,56 +6,58 @@ Accepted
 
 ## Context
 
-Depot needs an operator interface in addition to native package registry routes. The CLI and MCP
-server should expose the same capabilities without duplicating registry, storage, config, or policy
-logic. Depot also needs to remain useful without a configuration file for local development and
-agent-driven workflows.
+Depot needs local operator workflows for private deployments and agent integrations. CLI and MCP
+must share behavior rather than duplicating config, storage, or service construction.
 
 ## Decision
 
-Depot exposes operator functionality through a shared local operations crate used by both the CLI
-and MCP server.
+`depot-ops` is the shared local operations layer for `depot-cli` and the stdio MCP server.
 
-- `depot-ops` owns config resolution, runtime construction, and typed operator operations.
-- `depot-cli` owns command-line parsing, human/JSON output, and process exit behavior.
-- MCP is served over stdio in the first implementation using the official Rust MCP SDK.
-- CLI and MCP default to local-first execution: they build services from config/defaults and operate
-  directly on OpenDAL storage and configured upstream clients.
-- Config precedence is built-in defaults, config file, environment-driven config file selection, and
-  CLI overrides for the current invocation.
-- MCP read tools are always available. MCP write tools require an explicit startup flag.
-- Human CLI output is optimized for operators. `--output json` is the stable machine-readable
-  format.
+Implemented CLI surface:
 
-The first operator surface includes server startup, config display and validation, registry status,
-package listing, version and metadata lookup, artifact fetch, explicit artifact publish,
-yank/unyank, and cache deletion. The initial CLI/MCP publish command requires explicit package
-name, version, artifact filename, and optional license metadata. Native archive parsing and
-ecosystem-specific publish semantics remain adapter-owned work and must not be inferred loosely by
-operator commands.
+| Command | Status |
+|---------|--------|
+| `depot serve` | Implemented |
+| `depot config show` | Implemented |
+| `depot config validate` | Implemented |
+| `depot config init` | Implemented |
+| `depot registry list` | Implemented |
+| `depot registry status` | Implemented |
+| `depot package list` | Implemented |
+| `depot package versions` | Implemented |
+| `depot package metadata` | Implemented |
+| `depot package fetch` | Implemented |
+| `depot package publish` | Experimental local publishing |
+| `depot package yank` | Experimental local publishing |
+| `depot package unyank` | Experimental local publishing |
+| `depot cache delete-artifact` | Implemented local cache operation |
+| `depot mcp serve` | Implemented stdio MCP |
+| `depot sync` | Not implemented in MVP |
+| `depot lock verify` | Not implemented in MVP |
+| `depot lock update` | Not implemented in MVP |
 
-The initial command surface is:
+MCP runs over stdio. Read tools are available by default. Mutating tools require
+`depot mcp serve --allow-writes`.
 
-- `depot serve`
-- `depot config show|validate|init`
-- `depot registry list|status`
-- `depot package list|versions|metadata|fetch|publish|yank|unyank`
-- `depot cache delete-artifact`
-- `depot mcp serve [--allow-writes]`
-- `depot sync`, `depot lock verify`, and `depot lock update` as explicit deferred commands that
-  return controlled not-implemented errors
+## Implemented
 
-The initial MCP tool surface mirrors the supported local operations: config display, registry
-status, package list/version/metadata lookup, artifact fetch, explicit artifact publish, yank,
-unyank, and cache delete. Tools that mutate storage or metadata are hidden unless the MCP server is
-started with `--allow-writes`.
+- Config lookup through defaults, `DEPOT_CONFIG`, local `depot.toml`, explicit config path, and CLI
+  overrides.
+- `--no-config` local workflows.
+- Human output plus `--output json` for stable machine-readable output.
+- Shared runtime construction through `DepotRuntime`.
+- MCP tools backed by the same operations as CLI commands.
+
+## Deferred
+
+- Remote administration over HTTP.
+- Full sync workflows.
+- Lock file verify and update workflows.
+- Native archive inference for operator publishing.
+- Treating MCP writes as safe without explicit startup opt-in.
 
 ## Consequences
 
-- CLI and MCP remain behaviorally aligned because they call the same operation functions.
-- The CLI can work without `depot.toml` by using safe defaults.
-- MCP does not add a network listener or remote admin API surface in the first implementation.
-- Remote administration over HTTP requires a separate ADR because it introduces authentication,
-  authorization, and compatibility concerns beyond stdio MCP.
-- Native archive inference in operator publish commands remains a future enhancement. Native upload
-  parsing continues to belong in protocol adapters.
+- CLI and MCP stay aligned through `depot-ops`.
+- The private MVP can be operated locally without a config file.
+- Remote admin behavior needs a separate ADR.

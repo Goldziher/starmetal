@@ -24,12 +24,7 @@ pub async fn require_bearer_token(
         .and_then(|value| value.strip_prefix("Bearer "));
 
     if let Some(token) = token
-        && state
-            .config
-            .auth
-            .tokens
-            .iter()
-            .any(|allowed| allowed == token)
+        && state.config.authorize_bearer_token(token)
     {
         return next.run(request).await;
     }

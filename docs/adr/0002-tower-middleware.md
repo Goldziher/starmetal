@@ -6,45 +6,55 @@ Accepted
 
 ## Context
 
-Cross-cutting concerns — authentication, authorization, rate limiting, request tracing,
-compression, integrity headers — must apply uniformly across all protocol adapters without
-duplicating logic in each adapter.
+Depot serves several native registry protocols through one HTTP server. Cross-cutting behavior must
+be applied consistently while adapters remain focused on protocol translation.
+
+The private MVP is read-focused. Write routes exist for experimental local publishing, but native
+publishing is not an MVP support claim.
 
 ## Decision
 
-We use Tower's `Layer`/`Service` abstraction to compose middleware. The stack is assembled in `depot-server/src/app.rs` and wraps all adapter routes.
+`depot-server` composes the axum application with Tower middleware in `crates/depot-server/src/app.rs`.
 
-MVP middleware stack (outermost first):
+Implemented stack, from request entry inward:
 
-1. **TraceLayer** — structured request/response logging via `tracing`
-2. **CorsLayer** — required for npm web clients and browser-based tooling
-3. **Auth** — optional bearer token validation when `auth.enabled = true`
-4. **CompressionLayer** — response compression (gzip, brotli, zstd)
+| Layer | Implemented behavior |
+|-------|----------------------|
+| `TraceLayer` | Structured request tracing |
+| `CorsLayer::permissive()` | Broad CORS policy for MVP development and local clients |
+| Bearer auth middleware | Optional read-token enforcement when `auth.enabled = true` |
+| `CompressionLayer` | Response compression |
 
-Rate limiting and integrity response headers are deferred production-hardening
-features. They are not part of the MVP middleware stack.
+Adapter routers are mounted by feature flag and runtime upstream enablement:
 
-Protocol adapters are mounted as nested axum routers under path prefixes (`/pypi`, `/npm`,
-`/cargo`, `/hex`, `/maven`, `/rubygems`, `/nuget`, `/pub`).
+| Prefix | Runtime default | MVP position |
+|--------|-----------------|--------------|
+| `/pypi` | Enabled | Read candidate after live E2E |
+| `/npm` | Enabled | Read candidate after live E2E |
+| `/cargo` | Enabled | Read candidate after live E2E |
+| `/hex` | Enabled | Read candidate after live E2E |
+| `/maven` | Disabled | Opt-in beta |
+| `/rubygems` | Disabled | Opt-in beta |
+| `/nuget` | Disabled | Opt-in beta |
+| `/pub` | Disabled | Opt-in beta |
 
-Publishing routes add write authorization requirements. Read routes keep the existing optional
-bearer-token behavior. Write routes must extract native client credentials and resolve them to scoped
-Depot tokens before the adapter calls publishing services. Supported extraction forms include:
+## Implemented
 
-- Bearer-style tokens where native clients send bearer or raw authorization headers.
-- Basic authentication for clients such as twine and Maven.
-- API-key headers such as RubyGems `Authorization` and NuGet `X-NuGet-ApiKey`.
-- Ecosystem-specific token conventions used by npm, Cargo, Hex, and pub.dev clients.
+- Optional bearer-token auth for server requests.
+- Runtime route mounting based on `Config::upstream_enabled`.
+- Compression, tracing, and permissive CORS.
+- Experimental write-route token checks inside adapters against scoped publishing tokens.
 
-The middleware layer performs credential extraction and request-scoped auth context creation.
-Adapters remain responsible for native protocol parsing, and `depot-service` remains responsible for
-publish-policy enforcement.
+## Deferred
+
+- Production CORS allowlist configuration.
+- Rate limiting.
+- Integrity response headers beyond ecosystem-native metadata.
+- Central middleware-owned scoped write authorization.
+- Remote admin authentication and authorization.
 
 ## Consequences
 
-- All cross-cutting logic is defined once and applies to every adapter.
-- Middleware ordering is explicit and documented.
-- Individual adapters remain focused on protocol translation.
-- Tower's `Service` trait composes well with axum's router, avoiding framework lock-in for the middleware implementations themselves.
-- Publishing authorization can evolve without duplicating token parsing and scope checks in every
-  adapter.
+- Read middleware behavior is uniform across adapters.
+- Write authorization is currently adapter-owned because native credential shapes differ.
+- The permissive CORS policy must be tightened before any non-private deployment.

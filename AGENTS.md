@@ -1,10 +1,10 @@
 <!--
 🤖 AI-RULEZ :: GENERATED FILE — DO NOT EDIT DIRECTLY
 Project: depot
-Generated: 2026-06-17 20:42:33
+Generated: 2026-06-28 14:12:05
 Source: .ai-rulez/config.toml
 Target: AGENTS.md
-Content: rules=38, sections=0, agents=9
+Content: rules=39, sections=0, agents=9
 
 WHAT IS AI-RULEZ
 AI-Rulez is a directory-based AI governance tool. All configuration lives in
@@ -46,8 +46,8 @@ INSTRUCTIONS FOR AI AGENTS
    c. Commit both .ai-rulez/ and generated files
 
 Documentation: https://github.com/Goldziher/ai-rulez
-Content-Hash: blake3:42af5e3082ff9c356f2f68586fe4b01bece98199d07e285dc52bc0374b588d79
-Source-Hash: blake3:448377bfcf2a2388b878b296fb5ebdf52a1c5ce3464311aac7b8ed4e90a80585
+Content-Hash: blake3:02efc0f4e234ac843a92b739386a8521442649e1872a2b3acd7878a33c5feddc
+Source-Hash: blake3:ee1b77539ffc9a77af4659af1bb7782210397f42610e869d338cdeab3c3d2526
 -->
 
 # depot
@@ -79,6 +79,19 @@ Each commit represents one logical change. Don't mix unrelated changes. Use conv
 **Priority:** medium
 
 Extract shared logic after the third repetition, not before. Three similar lines of code are better than a premature abstraction. When extracting, ensure the shared code has a single reason to change — if two callers would evolve the logic differently, keep them separate. Premature abstraction creates worse coupling than duplication.
+
+### basemind-mcp
+
+**Priority:** high
+
+- Keep Basemind configured as an ai-rulez plugin through `[[plugins]]`; do not add Basemind as a raw `mcp_server`.
+- Configure the ai-rulez MCP server with `npx -y ai-rulez@latest mcp` so agents can manage `.ai-rulez/` safely.
+- Edit ai-rulez source files first, then regenerate outputs with `npx -y ai-rulez@latest generate --gitignore`.
+- When Basemind MCP tools are available, prefer them for code navigation and repository context before falling back to shell tools:
+  `outline`, `search_symbols`, `find_references`, `find_callers`, and `workspace_grep` for code search;
+  `recent_changes`, `blame_file`, `blame_symbol`, `diff_file`, `diff_outline`, and `commits_touching` for git history;
+  `search_documents`, `web_scrape`, `web_crawl`, and `web_map` for docs and web retrieval.
+- Use shell, `rg`, and raw `git` when Basemind is unavailable, when exact raw output is required, or when a task runner/check is the source of truth.
 
 ### batch-operations
 

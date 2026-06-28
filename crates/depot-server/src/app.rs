@@ -1,7 +1,11 @@
 use axum::Router;
+use axum::http::HeaderValue;
+use axum::http::Method;
+use axum::http::header;
 use axum::middleware;
 use tower_http::compression::CompressionLayer;
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{AllowOrigin, CorsLayer};
+use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::trace::TraceLayer;
 
 use crate::middleware::auth;
@@ -9,6 +13,7 @@ use crate::state::AppState;
 
 /// Build the axum application with all middleware and adapter routes.
 pub fn build_app(state: AppState) -> Router {
+    #[allow(unused_mut)]
     let mut app = Router::new();
 
     #[cfg(feature = "pypi")]
@@ -72,8 +77,37 @@ pub fn build_app(state: AppState) -> Router {
             state.clone(),
             auth::require_bearer_token,
         ))
-        // TODO: replace CorsLayer::permissive() with a restrictive policy before production use
-        .layer(CorsLayer::permissive())
+        .layer(cors_layer(&state))
+        .layer(RequestBodyLimitLayer::new(
+            state.config.server.max_upload_bytes as usize,
+        ))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
+}
+
+fn cors_layer(state: &AppState) -> CorsLayer {
+    let origins = state
+        .config
+        .server
+        .cors_allowed_origins
+        .iter()
+        .filter_map(|origin| origin.parse::<HeaderValue>().ok())
+        .collect::<Vec<_>>();
+
+    let layer = CorsLayer::new()
+        .allow_methods([
+            Method::GET,
+            Method::HEAD,
+            Method::OPTIONS,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+        ])
+        .allow_headers([header::ACCEPT, header::AUTHORIZATION, header::CONTENT_TYPE]);
+
+    if origins.is_empty() {
+        layer
+    } else {
+        layer.allow_origin(AllowOrigin::list(origins))
+    }
 }

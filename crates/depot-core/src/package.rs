@@ -5,7 +5,9 @@ use ahash::AHashMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::error::DepotError;
+use crate::error::{DepotError, Result};
+
+const RESERVED_STORAGE_PREFIX: &str = "_depot";
 
 /// Supported package ecosystems.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
@@ -39,7 +41,7 @@ impl std::fmt::Display for Ecosystem {
 impl FromStr for Ecosystem {
     type Err = DepotError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s.to_ascii_lowercase().as_str() {
             "pypi" => Ok(Self::PyPI),
             "npm" => Ok(Self::Npm),
@@ -73,6 +75,21 @@ impl PackageName {
         &self.0
     }
 
+    pub fn validate_for_storage(&self) -> Result<()> {
+        let _ = self.storage_segment()?;
+        Ok(())
+    }
+
+    pub fn storage_segment(&self) -> Result<String> {
+        if self.0 == RESERVED_STORAGE_PREFIX || self.0.starts_with("_depot/") {
+            return Err(DepotError::Config(
+                "package names must not use the reserved _depot prefix".to_string(),
+            ));
+        }
+        validate_package_name_for_storage(&self.0)?;
+        Ok(encode_storage_segment(&self.0))
+    }
+
     /// Normalize for a specific ecosystem, returning `Cow::Borrowed` when no
     /// transformation is needed (zero-alloc fast path).
     pub fn normalized(&self, ecosystem: Ecosystem) -> Cow<'_, str> {
@@ -104,6 +121,91 @@ impl PackageName {
                 }
             }
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+pub struct StorageKey(String);
+
+impl StorageKey {
+    pub fn from_segments(segments: &[&str]) -> Result<Self> {
+        if segments.is_empty() {
+            return Err(DepotError::Config(
+                "storage key requires at least one segment".to_string(),
+            ));
+        }
+        for segment in segments {
+            validate_storage_segment("storage key segment", segment)?;
+        }
+        Ok(Self(segments.join("/")))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn into_string(self) -> String {
+        self.0
+    }
+}
+
+impl std::fmt::Display for StorageKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+pub fn validate_storage_segment(label: &str, segment: &str) -> Result<()> {
+    if segment.trim().is_empty() {
+        return Err(DepotError::Config(format!("{label} must not be empty")));
+    }
+    if segment == "." || segment == ".." {
+        return Err(DepotError::Config(format!(
+            "{label} must not be a relative path segment"
+        )));
+    }
+    if segment.contains('/') || segment.contains('\\') {
+        return Err(DepotError::Config(format!(
+            "{label} must not contain path separators"
+        )));
+    }
+    if segment.starts_with('/') || segment.starts_with('\\') {
+        return Err(DepotError::Config(format!(
+            "{label} must not be an absolute path"
+        )));
+    }
+    if segment.bytes().any(|byte| byte == 0) {
+        return Err(DepotError::Config(format!("{label} must not contain NUL")));
+    }
+    Ok(())
+}
+
+pub fn decode_storage_segment(segment: &str) -> String {
+    let bytes = segment.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%'
+            && index + 2 < bytes.len()
+            && let (Some(high), Some(low)) =
+                (hex_value(bytes[index + 1]), hex_value(bytes[index + 2]))
+        {
+            decoded.push((high << 4) | low);
+            index += 3;
+            continue;
+        }
+        decoded.push(bytes[index]);
+        index += 1;
+    }
+    String::from_utf8_lossy(&decoded).into_owned()
+}
+
+fn hex_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
     }
 }
 
@@ -177,6 +279,52 @@ impl ArtifactId {
         key.push_str(&self.filename);
         key
     }
+
+    pub fn validated_storage_key(&self) -> Result<StorageKey> {
+        let name = self.name.storage_segment()?;
+        let ecosystem = self.ecosystem.to_string();
+        StorageKey::from_segments(&[&ecosystem, &name, &self.version, &self.filename])
+    }
+}
+
+fn validate_package_name_for_storage(name: &str) -> Result<()> {
+    if name.trim().is_empty() {
+        return Err(DepotError::Config(
+            "package name must not be empty".to_string(),
+        ));
+    }
+    if name == "." || name == ".." {
+        return Err(DepotError::Config(
+            "package name must not be a relative path segment".to_string(),
+        ));
+    }
+    if name.starts_with('/') || name.starts_with('\\') {
+        return Err(DepotError::Config(
+            "package name must not be an absolute path".to_string(),
+        ));
+    }
+    if name.bytes().any(|byte| byte == 0) {
+        return Err(DepotError::Config(
+            "package name must not contain NUL".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn encode_storage_segment(input: &str) -> String {
+    let mut output = String::with_capacity(input.len());
+    for byte in input.bytes() {
+        match byte {
+            b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'.' | b'-' | b'_' | b'@' | b':' => {
+                output.push(char::from(byte))
+            }
+            _ => {
+                use std::fmt::Write as _;
+                let _ = write!(&mut output, "%{byte:02X}");
+            }
+        }
+    }
+    output
 }
 
 /// Metadata for a specific package version.
@@ -333,6 +481,60 @@ mod tests {
         assert!(
             matches!(cow, Cow::Borrowed(_)),
             "should borrow when already lowercase"
+        );
+    }
+
+    #[test]
+    fn storage_key_rejects_traversal_segments() {
+        let artifact = ArtifactId {
+            ecosystem: Ecosystem::PyPI,
+            name: PackageName::new("requests"),
+            version: "..".to_string(),
+            filename: "requests.tar.gz".to_string(),
+        };
+
+        let err = artifact.validated_storage_key().unwrap_err().to_string();
+        assert!(err.contains("relative path segment"));
+    }
+
+    #[test]
+    fn storage_key_rejects_filename_with_separator() {
+        let artifact = ArtifactId {
+            ecosystem: Ecosystem::Npm,
+            name: PackageName::new("is-odd"),
+            version: "3.0.1".to_string(),
+            filename: "../is-odd.tgz".to_string(),
+        };
+
+        let err = artifact.validated_storage_key().unwrap_err().to_string();
+        assert!(err.contains("path separators"));
+    }
+
+    #[test]
+    fn storage_key_rejects_reserved_public_package_name() {
+        let artifact = ArtifactId {
+            ecosystem: Ecosystem::Cargo,
+            name: PackageName::new("_depot"),
+            version: "1.0.0".to_string(),
+            filename: "pkg.crate".to_string(),
+        };
+
+        let err = artifact.validated_storage_key().unwrap_err().to_string();
+        assert!(err.contains("reserved _depot prefix"));
+    }
+
+    #[test]
+    fn storage_key_encodes_scoped_npm_package_name() {
+        let artifact = ArtifactId {
+            ecosystem: Ecosystem::Npm,
+            name: PackageName::new("@scope/name"),
+            version: "1.0.0".to_string(),
+            filename: "name-1.0.0.tgz".to_string(),
+        };
+
+        assert_eq!(
+            artifact.validated_storage_key().unwrap().as_str(),
+            "npm/@scope%2Fname/1.0.0/name-1.0.0.tgz"
         );
     }
 }

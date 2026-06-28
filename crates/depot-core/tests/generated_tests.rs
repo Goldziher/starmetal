@@ -48,7 +48,7 @@ fn config_01_config_parsing_empty_config_uses_defaults() {
     let config: depot_core::config::Config =
         toml::from_str("").expect("fixture 'empty config uses defaults' should parse");
     assert_eq!(
-        config.server.bind, "0.0.0.0:8080",
+        config.server.bind, "127.0.0.1:8080",
         "fixture 'empty config uses defaults' bind"
     );
     assert_eq!(

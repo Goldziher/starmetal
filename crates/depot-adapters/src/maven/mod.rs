@@ -284,14 +284,6 @@ fn text_response(method: Method, body: String) -> Response {
 }
 
 fn map_error(err: &DepotError) -> (StatusCode, String) {
-    match err {
-        DepotError::PackageNotFound { .. }
-        | DepotError::VersionNotFound { .. }
-        | DepotError::ArtifactNotFound(_) => (StatusCode::NOT_FOUND, err.to_string()),
-        DepotError::PolicyViolation(_) => (StatusCode::FORBIDDEN, err.to_string()),
-        DepotError::Adapter(_) => (StatusCode::BAD_REQUEST, err.to_string()),
-        DepotError::Publish(_) => (StatusCode::CONFLICT, err.to_string()),
-        DepotError::Upstream(_) => (StatusCode::BAD_GATEWAY, err.to_string()),
-        _ => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
-    }
+    tracing::warn!(error = %err, "Maven adapter request failed");
+    crate::map_public_error(err)
 }

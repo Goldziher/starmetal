@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use ahash::AHashMap;
 use async_trait::async_trait;
 use bytes::Bytes;
+use depot_core::config::DEFAULT_MAX_UPSTREAM_BYTES;
 use depot_core::error::{DepotError, Result};
 use depot_core::package::{ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata};
 use depot_core::ports::UpstreamClient;
@@ -27,6 +28,7 @@ pub struct CargoUpstreamClient {
     client: reqwest::Client,
     index_url: String,
     dl_url: String,
+    max_response_bytes: u64,
     entries_cache: Arc<RwLock<CargoEntriesCache>>,
 }
 
@@ -37,6 +39,14 @@ impl CargoUpstreamClient {
     /// - `index_url`: `https://index.crates.io`
     /// - `dl_url`: `https://static.crates.io/crates`
     pub fn new(index_url: String, dl_url: String) -> Self {
+        Self::with_max_response_bytes(index_url, dl_url, DEFAULT_MAX_UPSTREAM_BYTES)
+    }
+
+    pub fn with_max_response_bytes(
+        index_url: String,
+        dl_url: String,
+        max_response_bytes: u64,
+    ) -> Self {
         let client = reqwest::Client::builder()
             .connect_timeout(std::time::Duration::from_secs(30))
             .timeout(std::time::Duration::from_secs(60))
@@ -46,6 +56,7 @@ impl CargoUpstreamClient {
             client,
             index_url,
             dl_url,
+            max_response_bytes,
             entries_cache: Arc::new(RwLock::new(AHashMap::new())),
         }
     }
@@ -90,10 +101,12 @@ impl CargoUpstreamClient {
             )));
         }
 
-        let body = response
-            .text()
-            .await
-            .map_err(|err| DepotError::Upstream(err.to_string()))?;
+        let body = crate::upstream_http::text_limited(
+            response,
+            self.max_response_bytes,
+            "Cargo sparse index",
+        )
+        .await?;
 
         let entries: Vec<CargoIndexEntry> = body
             .lines()
@@ -179,9 +192,11 @@ impl UpstreamClient for CargoUpstreamClient {
             )));
         }
 
-        response
-            .bytes()
-            .await
-            .map_err(|err| DepotError::Upstream(err.to_string()))
+        crate::upstream_http::bytes_limited(
+            response,
+            self.max_response_bytes,
+            "Cargo crate download",
+        )
+        .await
     }
 }

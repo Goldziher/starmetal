@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use ahash::AHashMap;
 use async_trait::async_trait;
 use bytes::Bytes;
+use depot_core::config::DEFAULT_MAX_UPSTREAM_BYTES;
 use depot_core::error::{DepotError, Result};
 use depot_core::package::{ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata};
 use depot_core::ports::UpstreamClient;
@@ -25,6 +26,7 @@ use super::models;
 pub struct NpmUpstreamClient {
     client: reqwest::Client,
     base_url: String,
+    max_response_bytes: u64,
     /// Cache of normalized package name -> (insertion time, raw packument JSON).
     packument_cache: Arc<RwLock<AHashMap<String, (Instant, serde_json::Value)>>>,
 }
@@ -32,6 +34,10 @@ pub struct NpmUpstreamClient {
 impl NpmUpstreamClient {
     /// Create a new upstream client targeting the given base URL.
     pub fn new(base_url: String) -> Self {
+        Self::with_max_response_bytes(base_url, DEFAULT_MAX_UPSTREAM_BYTES)
+    }
+
+    pub fn with_max_response_bytes(base_url: String, max_response_bytes: u64) -> Self {
         let client = reqwest::Client::builder()
             .connect_timeout(std::time::Duration::from_secs(30))
             .timeout(std::time::Duration::from_secs(60))
@@ -40,6 +46,7 @@ impl NpmUpstreamClient {
         Self {
             client,
             base_url,
+            max_response_bytes,
             packument_cache: Arc::new(RwLock::new(AHashMap::new())),
         }
     }
@@ -97,10 +104,9 @@ impl NpmUpstreamClient {
         }
 
         // Fetch as raw JSON Value — handles any field shape without strict typing
-        let packument: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|err| DepotError::Upstream(err.to_string()))?;
+        let packument: serde_json::Value =
+            crate::upstream_http::json_limited(response, self.max_response_bytes, "npm packument")
+                .await?;
 
         self.packument_cache
             .write()
@@ -159,9 +165,11 @@ impl UpstreamClient for NpmUpstreamClient {
             )));
         }
 
-        response
-            .bytes()
-            .await
-            .map_err(|err| DepotError::Upstream(err.to_string()))
+        crate::upstream_http::bytes_limited(
+            response,
+            self.max_response_bytes,
+            "npm tarball download",
+        )
+        .await
     }
 }

@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use bytes::Bytes;
+use depot_core::config::DEFAULT_MAX_UPSTREAM_BYTES;
 use depot_core::error::{DepotError, Result};
 use depot_core::package::{
     ArtifactDigest, ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata,
@@ -9,13 +10,19 @@ use depot_core::ports::UpstreamClient;
 pub struct NuGetUpstreamClient {
     client: reqwest::Client,
     service_index_url: String,
+    max_response_bytes: u64,
 }
 
 impl NuGetUpstreamClient {
     pub fn new(service_index_url: String) -> Self {
+        Self::with_max_response_bytes(service_index_url, DEFAULT_MAX_UPSTREAM_BYTES)
+    }
+
+    pub fn with_max_response_bytes(service_index_url: String, max_response_bytes: u64) -> Self {
         Self {
             client: reqwest::Client::new(),
             service_index_url,
+            max_response_bytes,
         }
     }
 
@@ -45,10 +52,7 @@ impl NuGetUpstreamClient {
                 response.status()
             )));
         }
-        response
-            .json()
-            .await
-            .map_err(|err| DepotError::Upstream(err.to_string()))
+        crate::upstream_http::json_limited(response, self.max_response_bytes, "NuGet JSON").await
     }
 
     async fn fetch_optional_text(&self, url: String) -> Result<Option<String>> {
@@ -67,11 +71,9 @@ impl NuGetUpstreamClient {
                 response.status()
             )));
         }
-        response
-            .text()
+        crate::upstream_http::text_limited(response, self.max_response_bytes, "NuGet text")
             .await
             .map(Some)
-            .map_err(|err| DepotError::Upstream(err.to_string()))
     }
 }
 
@@ -149,10 +151,12 @@ impl UpstreamClient for NuGetUpstreamClient {
                 response.status()
             )));
         }
-        response
-            .bytes()
-            .await
-            .map_err(|err| DepotError::Upstream(err.to_string()))
+        crate::upstream_http::bytes_limited(
+            response,
+            self.max_response_bytes,
+            "NuGet artifact download",
+        )
+        .await
     }
 }
 

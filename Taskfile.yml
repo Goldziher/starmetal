@@ -1,12 +1,42 @@
 version: "3"
 
+vars:
+  SCCACHE_BIN:
+    sh: command -v sccache || true
+
+env:
+  RUSTC_WRAPPER: "{{.SCCACHE_BIN}}"
+
 tasks:
   setup:
     desc: First-time setup — install hooks and generate AI config
     cmds:
+      - task: setup:sccache
       - task: setup:prek
       - task: setup:hooks
       - task: setup:ai-rulez
+
+  setup:sccache:
+    desc: Install sccache if it is not already available
+    status:
+      - command -v sccache
+    cmds:
+      - |
+        if ! command -v brew &> /dev/null; then
+          echo "Error: Homebrew is not installed. Install sccache manually from https://github.com/mozilla/sccache"
+          exit 1
+        fi
+        brew install sccache
+
+  sccache:stats:
+    desc: Show sccache compiler cache statistics
+    cmds:
+      - |
+        if ! command -v sccache &> /dev/null; then
+          echo "sccache is not installed. Run: task setup:sccache"
+          exit 1
+        fi
+        sccache --show-stats
 
   setup:prek:
     desc: Install prek if not present
@@ -28,12 +58,13 @@ tasks:
   setup:ai-rulez:
     desc: Generate AI assistant configuration files
     cmds:
-      - npx -y ai-rulez@latest generate
+      - npx -y ai-rulez@latest generate --gitignore
 
   test:generate:
     desc: Generate integration tests from fixtures
     cmds:
       - cargo run -p depot-test-generator -- --fixtures crates/depot-core/testing_data --output crates/depot-core/tests/generated_tests.rs
+      - cargo fmt --all
 
   schema:fetch:
     desc: Download pinned official registry schema/spec artifacts
@@ -116,6 +147,51 @@ tasks:
     cmds:
       - cargo test -p depot-integration-tests --test pubdev -- --ignored --test-threads=1
 
+  fmt:check:
+    desc: Check Rust formatting
+    cmds:
+      - cargo fmt --all -- --check
+
+  clippy:
+    desc: Run clippy with warnings denied
+    cmds:
+      - cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+  build:
+    desc: Build the workspace
+    cmds:
+      - cargo build --workspace
+
+  feature:check:
+    desc: Check representative feature flag combinations
+    cmds:
+      - cargo check -p depot-cli --no-default-features --features backend-memory
+      - cargo check -p depot-cli --no-default-features --features pypi,backend-memory
+      - cargo check -p depot-cli --no-default-features --features npm,backend-memory
+      - cargo check -p depot-cli --no-default-features --features cargo-registry,backend-memory
+      - cargo check -p depot-cli --no-default-features --features hex,backend-memory
+      - cargo check -p depot-cli --no-default-features --features maven,backend-memory
+      - cargo check -p depot-cli --no-default-features --features rubygems,backend-memory
+      - cargo check -p depot-cli --no-default-features --features nuget,backend-memory
+      - cargo check -p depot-cli --no-default-features --features pub,backend-memory
+      - cargo check -p depot-cli --all-features
+
+  deny:
+    desc: Run cargo-deny policy checks
+    cmds:
+      - cargo deny check all
+
+  audit:
+    desc: Run cargo-audit with documented temporary ignores from audit.toml
+    cmds:
+      - cargo audit --ignore RUSTSEC-2023-0071
+
+  security:
+    desc: Run Rust dependency policy and advisory checks
+    cmds:
+      - task: deny
+      - task: audit
+
   generate:
     desc: Regenerate committed artifacts
     cmds:
@@ -123,12 +199,36 @@ tasks:
       - task: test:generate
 
   check:
-    desc: Run generated artifact checks and tests
+    desc: Run PR-safe offline checks and tests
     cmds:
       - task: schema:check
+      - task: schema:validate
       - task: conformance
       - task: test:all
-      - task: test:e2e
+
+  lint:
+    desc: Run pre-commit checks across the repository
+    cmds:
+      - prek run --all-files
+
+  ci:
+    desc: Run PR-safe CI checks
+    cmds:
+      - task: fmt:check
+      - task: clippy
+      - task: build
+      - task: feature:check
+      - task: check
+      - task: security
+
+  ci:live-e2e:
+    desc: Run live upstream checks and MVP native-client E2E tests
+    cmds:
+      - task: schema:check-live
+      - task: test:e2e:pypi
+      - task: test:e2e:npm
+      - task: test:e2e:cargo
+      - task: test:e2e:hex
 
   test:all:
     desc: Run all tests

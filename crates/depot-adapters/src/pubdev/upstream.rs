@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use bytes::Bytes;
+use depot_core::config::DEFAULT_MAX_UPSTREAM_BYTES;
 use depot_core::error::{DepotError, Result};
 use depot_core::package::{
     ArtifactDigest, ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata,
@@ -9,13 +10,19 @@ use depot_core::ports::UpstreamClient;
 pub struct PubUpstreamClient {
     client: reqwest::Client,
     base_url: String,
+    max_response_bytes: u64,
 }
 
 impl PubUpstreamClient {
     pub fn new(base_url: String) -> Self {
+        Self::with_max_response_bytes(base_url, DEFAULT_MAX_UPSTREAM_BYTES)
+    }
+
+    pub fn with_max_response_bytes(base_url: String, max_response_bytes: u64) -> Self {
         Self {
             client: reqwest::Client::new(),
             base_url: base_url.trim_end_matches('/').to_string(),
+            max_response_bytes,
         }
     }
 
@@ -32,10 +39,7 @@ impl PubUpstreamClient {
                 response.status()
             )));
         }
-        response
-            .json()
-            .await
-            .map_err(|err| DepotError::Upstream(err.to_string()))
+        crate::upstream_http::json_limited(response, self.max_response_bytes, "Pub package").await
     }
 }
 
@@ -95,10 +99,12 @@ impl UpstreamClient for PubUpstreamClient {
                 response.status()
             )));
         }
-        response
-            .bytes()
-            .await
-            .map_err(|err| DepotError::Upstream(err.to_string()))
+        crate::upstream_http::bytes_limited(
+            response,
+            self.max_response_bytes,
+            "Pub archive download",
+        )
+        .await
     }
 }
 

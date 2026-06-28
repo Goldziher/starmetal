@@ -6,40 +6,39 @@ Accepted
 
 ## Context
 
-Each package ecosystem uses different hash algorithms (SHA256 for PyPI, SHA1/SHA512 for npm, SHA256 for Cargo). We need a consistent integrity guarantee across all ecosystems, and a way to pin exact artifact versions with verified hashes.
+Package ecosystems use different integrity algorithms. Depot needs one internal cache integrity
+mechanism while preserving upstream hashes where registries provide them.
+
+Depot also has a TOML lock file format, but lock verification and update CLI workflows are not part
+of the private MVP.
 
 ## Decision
 
-### Blake3 for integrity
+Depot uses Blake3 as its canonical stored-artifact integrity hash.
 
-All artifacts stored in depot are hashed with [BLAKE3](https://github.com/BLAKE3-team/BLAKE3). Blake3 is:
+Implemented cache behavior in `CachingPackageService`:
 
-- Faster than SHA-256 (especially on large artifacts)
-- Cryptographically secure
-- Consistent across ecosystems (we compute our own hash regardless of what upstream uses)
+- On artifact fetch, Depot verifies supported upstream hashes when present.
+- Depot computes a Blake3 hash for stored artifact bytes.
+- Depot stores the hash as a `.blake3` sidecar next to the artifact.
+- On cache read, Depot verifies the sidecar before serving bytes.
+- Cached artifacts without a sidecar fail closed.
 
-Upstream-provided hashes are verified on fetch when depot has a supported digest
-in metadata (PyPI/Cargo `sha256`, npm SRI `integrity`, or npm `sha1`
-`shasum`). Depot's blake3 hash then becomes the canonical cache integrity
-check.
+Supported upstream hash evidence:
 
-### Current Implementation
+| Source form | Used for |
+|-------------|----------|
+| `sha256` | PyPI, Cargo, Hex, RubyGems, pub.dev, some Maven artifacts |
+| npm SRI `integrity` | npm tarballs |
+| `sha1` | Maven checksum sidecars |
+| `sha512` | NuGet package hashes |
 
-Blake3 integrity is implemented in `CachingPackageService` (`depot-service`):
-
-- On first artifact fetch, the blake3 hash is computed and stored as a `.blake3` sidecar file alongside the artifact in storage (e.g., `pypi/requests/2.31.0/requests-2.31.0.tar.gz.blake3`).
-- On every subsequent cache read, the sidecar hash is loaded and verified against the artifact data.
-- Cached artifacts without a `.blake3` sidecar fail closed instead of being served unverified.
-- Upstream-provided hashes are preserved in `ArtifactDigest.upstream_hashes` for ecosystems that provide them.
-
-### Depot lock file
-
-We define our own TOML-based lock file format (`depot-lock.toml`) that is ecosystem-agnostic:
+Depot lock files are TOML and ecosystem-agnostic:
 
 ```toml
 [metadata]
 schema_version = 1
-generated_at = "2026-04-19T10:30:00Z"
+generated_at = "2026-06-28T00:00:00Z"
 depot_version = "0.1.0"
 
 [[packages]]
@@ -47,22 +46,27 @@ ecosystem = "pypi"
 name = "requests"
 version = "2.31.0"
 artifacts = [
-  { filename = "requests-2.31.0.tar.gz", blake3 = "d1e2f3...", size = 110293 }
+  { filename = "requests-2.31.0.tar.gz", blake3 = "d1e2f3...", size = 110293 },
 ]
 resolved_from = "https://pypi.org"
 pinned = true
 ```
 
-The lock file records:
+## Implemented
 
-- Which ecosystem and version was resolved
-- Blake3 hash and size of every artifact
-- Which upstream it was fetched from
-- Whether the pin is explicit or auto-resolved
+- Blake3 cache sidecars.
+- Upstream hash preservation in `ArtifactDigest.upstream_hashes`.
+- Lock file domain types and generated JSON Schema.
+
+## Deferred
+
+- `depot lock verify`.
+- `depot lock update`.
+- Full sync workflows based on lock files.
+- Replacing ecosystem-native lock files.
 
 ## Consequences
 
-- A single lock file captures the full dependency state across all ecosystems.
-- Integrity verification is uniform — one algorithm, one code path.
-- The lock file is human-readable (TOML) and diff-friendly for version control.
-- We do not replace ecosystem-specific lock files (package-lock.json, Cargo.lock, etc.) — depot's lock file tracks what's in the registry, not what's in a project.
+- Stored artifacts have one uniform internal integrity check.
+- Upstream integrity remains available for provenance and ecosystem-specific responses.
+- Lock files describe Depot registry state, not application dependency resolution.

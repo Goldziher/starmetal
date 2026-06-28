@@ -77,6 +77,7 @@ async fn package<S: HasPubState>(
 ) -> Result<Response, (StatusCode, String)> {
     let name = PackageName::new(name.to_ascii_lowercase());
     let service = state.package_service();
+    let base_url = crate::public_base_url(state.config(), &headers);
     let mut package: serde_json::Value = if let Some(raw) = service
         .get_raw_upstream(Ecosystem::Pub, &name)
         .await
@@ -87,7 +88,7 @@ async fn package<S: HasPubState>(
     } else {
         let fetched = match state.pub_upstream().fetch_package_json(&name).await {
             Ok(fetched) => fetched,
-            Err(_) => build_local_package(service.as_ref(), &name, &host_base(&headers))
+            Err(_) => build_local_package(service.as_ref(), &name, &base_url)
                 .await
                 .map_err(|err| map_error(&err))?,
         };
@@ -104,7 +105,7 @@ async fn package<S: HasPubState>(
     validate_package(service.as_ref(), &name, &package)
         .await
         .map_err(|err| map_error(&err))?;
-    rewrite_archive_urls(&mut package, &host_base(&headers));
+    rewrite_archive_urls(&mut package, &base_url);
     Ok(json_response(package))
 }
 
@@ -160,9 +161,9 @@ async fn version<S: HasPubState>(
         .get_version_metadata(Ecosystem::Pub, &name, &version)
         .await
         .map_err(|err| map_error(&err))?;
+    let base_url = crate::public_base_url(state.config(), &headers);
     let archive_url = format!(
-        "{}/pub/api/archives/{}-{version}.tar.gz",
-        host_base(&headers),
+        "{base_url}/pub/api/archives/{}-{version}.tar.gz",
         name.as_str()
     );
     Ok(json_response(serde_json::json!({
@@ -240,14 +241,6 @@ fn parse_archive_filename(filename: &str) -> Option<(&str, &str)> {
     None
 }
 
-fn host_base(headers: &HeaderMap) -> String {
-    let host = headers
-        .get(header::HOST)
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or("localhost:8080");
-    format!("http://{host}")
-}
-
 fn json_response(value: serde_json::Value) -> Response {
     (
         [(header::CONTENT_TYPE, "application/json")],
@@ -257,16 +250,8 @@ fn json_response(value: serde_json::Value) -> Response {
 }
 
 fn map_error(err: &DepotError) -> (StatusCode, String) {
-    match err {
-        DepotError::PackageNotFound { .. }
-        | DepotError::VersionNotFound { .. }
-        | DepotError::ArtifactNotFound(_) => (StatusCode::NOT_FOUND, err.to_string()),
-        DepotError::PolicyViolation(_) => (StatusCode::FORBIDDEN, err.to_string()),
-        DepotError::Adapter(_) => (StatusCode::BAD_REQUEST, err.to_string()),
-        DepotError::Publish(_) => (StatusCode::CONFLICT, err.to_string()),
-        DepotError::Upstream(_) => (StatusCode::BAD_GATEWAY, err.to_string()),
-        _ => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
-    }
+    tracing::warn!(error = %err, "Pub adapter request failed");
+    crate::map_public_error(err)
 }
 
 fn authorize_publish<S: HasPubState>(

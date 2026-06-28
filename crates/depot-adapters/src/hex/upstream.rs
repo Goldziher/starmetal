@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use ahash::AHashMap;
 use async_trait::async_trait;
 use bytes::Bytes;
+use depot_core::config::DEFAULT_MAX_UPSTREAM_BYTES;
 use depot_core::error::{DepotError, Result};
 use depot_core::package::{ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata};
 use depot_core::ports::UpstreamClient;
@@ -26,6 +27,7 @@ pub struct HexUpstreamClient {
     client: reqwest::Client,
     base_url: String,
     repo_url: String,
+    max_response_bytes: u64,
     /// Cache of normalized package name -> package response, so multiple calls
     /// for the same package (e.g. fetch_versions then N x fetch_metadata) only
     /// hit upstream once.
@@ -44,6 +46,14 @@ impl HexUpstreamClient {
     /// `base_url` is the API domain (e.g., `https://hex.pm`).
     /// `repo_url` is the repository domain for tarball downloads (e.g., `https://repo.hex.pm`).
     pub fn new(base_url: String, repo_url: String) -> Self {
+        Self::with_max_response_bytes(base_url, repo_url, DEFAULT_MAX_UPSTREAM_BYTES)
+    }
+
+    pub fn with_max_response_bytes(
+        base_url: String,
+        repo_url: String,
+        max_response_bytes: u64,
+    ) -> Self {
         let client = reqwest::Client::builder()
             .connect_timeout(std::time::Duration::from_secs(30))
             .timeout(std::time::Duration::from_secs(60))
@@ -54,6 +64,7 @@ impl HexUpstreamClient {
             client,
             base_url,
             repo_url,
+            max_response_bytes,
             package_cache: Arc::new(RwLock::new(AHashMap::new())),
             registry_cache: Arc::new(RwLock::new(AHashMap::new())),
         }
@@ -98,10 +109,9 @@ impl HexUpstreamClient {
             )));
         }
 
-        let pkg: HexPackage = response
-            .json()
-            .await
-            .map_err(|err| DepotError::Upstream(err.to_string()))?;
+        let pkg: HexPackage =
+            crate::upstream_http::json_limited(response, self.max_response_bytes, "Hex package")
+                .await?;
 
         // Populate cache
         self.package_cache
@@ -166,10 +176,12 @@ impl HexUpstreamClient {
             )));
         }
 
-        let bytes = response
-            .bytes()
-            .await
-            .map_err(|err| DepotError::Upstream(err.to_string()))?;
+        let bytes = crate::upstream_http::bytes_limited(
+            response,
+            self.max_response_bytes,
+            "Hex registry protobuf",
+        )
+        .await?;
 
         self.registry_cache
             .write()
@@ -236,10 +248,12 @@ impl UpstreamClient for HexUpstreamClient {
             )));
         }
 
-        response
-            .bytes()
-            .await
-            .map_err(|err| DepotError::Upstream(err.to_string()))
+        crate::upstream_http::bytes_limited(
+            response,
+            self.max_response_bytes,
+            "Hex tarball download",
+        )
+        .await
     }
 }
 
