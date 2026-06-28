@@ -1,0 +1,13 @@
+.git
+.github
+.agents
+.cache
+.DS_Store
+
+target
+depot-data
+starmetal-data
+
+*.log
+*.tmp
+tmp

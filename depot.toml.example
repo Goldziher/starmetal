@@ -4,17 +4,17 @@
 [server]
 bind = "127.0.0.1:8080"
 # Set when Starmetal is behind a reverse proxy so package metadata emits stable URLs.
-# public_base_url = "https://depot.internal.example.com"
+# public_base_url = "https://starmetal.internal.example.com"
 # Empty means browser clients are not allowed cross-origin access.
 cors_allowed_origins = []
 max_upload_bytes = 536870912
 
 [storage]
 backend = "fs"            # fs | s3 | gcs | memory
-path = "/var/lib/depot"
+path = "/var/lib/starmetal"
 
 # [storage.s3]
-# bucket = "depot-packages"
+# bucket = "starmetal-packages"
 # region = "us-east-1"
 # endpoint = "https://s3.amazonaws.com"
 

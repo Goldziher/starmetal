@@ -3,6 +3,7 @@ use axum::http::HeaderValue;
 use axum::http::Method;
 use axum::http::header;
 use axum::middleware;
+use axum::routing::get;
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::limit::RequestBodyLimitLayer;
@@ -14,7 +15,7 @@ use crate::state::AppState;
 /// Build the axum application with all middleware and adapter routes.
 pub fn build_app(state: AppState) -> Router {
     #[allow(unused_mut)]
-    let mut app = Router::new();
+    let mut app = Router::new().route("/healthz", get(healthz));
 
     #[cfg(feature = "pypi")]
     {
@@ -83,6 +84,10 @@ pub fn build_app(state: AppState) -> Router {
         ))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
+}
+
+async fn healthz() -> &'static str {
+    "ok"
 }
 
 fn cors_layer(state: &AppState) -> CorsLayer {

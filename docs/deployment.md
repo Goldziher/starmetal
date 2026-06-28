@@ -12,7 +12,68 @@ Supported deployment posture:
 - Native publishing disabled.
 - Experimental local publishing disabled unless testing it intentionally.
 
-## Build
+## Container Deploy
+
+Docker is the primary private-MVP deployment path. The Dockerfile uses Chainguard images for both
+the Rust builder and the shell-less glibc runtime, pins the default image digests, and runs the final
+container as non-root UID/GID `65532`. The single image is used for both modes: `ENTRYPOINT` is
+`sm`, and `CMD` is `serve`.
+
+Build the default image:
+
+```sh
+docker build -t starmetal:local .
+```
+
+Run the repeatable container pressure test:
+
+```sh
+task docker:pressure
+```
+
+The pressure test starts the image with a named volume, warms the PyPI route, fetches a real artifact
+through Starmetal, verifies the OpenDAL filesystem writes and Blake3 sidecar, and sends concurrent
+requests against cached metadata and artifact routes.
+
+With no extra args, the image runs `sm serve`, reads `/etc/starmetal/depot.toml`, listens on
+`0.0.0.0:8080`, and uses OpenDAL filesystem storage rooted at `/var/lib/starmetal`.
+
+```sh
+docker run --rm \
+  --publish 8080:8080 \
+  --volume starmetal-data:/var/lib/starmetal \
+  starmetal:local
+```
+
+Passing args after the image name overrides the default `serve` command and runs the same binary as a
+CLI or MCP tool:
+
+```sh
+docker run --rm starmetal:local config validate
+docker run --rm starmetal:local registry list
+docker run --rm starmetal:local mcp serve
+```
+
+For production settings, bind-mount a config file. Keep real auth and publishing tokens out of the
+repository.
+
+```sh
+docker run --rm \
+  --publish 8080:8080 \
+  --volume "$PWD/depot.toml:/etc/starmetal/depot.toml:ro" \
+  --volume starmetal-data:/var/lib/starmetal \
+  starmetal:local
+```
+
+Build a smaller MVP-read image by compiling only the read candidate adapters and filesystem storage:
+
+```sh
+docker build \
+  --build-arg CARGO_FEATURES=pypi,npm,cargo-registry,hex,backend-fs \
+  -t starmetal:mvp .
+```
+
+## Build From Source
 
 ```sh
 cargo build --release -p depot-cli
@@ -39,7 +100,7 @@ Private MVP baseline:
 
 ```toml
 [server]
-bind = "127.0.0.1:8080"
+bind = "0.0.0.0:8080"
 
 [storage]
 backend = "fs"
@@ -104,6 +165,47 @@ For a release binary:
 
 Starmetal serves HTTP. Put it behind a private network boundary or a TLS-terminating reverse proxy. Do
 not expose the MVP server directly to the public internet.
+
+## OpenDAL Storage
+
+Starmetal passes `[storage]` to OpenDAL. The `backend` value selects the OpenDAL service, and
+`[storage.options]` carries backend-specific key-value options.
+
+Filesystem storage:
+
+```toml
+[storage]
+backend = "fs"
+
+[storage.options]
+root = "/var/lib/starmetal"
+```
+
+S3-compatible storage:
+
+```toml
+[storage]
+backend = "s3"
+
+[storage.s3]
+bucket = "starmetal-packages"
+region = "us-east-1"
+# endpoint = "https://s3.amazonaws.com"
+```
+
+GCS storage:
+
+```toml
+[storage]
+backend = "gcs"
+
+[storage.gcs]
+bucket = "starmetal-packages"
+# credential_path = "/run/secrets/gcs.json"
+```
+
+Additional OpenDAL options can be supplied under `[storage.options]` when a deployment needs a
+backend knob that is not modeled by the typed `s3` or `gcs` sections.
 
 ## Authentication
 

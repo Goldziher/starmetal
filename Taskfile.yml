@@ -55,6 +55,46 @@ tasks:
     cmds:
       - prek install
 
+  docker:build:
+    desc: Build the local Starmetal container image
+    cmds:
+      - docker build --tag starmetal:local .
+
+  docker:smoke:
+    desc: Build the image and smoke-test CLI and API container modes
+    cmds:
+      - task: docker:build
+      - docker run --rm starmetal:local --version
+      - docker run --rm starmetal:local config validate
+      - |
+        set -eu
+        container_id="$(docker run --rm --detach --publish 127.0.0.1::8080 starmetal:local)"
+        cleanup() {
+          docker logs "$container_id" >/dev/null 2>&1 || true
+          docker rm --force "$container_id" >/dev/null 2>&1 || true
+        }
+        trap cleanup EXIT
+        port="$(docker port "$container_id" 8080/tcp | awk -F: '{print $NF}')"
+        for _ in $(seq 1 30); do
+          if curl --fail --silent --show-error --output /dev/null "http://127.0.0.1:${port}/healthz"; then
+            exit 0
+          fi
+          sleep 1
+        done
+        docker logs "$container_id"
+        exit 1
+
+  docker:pressure:
+    desc: Build the image and pressure-test HTTP and OpenDAL filesystem storage
+    cmds:
+      - task: docker:build
+      - ./docker/pressure-test.sh
+
+  docker:run:
+    desc: Run Starmetal with filesystem storage in a Docker volume
+    cmds:
+      - docker run --rm --publish 8080:8080 --volume starmetal-data:/var/lib/starmetal starmetal:local
+
   setup:ai-rulez:
     desc: Generate AI assistant configuration files
     cmds:

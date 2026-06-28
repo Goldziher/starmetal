@@ -1,7 +1,7 @@
 <!-- markdownlint-disable MD013 MD033 MD041 -->
 <div align="center">
 
-<img src="docs/media/starmetal-banner.svg" alt="Starmetal — SM package registry mark" width="820">
+<img src="docs/media/starmetal-banner.svg" alt="StarMetal - armored registry proxy" width="820">
 
 **Multi-language, high-performance, self-hosted package registry and registry proxy.**
 
@@ -19,7 +19,7 @@ PyPI · npm · Cargo · Hex · Maven · RubyGems · NuGet · pub.dev · Blake3 i
 [![Rust 2024](https://img.shields.io/badge/rust-2024-orange?style=flat-square)](https://www.rust-lang.org/)
 [![License: BUSL-1.1](https://img.shields.io/badge/license-BUSL--1.1-blue?style=flat-square)](LICENSE)
 
-[Quick Start](#quick-start) · [Registry Support](#registry-support) · [Deployment](#deployment) · [Architecture](#architecture) · [ADRs](#adrs)
+[Quick Start](#quick-start) · [Registry Support](#registry-support) · [Docker](#docker) · [Deployment](#deployment) · [Architecture](#architecture) · [ADRs](#adrs)
 
 </div>
 
@@ -105,6 +105,32 @@ task test:e2e:hex
 ```
 
 `task ci:live-e2e` runs the same MVP live gate plus live schema freshness checks.
+
+## Docker
+
+Docker is the primary deployment path for private MVP installs. The image uses Chainguard builder and
+runtime bases, runs as non-root, and uses one image for both API and CLI operations. Its entrypoint is
+`sm`; its default command is `serve`, so no args starts the API server, and args after the image name
+run normal CLI or MCP commands.
+
+```bash
+docker build -t starmetal:local .
+docker run --rm -p 8080:8080 -v starmetal-data:/var/lib/starmetal starmetal:local
+docker run --rm starmetal:local config validate
+```
+
+Use a mounted config file for production settings, auth tokens, `public_base_url`, and S3/GCS
+OpenDAL options:
+
+```bash
+docker run --rm \
+  -p 8080:8080 \
+  -v ./depot.toml:/etc/starmetal/depot.toml:ro \
+  -v starmetal-data:/var/lib/starmetal \
+  starmetal:local
+```
+
+The default container config is [docker/starmetal.toml](docker/starmetal.toml).
 
 ## Configuration
 

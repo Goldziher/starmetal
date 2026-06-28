@@ -1,110 +1,95 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 340" width="1200" height="340" role="img" aria-label="Starmetal — forged star metal mark">
-  <title>Starmetal — forged star metal mark</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 340" width="1200" height="340" role="img" aria-label="StarMetal - armored registry proxy">
+  <title>StarMetal - armored registry proxy</title>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#050a12"/>
-      <stop offset="52%" stop-color="#08131c"/>
-      <stop offset="100%" stop-color="#160f09"/>
+      <stop offset="0%" stop-color="#050814"/>
+      <stop offset="52%" stop-color="#090f1d"/>
+      <stop offset="100%" stop-color="#0d080d"/>
     </linearGradient>
+    <radialGradient id="nebula" cx="50%" cy="46%" r="60%">
+      <stop offset="0%" stop-color="#27324f" stop-opacity="0.52"/>
+      <stop offset="54%" stop-color="#111827" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#02030a" stop-opacity="0"/>
+    </radialGradient>
     <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#ffe8a3"/>
-      <stop offset="44%" stop-color="#fbbf24"/>
-      <stop offset="100%" stop-color="#b45309"/>
+      <stop offset="44%" stop-color="#d69b2c"/>
+      <stop offset="100%" stop-color="#6f3f13"/>
     </linearGradient>
     <linearGradient id="steel" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#f8fafc"/>
-      <stop offset="42%" stop-color="#94a3b8"/>
-      <stop offset="100%" stop-color="#334155"/>
+      <stop offset="0%" stop-color="#f0f3f8"/>
+      <stop offset="42%" stop-color="#9aa5b5"/>
+      <stop offset="100%" stop-color="#303949"/>
     </linearGradient>
-    <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#67e8f9"/>
-      <stop offset="100%" stop-color="#0e7490"/>
+    <linearGradient id="name" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f4f7fb"/>
+      <stop offset="45%" stop-color="#aab4c4"/>
+      <stop offset="100%" stop-color="#4b5568"/>
     </linearGradient>
-    <radialGradient id="heat" cx="50%" cy="48%" r="56%">
-      <stop offset="0%" stop-color="#facc15" stop-opacity="0.42"/>
-      <stop offset="42%" stop-color="#f97316" stop-opacity="0.16"/>
-      <stop offset="100%" stop-color="#020617" stop-opacity="0"/>
-    </radialGradient>
+    <linearGradient id="rule" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#6b7280" stop-opacity="0"/>
+      <stop offset="34%" stop-color="#8a3946" stop-opacity="0.72"/>
+      <stop offset="66%" stop-color="#3f5f90" stop-opacity="0.72"/>
+      <stop offset="100%" stop-color="#6b7280" stop-opacity="0"/>
+    </linearGradient>
     <clipPath id="frame">
       <rect width="1200" height="340" rx="18"/>
     </clipPath>
   </defs>
-  <g clip-path="url(#frame)" shape-rendering="crispEdges">
+  <g clip-path="url(#frame)">
     <rect width="1200" height="340" fill="url(#bg)"/>
-    <rect width="1200" height="340" fill="url(#heat)"/>
+    <rect width="1200" height="340" fill="url(#nebula)"/>
+    <rect width="1200" height="340" fill="#01030a" opacity="0.22"/>
 
-    <g opacity="0.18">
-      <path d="M0 74H1200M0 122H1200M0 170H1200M0 218H1200M0 266H1200" stroke="#64748b" stroke-width="2"/>
-      <path d="M120 0V340M216 0V340M312 0V340M408 0V340M504 0V340M600 0V340M696 0V340M792 0V340M888 0V340M984 0V340M1080 0V340" stroke="#f59e0b" stroke-width="2"/>
+    <g fill="#d8dde8" opacity="0.76">
+      <circle cx="72" cy="52" r="1.3"/><circle cx="143" cy="133" r="1"/><circle cx="221" cy="73" r="1.2"/>
+      <circle cx="319" cy="114" r="1"/><circle cx="401" cy="45" r="1.3"/><circle cx="487" cy="104" r="1"/>
+      <circle cx="572" cy="58" r="1.2"/><circle cx="666" cy="92" r="1"/><circle cx="736" cy="42" r="1.3"/>
+      <circle cx="831" cy="118" r="1"/><circle cx="921" cy="54" r="1"/><circle cx="1036" cy="86" r="1.3"/>
+      <circle cx="1128" cy="142" r="1"/><circle cx="96" cy="232" r="1"/><circle cx="1080" cy="222" r="1.2"/>
+    </g>
+    <g stroke="#b9c0cf" stroke-width="2" stroke-linecap="square" opacity="0.42">
+      <path d="M164 48h20M174 38v20"/><path d="M1010 76h22M1021 65v22"/><path d="M286 194h16M294 186v16"/>
     </g>
 
-    <rect x="72" y="52" width="1056" height="236" rx="10" fill="#07111b" stroke="#204354" stroke-width="4"/>
-    <rect x="104" y="250" width="992" height="16" fill="#172554"/>
-    <rect x="160" y="234" width="880" height="16" fill="#334155"/>
+    <rect x="118" y="54" width="964" height="224" rx="10" fill="#060b15" opacity="0.72" stroke="#27324f" stroke-width="2"/>
+    <rect x="260" y="252" width="680" height="3" fill="url(#rule)"/>
 
-    <!-- Meteor trail and scattered ore -->
-    <rect x="154" y="102" width="80" height="16" fill="#fbbf24"/>
-    <rect x="234" y="118" width="96" height="16" fill="#f59e0b"/>
-    <rect x="330" y="134" width="80" height="16" fill="#92400e"/>
-    <rect x="174" y="118" width="24" height="24" fill="#67e8f9"/>
-    <rect x="978" y="94" width="40" height="40" fill="#fbbf24"/>
-    <rect x="946" y="134" width="24" height="24" fill="#94a3b8"/>
-    <rect x="1018" y="166" width="24" height="24" fill="#38bdf8"/>
-
-    <!-- Forged eight-point star ingot -->
-    <g transform="translate(432 52)">
+    <g transform="translate(501 34) scale(0.56)" shape-rendering="crispEdges">
       <rect x="144" y="0" width="64" height="32" fill="url(#steel)"/>
-      <rect x="112" y="32" width="128" height="32" fill="#cbd5e1"/>
-      <rect x="80" y="64" width="192" height="32" fill="#94a3b8"/>
-      <rect x="48" y="96" width="256" height="32" fill="#64748b"/>
-      <rect x="16" y="128" width="320" height="32" fill="#475569"/>
-      <rect x="48" y="160" width="256" height="32" fill="#334155"/>
-      <rect x="80" y="192" width="192" height="32" fill="#1e293b"/>
-      <rect x="112" y="224" width="128" height="16" fill="#0f172a"/>
+      <rect x="112" y="32" width="128" height="32" fill="#c4cad4"/>
+      <rect x="80" y="64" width="192" height="32" fill="#8d98a8"/>
+      <rect x="48" y="96" width="256" height="32" fill="#667184"/>
+      <rect x="16" y="128" width="320" height="32" fill="#485367"/>
+      <rect x="48" y="160" width="256" height="32" fill="#333d4f"/>
+      <rect x="80" y="192" width="192" height="32" fill="#1d2636"/>
+      <rect x="112" y="224" width="128" height="16" fill="#0d1422"/>
 
       <rect x="144" y="64" width="64" height="32" fill="url(#gold)"/>
-      <rect x="112" y="96" width="128" height="32" fill="#fbbf24"/>
-      <rect x="80" y="128" width="192" height="32" fill="#f59e0b"/>
-      <rect x="112" y="160" width="128" height="32" fill="#d97706"/>
-      <rect x="144" y="192" width="64" height="32" fill="#92400e"/>
+      <rect x="112" y="96" width="128" height="32" fill="#d69b2c"/>
+      <rect x="80" y="128" width="192" height="32" fill="#b87419"/>
+      <rect x="112" y="160" width="128" height="32" fill="#8c4f17"/>
+      <rect x="144" y="192" width="64" height="32" fill="#593011"/>
 
-      <rect x="16" y="96" width="64" height="32" fill="#f8fafc"/>
-      <rect x="272" y="96" width="64" height="32" fill="#f8fafc"/>
-      <rect x="48" y="64" width="64" height="32" fill="#cbd5e1"/>
-      <rect x="240" y="64" width="64" height="32" fill="#cbd5e1"/>
-      <rect x="48" y="160" width="64" height="32" fill="#334155"/>
-      <rect x="240" y="160" width="64" height="32" fill="#334155"/>
+      <rect x="16" y="96" width="64" height="32" fill="#edf1f7"/>
+      <rect x="272" y="96" width="64" height="32" fill="#edf1f7"/>
+      <rect x="48" y="64" width="64" height="32" fill="#c4cad4"/>
+      <rect x="240" y="64" width="64" height="32" fill="#c4cad4"/>
+      <rect x="48" y="160" width="64" height="32" fill="#303949"/>
+      <rect x="240" y="160" width="64" height="32" fill="#303949"/>
 
-      <rect x="144" y="96" width="32" height="32" fill="#fff7ed"/>
-      <rect x="176" y="128" width="32" height="32" fill="#fde68a"/>
-      <rect x="208" y="96" width="32" height="32" fill="#f59e0b"/>
-      <rect x="112" y="160" width="32" height="32" fill="#78350f"/>
+      <rect x="144" y="96" width="32" height="32" fill="#fff7e7"/>
+      <rect x="176" y="128" width="32" height="32" fill="#e9c46a"/>
+      <rect x="208" y="96" width="32" height="32" fill="#b87419"/>
+      <rect x="112" y="160" width="32" height="32" fill="#4a260d"/>
     </g>
 
-    <!-- Pixel sparks around the star metal -->
-    <rect x="386" y="84" width="16" height="16" fill="#fde68a"/>
-    <rect x="402" y="116" width="16" height="16" fill="#38bdf8"/>
-    <rect x="786" y="84" width="16" height="16" fill="#fde68a"/>
-    <rect x="770" y="132" width="16" height="16" fill="#67e8f9"/>
-    <rect x="360" y="196" width="16" height="16" fill="#f59e0b"/>
-    <rect x="824" y="204" width="16" height="16" fill="#f8fafc"/>
-
-    <!-- SM mark built into the base plate -->
-    <g transform="translate(470 244)">
-      <rect x="0" y="0" width="32" height="12" fill="url(#cyan)"/>
-      <rect x="0" y="12" width="12" height="12" fill="url(#cyan)"/>
-      <rect x="0" y="24" width="32" height="12" fill="url(#cyan)"/>
-      <rect x="20" y="36" width="12" height="12" fill="url(#cyan)"/>
-      <rect x="0" y="48" width="32" height="12" fill="url(#cyan)"/>
-
-      <rect x="72" y="0" width="12" height="60" fill="url(#gold)"/>
-      <rect x="84" y="12" width="12" height="12" fill="url(#gold)"/>
-      <rect x="96" y="24" width="12" height="12" fill="url(#gold)"/>
-      <rect x="108" y="12" width="12" height="12" fill="url(#gold)"/>
-      <rect x="120" y="0" width="12" height="60" fill="url(#gold)"/>
+    <g transform="skewX(-8 600 209)">
+      <text x="600" y="222" fill="#060913" opacity="0.86" font-family="'Arial Black', Impact, sans-serif" font-size="78" font-weight="900" text-anchor="middle" letter-spacing="1">StarMetal</text>
+      <text x="600" y="216" fill="url(#name)" font-family="'Arial Black', Impact, sans-serif" font-size="78" font-weight="900" text-anchor="middle" letter-spacing="1">StarMetal</text>
     </g>
 
-    <text x="600" y="314" fill="#94a3b8" font-family="'Courier New', monospace" font-size="20" text-anchor="middle" letter-spacing="4">STARMETAL</text>
-    <rect x="72" y="52" width="1056" height="236" rx="10" fill="none" stroke="url(#cyan)" stroke-opacity="0.35" stroke-width="2"/>
+    <text x="600" y="291" fill="#a9b1c0" font-family="'Courier New', monospace" font-size="24" font-weight="700" text-anchor="middle" letter-spacing="5">ARMORED REGISTRY PROXY</text>
+    <rect width="1200" height="340" rx="18" fill="none" stroke="#25304d" stroke-width="2" opacity="0.72"/>
   </g>
 </svg>

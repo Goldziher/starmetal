@@ -1,0 +1,20 @@
+# Container default configuration for Starmetal.
+# Override by bind-mounting a config file and setting DEPOT_CONFIG.
+
+[server]
+bind = "0.0.0.0:8080"
+cors_allowed_origins = []
+max_upload_bytes = 536870912
+
+[storage]
+backend = "fs"
+
+[storage.options]
+root = "/var/lib/starmetal"
+
+[auth]
+enabled = false
+tokens = []
+
+[publishing]
+enabled = false
