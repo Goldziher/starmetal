@@ -58,7 +58,7 @@ jsonschema = "0.46"
 memchr = "2"
 
 # Storage
-opendal = "0.56"
+opendal = "0.57"
 prost = "0.14"
 
 # HTTP client
