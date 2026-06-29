@@ -85,16 +85,49 @@ tasks:
         exit 1
 
   docker:pressure:
-    desc: Build the image and pressure-test HTTP and OpenDAL filesystem storage
+    desc: Alias for the live PyPI Docker pressure test
+    cmds:
+      - task: docker:pressure:live
+
+  docker:pressure:live:
+    desc: Build the image and pressure-test Docker against live PyPI
     cmds:
       - task: docker:build
       - ./docker/pressure-test.sh
 
+  docker:proxy:e2e:
+    desc: Run deterministic Docker proxy HTTP, native-client, and pnpm E2E tests
+    cmds:
+      - task: docker:build
+      - STARMETAL_PROXY_E2E_SKIP_BUILD=1 ./docker/proxy-e2e/run.sh --http
+      - STARMETAL_PROXY_E2E_SKIP_BUILD=1 ./docker/proxy-e2e/run.sh --native
+      - STARMETAL_PROXY_E2E_SKIP_BUILD=1 ./docker/proxy-e2e/run.sh --pnpm
+
+  docker:proxy:e2e:http:
+    desc: Run deterministic Docker proxy HTTP E2E tests for all implemented registries
+    cmds:
+      - ./docker/proxy-e2e/run.sh --http
+
+  docker:proxy:e2e:native:
+    desc: Run native-client Docker proxy E2E tests without read auth
+    cmds:
+      - ./docker/proxy-e2e/run.sh --native
+
+  docker:proxy:e2e:pnpm:
+    desc: Run pnpm Docker proxy E2E tests for read-through cache and local npm publish/install
+    cmds:
+      - ./docker/proxy-e2e/run.sh --pnpm
+
+  docker:proxy:e2e:live:
+    desc: Run live Docker proxy E2E tests when available
+    cmds:
+      - ./docker/proxy-e2e/run.sh --live
+
   docker:integration:
-    desc: Run Docker smoke and pressure integration tests
+    desc: Run Docker smoke and deterministic proxy integration tests
     cmds:
       - task: docker:smoke
-      - ./docker/pressure-test.sh
+      - task: docker:proxy:e2e
 
   docker:run:
     desc: Run Starmetal with filesystem storage in a Docker volume

@@ -34,8 +34,10 @@ This starts a local fixture upstream, starts the StarMetal image with a mounted 
 OpenDAL filesystem volume, exercises all implemented registry proxy routes with HTTP assertions,
 runs native client containers for PyPI, npm, Cargo, Maven, RubyGems, NuGet, and pub.dev, stops the
 fixture upstream, restarts StarMetal with the same volume, and verifies the cached routes still
-work. Native clients run without read auth; the HTTP pass covers Bearer auth, CORS, response limits,
-URL rewriting, cache writes, and sanitized error responses.
+work. It also runs pnpm read-through install, cached reinstall with a fresh pnpm store, and
+experimental local npm publish-then-install. Native clients run without read auth; the HTTP pass
+covers Bearer auth, CORS, response limits, URL rewriting, cache writes, and sanitized error
+responses.
 
 Run the live PyPI container pressure test when you want public-network pressure coverage:
 
@@ -289,8 +291,8 @@ task conformance
 task docker:proxy:e2e
 ```
 
-Use `task docker:proxy:e2e:http` or `task docker:proxy:e2e:native` for targeted Docker proxy
-debugging.
+Use `task docker:proxy:e2e:http`, `task docker:proxy:e2e:native`, or
+`task docker:proxy:e2e:pnpm` for targeted Docker proxy debugging.
 
 Live read E2E:
 

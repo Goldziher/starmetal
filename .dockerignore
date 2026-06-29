@@ -1,11 +1,13 @@
 .git
 .github
 .agents
+.artifacts
 .cache
 .DS_Store
 
 target
 starmetal-data
+**/__pycache__
 
 *.log
 *.tmp

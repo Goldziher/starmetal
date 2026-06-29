@@ -151,9 +151,10 @@ task docker:proxy:e2e
 That gate builds the image, runs a local fixture upstream plus StarMetal on an isolated Docker
 network, exercises every implemented registry route with HTTP assertions, runs native client
 containers for PyPI, npm, Cargo, Maven, RubyGems, NuGet, and pub.dev, restarts StarMetal with the
-same OpenDAL filesystem volume, and repeats the checks with the fixture upstream stopped. The native
-client pass disables read auth because package-manager support for Bearer read auth is uneven; the
-HTTP pass covers auth behavior.
+same OpenDAL filesystem volume, and repeats the checks with the fixture upstream stopped. It also
+runs pnpm read-through install, cached reinstall with a fresh pnpm store, and experimental local npm
+publish-then-install. The native client pass disables read auth because package-manager support for
+Bearer read auth is uneven; the HTTP pass covers auth behavior.
 
 Use a mounted config file for production settings, auth tokens, `public_base_url`, and S3/GCS
 OpenDAL options:
