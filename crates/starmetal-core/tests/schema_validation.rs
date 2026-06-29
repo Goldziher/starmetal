@@ -1,3 +1,6 @@
+use std::collections::BTreeSet;
+
+use serde_json::Map;
 use serde_json::Value;
 
 /// Resolve the workspace root from CARGO_MANIFEST_DIR (starmetal-core -> workspace).
@@ -15,6 +18,86 @@ fn load_schema(relative_path: &str) -> Value {
         .unwrap_or_else(|e| panic!("failed to read schema {}: {e}", path.display()));
     serde_json::from_str(&content)
         .unwrap_or_else(|e| panic!("failed to parse schema {}: {e}", path.display()))
+}
+
+fn load_text(relative_path: &str) -> String {
+    let path = workspace_root().join(relative_path);
+    std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()))
+}
+
+fn collect_config_schema_paths(schema: &Value) -> BTreeSet<String> {
+    let definitions = schema
+        .get("$defs")
+        .and_then(Value::as_object)
+        .expect("config schema should have $defs");
+    let properties = schema
+        .get("properties")
+        .and_then(Value::as_object)
+        .expect("config schema should have top-level properties");
+    let mut paths = BTreeSet::new();
+
+    for (name, property_schema) in properties {
+        paths.insert(name.clone());
+        collect_child_schema_paths(name, property_schema, definitions, &mut paths);
+    }
+
+    paths
+}
+
+fn collect_child_schema_paths(
+    prefix: &str,
+    schema: &Value,
+    definitions: &Map<String, Value>,
+    paths: &mut BTreeSet<String>,
+) {
+    if let Some(reference) = schema.get("$ref").and_then(Value::as_str)
+        && let Some(definition) = definition_for_ref(reference, definitions)
+    {
+        collect_object_property_paths(prefix, definition, definitions, paths);
+    }
+
+    if let Some(additional_properties) = schema.get("additionalProperties") {
+        let wildcard_path = format!("{prefix}.*");
+        collect_child_schema_paths(&wildcard_path, additional_properties, definitions, paths);
+    }
+
+    if let Some(options) = schema.get("anyOf").and_then(Value::as_array) {
+        for option in options {
+            collect_child_schema_paths(prefix, option, definitions, paths);
+        }
+    }
+
+    if let Some(items) = schema.get("items") {
+        let item_path = format!("{prefix}.*");
+        collect_child_schema_paths(&item_path, items, definitions, paths);
+    }
+
+    collect_object_property_paths(prefix, schema, definitions, paths);
+}
+
+fn collect_object_property_paths(
+    prefix: &str,
+    schema: &Value,
+    definitions: &Map<String, Value>,
+    paths: &mut BTreeSet<String>,
+) {
+    if let Some(properties) = schema.get("properties").and_then(Value::as_object) {
+        for (name, property_schema) in properties {
+            let path = format!("{prefix}.{name}");
+            paths.insert(path.clone());
+            collect_child_schema_paths(&path, property_schema, definitions, paths);
+        }
+    }
+}
+
+fn definition_for_ref<'a>(
+    reference: &str,
+    definitions: &'a Map<String, Value>,
+) -> Option<&'a Value> {
+    reference
+        .strip_prefix("#/$defs/")
+        .and_then(|name| definitions.get(name))
 }
 
 fn validate(schema_value: &Value, instance: &Value) -> std::result::Result<(), String> {
@@ -293,6 +376,22 @@ fn should_validate_config_sample_against_schema() {
     .unwrap();
 
     validate(&schema, &sample).expect("config sample should validate against schema");
+}
+
+#[test]
+fn should_document_every_config_schema_field() {
+    let schema = load_schema("schemas/starmetal/config.schema.json");
+    let docs = load_text("docs/configuration.md");
+    let missing_paths: Vec<String> = collect_config_schema_paths(&schema)
+        .into_iter()
+        .filter(|path| !docs.contains(path))
+        .collect();
+
+    assert!(
+        missing_paths.is_empty(),
+        "docs/configuration.md is missing config schema paths: {}",
+        missing_paths.join(", ")
+    );
 }
 
 #[test]

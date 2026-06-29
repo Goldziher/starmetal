@@ -32,6 +32,10 @@ Implemented local publishing behavior:
 - Shadowing upstream package versions is blocked by default unless `allow_shadowing = true`.
 - CLI and MCP can publish one explicit artifact when publishing is enabled.
 - MCP mutating tools require `sm mcp serve --allow-writes`.
+- Deterministic Docker pnpm E2E proves local npm publishing can publish a fixture package into
+  Starmetal and install it back through Starmetal.
+- Local RubyGems publishing writes Bundler-compatible Compact Index metadata:
+  `/versions` includes the per-gem info checksum and `/info/<gem>` uses `|checksum:<sha256>`.
 - Native upload routes call `PublishingService` when publishing is enabled, but these routes are
   experimental and do not create a native publishing support claim.
 
@@ -43,6 +47,8 @@ Implemented local publishing behavior:
 - CLI explicit artifact publish.
 - MCP explicit artifact publish behind `--allow-writes`.
 - Route-level experimental publish parsing for multiple ecosystems.
+- Docker pnpm local npm publish-then-install evidence.
+- Bundler-compatible local RubyGems Compact Index metadata generation.
 - Yank and unyank service operations for locally known versions.
 
 ## Deferred
@@ -59,5 +65,7 @@ Implemented local publishing behavior:
 
 - Documentation must say "experimental local publishing" unless a later ADR changes support status.
 - Read readiness does not imply write readiness.
+- Route-level publish parsing and local metadata generation do not imply native package-manager
+  publishing support.
 - Any future publishing support requires native-client E2E coverage, documented failure semantics,
   and credential behavior per ecosystem.

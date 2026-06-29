@@ -24,15 +24,28 @@ Build the default image:
 docker build -t starmetal:local .
 ```
 
-Run the repeatable container pressure test:
+Run the deterministic container proxy E2E test:
 
 ```sh
-task docker:pressure
+task docker:proxy:e2e
 ```
 
-The pressure test starts the image with a named volume, warms the PyPI route, fetches a real artifact
-through Starmetal, verifies the OpenDAL filesystem writes and Blake3 sidecar, and sends concurrent
-requests against cached metadata and artifact routes.
+This starts a local fixture upstream, starts the StarMetal image with a mounted private config and
+OpenDAL filesystem volume, exercises all implemented registry proxy routes with HTTP assertions,
+runs native client containers for PyPI, npm, Cargo, Maven, RubyGems, NuGet, and pub.dev, stops the
+fixture upstream, restarts StarMetal with the same volume, and verifies the cached routes still
+work. Native clients run without read auth; the HTTP pass covers Bearer auth, CORS, response limits,
+URL rewriting, cache writes, and sanitized error responses.
+
+Run the live PyPI container pressure test when you want public-network pressure coverage:
+
+```sh
+task docker:pressure:live
+```
+
+The live pressure test starts the image with a named volume, warms the PyPI route, fetches a real
+artifact through Starmetal, verifies the OpenDAL filesystem writes and Blake3 sidecar, and sends
+concurrent requests against cached metadata and artifact routes.
 
 With no extra args, the image runs `sm serve`, reads `/etc/starmetal/starmetal.toml`, listens on
 `0.0.0.0:8080`, and uses OpenDAL filesystem storage rooted at `/var/lib/starmetal`.
@@ -54,7 +67,7 @@ docker run --rm starmetal:local mcp serve
 ```
 
 For production settings, bind-mount a config file. Keep real auth and publishing tokens out of the
-repository.
+repository. The complete option reference is in [Configuration Reference](configuration.md).
 
 ```sh
 docker run --rm \
@@ -108,6 +121,10 @@ backend = "fs"
 root = "./starmetal-data"
 
 [auth]
+enabled = false
+tokens = []
+
+[admin]
 enabled = false
 tokens = []
 
@@ -219,6 +236,19 @@ tokens = ["replace-with-private-token"]
 
 Do not commit real tokens.
 
+## Admin API
+
+Remote management is available through the admin JSON API when explicitly enabled:
+
+```toml
+[admin]
+enabled = true
+tokens = ["replace-with-private-admin-token"]
+```
+
+Admin routes live under `/admin/api/v1` and require `Authorization: Bearer <admin-token>`. Keep the
+admin surface private and behind the same network boundary as the registry service.
+
 ## Publishing
 
 Native publishing is not supported. Keep local publishing disabled for normal private deployments:
@@ -256,7 +286,11 @@ cargo test --workspace
 task schema:check
 task schema:validate
 task conformance
+task docker:proxy:e2e
 ```
+
+Use `task docker:proxy:e2e:http` or `task docker:proxy:e2e:native` for targeted Docker proxy
+debugging.
 
 Live read E2E:
 

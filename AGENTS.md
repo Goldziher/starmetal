@@ -1,7 +1,7 @@
 <!--
 🤖 AI-RULEZ :: GENERATED FILE — DO NOT EDIT DIRECTLY
 Project: starmetal
-Generated: 2026-06-28 18:36:47
+Generated: 2026-06-29 20:28:09
 Source: .ai-rulez/config.toml
 Target: AGENTS.md
 Content: rules=39, sections=0, agents=9
@@ -46,8 +46,8 @@ INSTRUCTIONS FOR AI AGENTS
    c. Commit both .ai-rulez/ and generated files
 
 Documentation: https://github.com/Goldziher/ai-rulez
-Content-Hash: blake3:53d5af6303d59fd38798b0424463eefa6d00592b724919d9dc33347e560b2f11
-Source-Hash: blake3:894687f422d4f1ba1124a0b2ec1953ddde476dbd488caae6a90e968420a1a551
+Content-Hash: blake3:a6f638f08c222e12fd264315a19894add7b5e99c72f7b1151928045063301ee5
+Source-Hash: blake3:0a7f7340ea1e19de55e77848e58143d8cb09e1bb6cfb5bb969e7dbe1a72a61f0
 -->
 
 # starmetal
@@ -349,19 +349,21 @@ All code lives under `crates/` — there is no top-level `src/`.
 
 | Crate | Role |
 |-------|------|
-| `starmetal-core` | Domain types, port traits (`PackageService`, `StoragePort`, `UpstreamClient`), policy engine, lock file, config |
-| `starmetal-service` | Application service layer. `CachingPackageService` implements pull-through caching, blake3 integrity verification (sidecar `.blake3` files), and policy enforcement. Sits between adapters and core. |
+| `starmetal-core` | Domain types, port traits (`PackageService`, `StoragePort`, `UpstreamClient`, `StatisticsService`), policy engine, lock file, config |
+| `starmetal-service` | Application service layer. `CachingPackageService` implements pull-through caching, blake3 integrity verification (sidecar `.blake3` files), in-memory statistics, and policy enforcement. Sits between adapters and core. |
 | `starmetal-storage` | OpenDAL-backed `StoragePort` implementation. Feature-gated backends: `backend-fs`, `backend-s3`, `backend-gcs`, `backend-memory` |
-| `starmetal-adapters` | Inbound protocol adapters (axum routers) + outbound upstream clients. Feature-gated: `pypi`, `npm`, `cargo-registry`, `hex`. Each adapter defines a state trait (`HasPypiState`, `HasNpmState`, `HasCargoState`, `HasHexState`) for accessing `PackageService` + ecosystem-specific upstream client. |
-| `starmetal-server` | Axum app assembly, Tower middleware stack (tracing, CORS, auth, compression), shared `AppState` |
-| `starmetal-cli` | Binary crate. Clap CLI with commands: `serve`, `sync`, `lock`, `config` |
-| `tests/integration` | Integration test crate with 31 tests covering pip, npm, cargo, and mix client workflows |
+| `starmetal-adapters` | Inbound protocol adapters (axum routers) + outbound upstream clients. Feature-gated: `pypi`, `npm`, `cargo-registry`, `hex`, `maven`, `rubygems`, `nuget`, `pub`. Each adapter defines a state trait for accessing `PackageService` plus ecosystem-specific upstream clients. |
+| `starmetal-server` | Axum app assembly, Tower middleware stack (tracing, CORS, auth, compression), admin API, shared `AppState` |
+| `starmetal-ops` | Shared local runtime and operator operations used by CLI and MCP |
+| `starmetal-cli` | Binary crate. Clap CLI with commands for serving, config, registry, package, cache, and MCP operations |
+| `tests/conformance` | Offline fixture-backed conformance tests for protocol routes and publishing behavior |
+| `tests/integration` | Integration test crate for server APIs and live ignored native-client workflows |
 
 ## Dependency Flow
 
-`starmetal-cli → starmetal-server → starmetal-adapters → starmetal-core`
-`→ starmetal-service  → starmetal-core`
-`→ starmetal-storage  → starmetal-core`
+`starmetal-cli → starmetal-ops → starmetal-server → starmetal-adapters → starmetal-core`
+`starmetal-ops → starmetal-service → starmetal-core`
+`starmetal-ops → starmetal-storage → starmetal-core`
 
 The core crate has zero framework dependencies — all I/O goes through port traits.
 
@@ -375,8 +377,11 @@ The core crate has zero framework dependencies — all I/O goes through port tra
 - npm adapter stores/serves raw `serde_json::Value` to handle the wide variety of npm field shapes
 - npm adapter performs recursive BFS dependency prefetch (max depth 10) when serving a packument
 - Hex adapter includes a protobuf registry proxy at `/hex/packages/{name}` for mix checksum verification
+- Maven, RubyGems, NuGet, and pub.dev adapters are experimental core read/proxy surfaces
 - Storage keys: `<ecosystem>/<name>/<version>/<filename>`
 - Lock file: TOML-based, ecosystem-agnostic, blake3 hashes
+- Admin API is disabled by default and mounted at `/admin/api/v1` only when configured
+- Metrics are in-memory process counters exposed through the admin API
 - Feature flags control compile-time inclusion of adapters and storage backends
 - TOML config with clap CLI
 
@@ -389,12 +394,16 @@ Architecture Decision Records are in `docs/adr/`. Read them before making archit
 ## Build & Test
 
 ```bash
-cargo build --workspace
-cargo check --workspace
-cargo test --workspace
-cargo test -p starmetal-core
-cargo clippy --workspace
-cargo fmt --check
+task fmt:check
+task clippy
+task test:all
+task schema:check
+task schema:validate
+task conformance
+task feature:check
+task docker:integration
+task security
+task ci
 ```
 
 ## Pre-commit
@@ -415,6 +424,7 @@ Do NOT add AI co-author signatures.
 - `thiserror` for error types
 - `tracing` for structured logging
 - Config: TOML files, `serde::Deserialize`
+- Documentation: keep `docs/configuration.md` aligned with `schemas/starmetal/config.schema.json`
 
 ### owasp-quick-reference
 
@@ -438,7 +448,7 @@ When a task aligns with a specialized agent listed below, delegate to that agent
 - **core-architect**: Domain modeling and core business logic specialist for starmetal-core
 - **docs-writer**: Use when writing or updating documentation, READMEs, or changelogs
 - **infra-engineer**: Storage, middleware, and server infrastructure specialist
-- **protocol-engineer**: Registry protocol adapter specialist for PyPI, npm, Cargo, and Hex
+- **protocol-engineer**: Registry protocol adapter specialist for PyPI, npm, Cargo, Hex, Maven, RubyGems, NuGet, and pub.dev
 - **qa-engineer**: Testing, CI, and quality assurance specialist
 - **security-auditor**: Use when auditing code or dependencies for security vulnerabilities
 - **test-writer**: Use when writing tests — follows TDD red-green-refactor cycle

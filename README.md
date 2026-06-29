@@ -19,7 +19,7 @@ PyPI · npm · Cargo · Hex · Maven · RubyGems · NuGet · pub.dev
 [![Rust 2024](https://img.shields.io/badge/rust-2024-orange?style=flat-square)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 
-[Install](#install) · [Quick Start](#quick-start) · [Registry Support](#registry-support) · [Docker](#docker) · [Deployment](#deployment) · [Release](docs/release.md) · [Architecture](#architecture) · [ADRs](#adrs)
+[Install](#install) · [Quick Start](#quick-start) · [Registry Support](#registry-support) · [Docker](#docker) · [Configuration](docs/configuration.md) · [Deployment](#deployment) · [Release](docs/release.md) · [Architecture](#architecture) · [ADRs](#adrs)
 
 </div>
 
@@ -142,6 +142,19 @@ docker run --rm starmetal:local config validate
 docker run --rm starmetal:local mcp serve
 ```
 
+Run the deterministic local proxy gate:
+
+```bash
+task docker:proxy:e2e
+```
+
+That gate builds the image, runs a local fixture upstream plus StarMetal on an isolated Docker
+network, exercises every implemented registry route with HTTP assertions, runs native client
+containers for PyPI, npm, Cargo, Maven, RubyGems, NuGet, and pub.dev, restarts StarMetal with the
+same OpenDAL filesystem volume, and repeats the checks with the fixture upstream stopped. The native
+client pass disables read auth because package-manager support for Bearer read auth is uneven; the
+HTTP pass covers auth behavior.
+
 Use a mounted config file for production settings, auth tokens, `public_base_url`, and S3/GCS
 OpenDAL options:
 
@@ -178,7 +191,8 @@ tokens = ["replace-with-a-secret-token"]
 
 Upstream URLs must be HTTPS and public by default. Local, private-network, or insecure upstreams
 require explicit `allow_private_network` and `allow_insecure` settings. See
-[docs/deployment.md](docs/deployment.md) for full private deployment configuration guidance.
+[docs/configuration.md](docs/configuration.md) for every option and validation rule, and
+[docs/deployment.md](docs/deployment.md) for private deployment guidance.
 
 ## CLI and MCP
 
@@ -237,12 +251,14 @@ task test:all
 task schema:check
 task schema:validate
 task conformance
+task docker:proxy:e2e
 task security
 task ci
 ```
 
-Live E2E is intentionally separate from normal PR CI because it requires network access and native
-package-manager CLIs.
+`task docker:proxy:e2e` uses disposable client containers, not host package-manager CLIs. Live E2E
+and live Docker pressure tests are intentionally separate from normal PR CI because they require
+public registry access.
 
 ## Schemas
 
@@ -268,6 +284,8 @@ under [`schemas/`](schemas/):
 - [0011 - Experimental Support Matrix](docs/adr/0011-mvp-support-matrix.md)
 - [0012 - CI Quality Gates](docs/adr/0012-ci-quality-gates.md)
 - [0013 - Basemind and AI-Rulez Alignment](docs/adr/0013-basemind-ai-rulez-alignment.md)
+- [0014 - Management Admin Surface](docs/adr/0014-management-admin-surface.md)
+- [0015 - Statistics and Operational Metrics](docs/adr/0015-statistics-operational-metrics.md)
 
 ## License
 

@@ -1,5 +1,21 @@
 {
   "$defs": {
+    "AdminConfig": {
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "tokens": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
     "AuthConfig": {
       "properties": {
         "enabled": {
@@ -351,6 +367,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "Starmetal-owned JSON Schema for starmetal.toml.",
   "properties": {
+    "admin": {
+      "$ref": "#/$defs/AdminConfig",
+      "default": {
+        "enabled": false,
+        "tokens": []
+      }
+    },
     "auth": {
       "$ref": "#/$defs/AuthConfig",
       "default": {

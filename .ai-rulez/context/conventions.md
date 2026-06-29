@@ -7,12 +7,16 @@ priority: high
 ## Build & Test
 
 ```bash
-cargo build --workspace
-cargo check --workspace
-cargo test --workspace
-cargo test -p starmetal-core
-cargo clippy --workspace
-cargo fmt --check
+task fmt:check
+task clippy
+task test:all
+task schema:check
+task schema:validate
+task conformance
+task feature:check
+task docker:integration
+task security
+task ci
 ```
 
 ## Pre-commit
@@ -33,3 +37,4 @@ Do NOT add AI co-author signatures.
 - `thiserror` for error types
 - `tracing` for structured logging
 - Config: TOML files, `serde::Deserialize`
+- Documentation: keep `docs/configuration.md` aligned with `schemas/starmetal/config.schema.json`

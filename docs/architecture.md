@@ -4,7 +4,8 @@
 
 Starmetal is a private/internal package registry cache. It speaks native package registry protocols,
 stores artifacts through OpenDAL, verifies cached bytes with Blake3 sidecars, and applies policy in
-the service layer.
+the service layer. A private admin JSON API exposes status, redacted config, cache inventory, and
+in-memory metrics when explicitly enabled.
 
 Support is experimental and read/proxy focused:
 
@@ -24,6 +25,7 @@ graph TB
         cargo_cli[cargo]
         mix[mix]
         extra_clients[Maven / Bundler / dotnet / dart pub]
+        admin_client[Admin clients]
     end
 
     subgraph Middleware
@@ -39,6 +41,7 @@ graph TB
         cargo[Cargo]
         hex[Hex]
         extra[Maven / RubyGems / NuGet / pub.dev]
+        admin[Admin JSON API]
     end
 
     subgraph Service
@@ -66,6 +69,7 @@ graph TB
     cargo_cli --> trace
     mix --> trace
     extra_clients --> trace
+    admin_client --> trace
 
     trace --> cors --> auth --> compress
 
@@ -74,12 +78,15 @@ graph TB
     compress --> cargo
     compress --> hex
     compress --> extra
+    compress --> admin
 
     pypi --> package_service
     npm --> package_service
     cargo --> package_service
     hex --> package_service
     extra --> package_service
+    admin --> package_service
+    admin --> caching
 
     pypi -. native shape .-> upstreams
     npm -. native shape .-> upstreams
@@ -178,6 +185,14 @@ sequenceDiagram
 Runtime defaults are defined in `Config::default()`. Full CLI builds compile all adapters, but
 compiled does not mean production-supported.
 
+## Admin Surface
+
+The admin API is disabled by default and mounted only when `[admin] enabled = true` has at least one
+configured token. It requires `Authorization: Bearer <admin-token>` and serves JSON under
+`/admin/api/v1` for status, redacted config, registry status, cached packages, cached versions,
+cached metadata, and in-memory metrics. See [Configuration](configuration.md) and
+[ADR-0014](adr/0014-management-admin-surface.md).
+
 ## Publishing Scope
 
 Native publishing is not supported. Existing write routes and `sm package publish` are experimental
@@ -244,3 +259,5 @@ not create support claims without live E2E evidence.
 - [0011 - Experimental Support Matrix](adr/0011-mvp-support-matrix.md)
 - [0012 - CI Quality Gates](adr/0012-ci-quality-gates.md)
 - [0013 - Basemind and AI-Rulez Alignment](adr/0013-basemind-ai-rulez-alignment.md)
+- [0014 - Management Admin Surface](adr/0014-management-admin-surface.md)
+- [0015 - Statistics and Operational Metrics](adr/0015-statistics-operational-metrics.md)

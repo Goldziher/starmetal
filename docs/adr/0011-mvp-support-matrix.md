@@ -31,6 +31,18 @@ Planned registry work includes OCI/distribution, Go modules, Composer, Conda, De
 RPM/YUM. Planned registries must not be described as implemented until adapters, upstream clients,
 fixtures, and route coverage exist.
 
+Deterministic Docker proxy E2E is required evidence for the experimental read/proxy matrix. It uses
+local fixture upstreams and disposable client containers to prove route behavior, Docker
+configuration, OpenDAL filesystem storage, cache persistence, and restart behavior without public
+registry network access. The native-client Docker pass covers PyPI, npm, Cargo, Maven, RubyGems,
+NuGet, and pub.dev; Hex is covered at the HTTP and protobuf route level, with native Mix coverage
+remaining live/deferred until a local signed fixture registry is proven.
+
+The npm Docker evidence includes pnpm read-through behavior: `pnpm add` writes `package.json` and
+`pnpm-lock.yaml`, Starmetal persists the tarball and raw packument, and a second install with a fresh
+pnpm store succeeds after the fixture upstream is stopped. Experimental local npm publishing also has
+Docker pnpm publish-then-install evidence, but this remains a local publishing claim only.
+
 ## Promotion Criteria
 
 Before describing any workflow as ready beyond experimental, the registry must have:
@@ -39,8 +51,9 @@ Before describing any workflow as ready beyond experimental, the registry must h
 2. Source provenance in `schemas/sources.toml`.
 3. Schema or protocol evidence in `schemas/manifest.json`.
 4. Offline conformance tests.
-5. Fresh live native-client E2E pass for the documented workflow.
-6. README and deployment documentation that match the exact supported client command.
+5. Deterministic Docker proxy E2E for container, config, storage, cache, and restart behavior.
+6. Fresh live native-client E2E pass for the documented workflow.
+7. README and deployment documentation that match the exact supported client command.
 
 To promote native publishing in a future ADR, the registry must also have:
 
