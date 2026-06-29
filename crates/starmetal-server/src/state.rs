@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use starmetal_core::config::Config;
-use starmetal_core::ports::{PackageService, PublishingService};
+use starmetal_core::ports::{PackageService, PublishingService, StatisticsService};
 
 /// Shared application state, passed to all handlers via axum's State extractor.
 #[derive(Clone)]
@@ -9,6 +9,7 @@ pub struct AppState {
     pub config: Arc<Config>,
     pub package_service: Arc<dyn PackageService>,
     pub publishing_service: Arc<dyn PublishingService>,
+    pub statistics_service: Arc<dyn StatisticsService>,
     pub upstreams: UpstreamClients,
 }
 
@@ -38,12 +39,14 @@ impl AppState {
         config: Config,
         package_service: Arc<dyn PackageService>,
         publishing_service: Arc<dyn PublishingService>,
+        statistics_service: Arc<dyn StatisticsService>,
         upstreams: UpstreamClients,
     ) -> Self {
         Self {
             config: Arc::new(config),
             package_service,
             publishing_service,
+            statistics_service,
             upstreams,
         }
     }

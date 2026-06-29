@@ -1,4 +1,5 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use ahash::AHashMap;
 use async_trait::async_trait;
@@ -13,8 +14,11 @@ use starmetal_core::package::{
     decode_storage_segment, validate_storage_segment,
 };
 use starmetal_core::policy::PolicyConfig;
-use starmetal_core::ports::{PackageService, PublishingService, StoragePort, UpstreamClient};
+use starmetal_core::ports::{
+    PackageService, PublishingService, StatisticsService, StoragePort, UpstreamClient,
+};
 use starmetal_core::publishing::{PublishMode, PublishRequest, PublishResult, YankRequest};
+use starmetal_core::statistics::{EcosystemStatistics, StatisticsSnapshot};
 
 /// Pull-through caching implementation of `PackageService`.
 ///
@@ -24,6 +28,7 @@ pub struct CachingPackageService {
     storage: Arc<dyn StoragePort>,
     upstream_clients: AHashMap<Ecosystem, Arc<dyn UpstreamClient>>,
     policy: PolicyConfig,
+    statistics: Mutex<StatisticsSnapshot>,
 }
 
 impl CachingPackageService {
@@ -36,6 +41,7 @@ impl CachingPackageService {
             storage,
             upstream_clients,
             policy,
+            statistics: Mutex::new(StatisticsSnapshot::default()),
         }
     }
 
@@ -148,6 +154,38 @@ impl CachingPackageService {
             .put(&key, Bytes::from(serde_json::to_vec(versions)?))
             .await
     }
+
+    fn record_statistics(
+        &self,
+        ecosystem: Ecosystem,
+        update: impl FnOnce(&mut EcosystemStatistics),
+    ) {
+        let Ok(mut snapshot) = self.statistics.lock() else {
+            tracing::warn!("statistics lock is poisoned; skipping statistics update");
+            return;
+        };
+        let stats = snapshot
+            .ecosystems
+            .entry(ecosystem.to_string())
+            .or_insert_with(EcosystemStatistics::default);
+        update(stats);
+        stats.last_activity_unix_seconds = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .ok()
+            .map(|duration| duration.as_secs());
+    }
+
+    fn record_upstream_error(&self, ecosystem: Ecosystem) {
+        self.record_statistics(ecosystem, |stats| {
+            stats.upstream_errors = stats.upstream_errors.saturating_add(1);
+        });
+    }
+
+    fn record_integrity_failure(&self, ecosystem: Ecosystem) {
+        self.record_statistics(ecosystem, |stats| {
+            stats.integrity_failures = stats.integrity_failures.saturating_add(1);
+        });
+    }
 }
 
 #[async_trait]
@@ -163,13 +201,21 @@ impl PackageService for CachingPackageService {
 
         if let Some(cached) = self.storage.get(&key).await? {
             tracing::debug!(ecosystem = %ecosystem, name = %name, "cache hit for versions");
+            self.record_statistics(ecosystem, |stats| {
+                stats.versions_cache_hits = stats.versions_cache_hits.saturating_add(1);
+            });
             let versions: Vec<VersionInfo> = serde_json::from_slice(&cached)?;
             return Ok(versions);
         }
 
+        self.record_statistics(ecosystem, |stats| {
+            stats.versions_cache_misses = stats.versions_cache_misses.saturating_add(1);
+        });
         tracing::info!(ecosystem = %ecosystem, name = %name, "fetching versions from upstream");
         let upstream = self.upstream(ecosystem)?;
-        let versions = upstream.fetch_versions(name).await?;
+        let versions = upstream.fetch_versions(name).await.inspect_err(|_err| {
+            self.record_upstream_error(ecosystem);
+        })?;
 
         let serialized = serde_json::to_vec(&versions)?;
         self.storage.put(&key, Bytes::from(serialized)).await?;
@@ -189,14 +235,25 @@ impl PackageService for CachingPackageService {
 
         if let Some(cached) = self.storage.get(&key).await? {
             tracing::debug!(ecosystem = %ecosystem, name = %name, version, "cache hit for metadata");
+            self.record_statistics(ecosystem, |stats| {
+                stats.metadata_cache_hits = stats.metadata_cache_hits.saturating_add(1);
+            });
             let metadata: VersionMetadata = serde_json::from_slice(&cached)?;
             self.policy.check(&metadata)?;
             return Ok(metadata);
         }
 
+        self.record_statistics(ecosystem, |stats| {
+            stats.metadata_cache_misses = stats.metadata_cache_misses.saturating_add(1);
+        });
         tracing::info!(ecosystem = %ecosystem, name = %name, version, "fetching metadata from upstream");
         let upstream = self.upstream(ecosystem)?;
-        let metadata = upstream.fetch_metadata(name, version).await?;
+        let metadata = upstream
+            .fetch_metadata(name, version)
+            .await
+            .inspect_err(|_err| {
+                self.record_upstream_error(ecosystem);
+            })?;
 
         self.policy.check(&metadata)?;
 
@@ -231,6 +288,7 @@ impl PackageService for CachingPackageService {
 
         if let Some(cached) = self.storage.get(&key).await? {
             let expected_hash = self.storage.get(&hash_key).await?.ok_or_else(|| {
+                self.record_integrity_failure(artifact_id.ecosystem);
                 StarmetalError::IntegrityError {
                     expected: format!("missing sidecar {hash_key}"),
                     actual: "unverified cached artifact".to_string(),
@@ -238,18 +296,39 @@ impl PackageService for CachingPackageService {
             })?;
             let expected = std::str::from_utf8(&expected_hash)
                 .map_err(|e| StarmetalError::Storage(e.to_string()))?;
-            integrity::verify_or_err(&cached, expected)?;
+            if let Err(err) = integrity::verify_or_err(&cached, expected) {
+                self.record_integrity_failure(artifact_id.ecosystem);
+                return Err(err);
+            }
+            self.record_statistics(artifact_id.ecosystem, |stats| {
+                stats.artifact_cache_hits = stats.artifact_cache_hits.saturating_add(1);
+                stats.bytes_served = stats.bytes_served.saturating_add(cached.len() as u64);
+            });
             return Ok(cached);
         }
 
+        self.record_statistics(artifact_id.ecosystem, |stats| {
+            stats.artifact_cache_misses = stats.artifact_cache_misses.saturating_add(1);
+        });
         tracing::info!(key, "fetching artifact from upstream");
         let upstream = self.upstream(artifact_id.ecosystem)?;
-        let data = upstream.fetch_artifact(artifact_id).await?;
-        Self::verify_upstream_hash(&data, artifact_digest)?;
+        let data = upstream
+            .fetch_artifact(artifact_id)
+            .await
+            .inspect_err(|_err| {
+                self.record_upstream_error(artifact_id.ecosystem);
+            })?;
+        if let Err(err) = Self::verify_upstream_hash(&data, artifact_digest) {
+            self.record_integrity_failure(artifact_id.ecosystem);
+            return Err(err);
+        }
 
         let hash = integrity::blake3_hex(&data);
         self.storage.put(&hash_key, Bytes::from(hash)).await?;
         self.storage.put(&key, data.clone()).await?;
+        self.record_statistics(artifact_id.ecosystem, |stats| {
+            stats.bytes_served = stats.bytes_served.saturating_add(data.len() as u64);
+        });
 
         Ok(data)
     }
@@ -397,6 +476,9 @@ impl PublishingService for CachingPackageService {
         }
         self.store_versions(request.ecosystem, &request.name, &versions)
             .await?;
+        self.record_statistics(request.ecosystem, |stats| {
+            stats.publishes = stats.publishes.saturating_add(1);
+        });
 
         Ok(PublishResult {
             ecosystem: request.ecosystem,
@@ -447,8 +529,23 @@ impl PublishingService for CachingPackageService {
         }
         self.store_versions(request.ecosystem, &request.name, &versions)
             .await?;
+        self.record_statistics(request.ecosystem, |stats| {
+            stats.yanks = stats.yanks.saturating_add(1);
+        });
 
         Ok(metadata)
+    }
+}
+
+impl StatisticsService for CachingPackageService {
+    fn statistics(&self) -> StatisticsSnapshot {
+        match self.statistics.lock() {
+            Ok(snapshot) => snapshot.clone(),
+            Err(_) => {
+                tracing::warn!("statistics lock is poisoned; returning empty statistics snapshot");
+                StatisticsSnapshot::default()
+            }
+        }
     }
 }
 
@@ -1292,6 +1389,49 @@ mod tests {
             expected_hash,
             "stored hash should match computed blake3"
         );
+    }
+
+    #[tokio::test]
+    async fn records_cache_statistics_for_artifact_fetches() {
+        let storage = Arc::new(MockStorage::new());
+        let artifact_data = Bytes::from_static(b"upstream content");
+        let mut artifacts = AHashMap::new();
+        artifacts.insert("pkg-1.0.0.tgz".to_string(), artifact_data.clone());
+        let mut metadata = AHashMap::new();
+        metadata.insert(
+            "1.0.0".to_string(),
+            test_metadata_with_artifact("pkg", "1.0.0", "pkg-1.0.0.tgz", AHashMap::new()),
+        );
+        let upstream = MockUpstream {
+            eco: Ecosystem::Npm,
+            versions: vec![],
+            metadata,
+            artifacts,
+        };
+        let service = build_service(storage, upstream, PolicyConfig::default());
+        let artifact_id = ArtifactId {
+            ecosystem: Ecosystem::Npm,
+            name: PackageName::new("pkg"),
+            version: "1.0.0".to_string(),
+            filename: "pkg-1.0.0.tgz".to_string(),
+        };
+
+        let first = service.get_artifact(&artifact_id).await.unwrap();
+        let second = service.get_artifact(&artifact_id).await.unwrap();
+
+        assert_eq!(first, artifact_data);
+        assert_eq!(second, artifact_data);
+        let snapshot = service.statistics();
+        let npm = snapshot
+            .ecosystems
+            .get("npm")
+            .expect("npm statistics should be present");
+        assert_eq!(npm.metadata_cache_misses, 1);
+        assert_eq!(npm.metadata_cache_hits, 1);
+        assert_eq!(npm.artifact_cache_misses, 1);
+        assert_eq!(npm.artifact_cache_hits, 1);
+        assert_eq!(npm.bytes_served, (artifact_data.len() * 2) as u64);
+        assert!(npm.last_activity_unix_seconds.is_some());
     }
 
     #[tokio::test]

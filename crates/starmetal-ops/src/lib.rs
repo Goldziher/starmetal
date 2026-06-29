@@ -8,7 +8,9 @@ use serde::{Deserialize, Serialize};
 use starmetal_core::config::{Config, DEFAULT_MAX_UPSTREAM_BYTES, UpstreamConfig};
 use starmetal_core::error::{Result, StarmetalError};
 use starmetal_core::package::{ArtifactId, Ecosystem, PackageName, VersionMetadata};
-use starmetal_core::ports::{PackageService, PublishingService, StoragePort, UpstreamClient};
+use starmetal_core::ports::{
+    PackageService, PublishingService, StatisticsService, StoragePort, UpstreamClient,
+};
 use starmetal_core::publishing::{PublishRequest, PublishedArtifact, YankRequest};
 use starmetal_server::state::{AppState, UpstreamClients};
 use starmetal_service::CachingPackageService;
@@ -77,6 +79,7 @@ pub struct StarmetalRuntime {
     pub storage: Arc<dyn StoragePort>,
     pub package_service: Arc<dyn PackageService>,
     pub publishing_service: Arc<dyn PublishingService>,
+    pub statistics_service: Arc<dyn StatisticsService>,
     pub upstreams: UpstreamClients,
 }
 
@@ -137,7 +140,8 @@ impl StarmetalRuntime {
             config,
             storage,
             package_service: service.clone(),
-            publishing_service: service,
+            publishing_service: service.clone(),
+            statistics_service: service,
             upstreams,
         })
     }
@@ -147,6 +151,7 @@ impl StarmetalRuntime {
             self.config.clone(),
             self.package_service.clone(),
             self.publishing_service.clone(),
+            self.statistics_service.clone(),
             self.upstreams.clone(),
         )
     }

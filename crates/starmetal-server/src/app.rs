@@ -73,6 +73,10 @@ pub fn build_app(state: AppState) -> Router {
         }
     }
 
+    if state.config.admin.enabled {
+        app = app.nest("/admin/api/v1", crate::admin::router());
+    }
+
     app.layer(CompressionLayer::new())
         .layer(middleware::from_fn_with_state(
             state.clone(),

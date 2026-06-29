@@ -25,6 +25,8 @@ pub struct Config {
     #[serde(default)]
     pub auth: AuthConfig,
     #[serde(default)]
+    pub admin: AdminConfig,
+    #[serde(default)]
     pub publishing: PublishingConfig,
     #[serde(default)]
     pub encryption: EncryptionConfig,
@@ -195,6 +197,23 @@ impl std::fmt::Debug for AuthConfig {
     }
 }
 
+#[derive(Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct AdminConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub tokens: Vec<String>,
+}
+
+impl std::fmt::Debug for AdminConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AdminConfig")
+            .field("enabled", &self.enabled)
+            .field("tokens", &format!("[{} redacted]", self.tokens.len()))
+            .finish()
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 pub struct EncryptionConfig {
     #[serde(default)]
@@ -312,7 +331,28 @@ impl Config {
             ));
         }
 
+        if self.admin.enabled && self.admin.tokens.is_empty() {
+            return Err(StarmetalError::Config(
+                "admin.enabled requires at least one bearer token".to_string(),
+            ));
+        }
+
         if self.publishing.enabled {
+            if self.publishing.mode != PublishMode::Local {
+                return Err(StarmetalError::Config(
+                    "publishing.enabled only supports mode = \"local\" in this MVP".to_string(),
+                ));
+            }
+            if self
+                .publishing
+                .upstream
+                .values()
+                .any(|upstream| upstream.enabled)
+            {
+                return Err(StarmetalError::Config(
+                    "publishing upstream forwarding is not implemented in this MVP".to_string(),
+                ));
+            }
             let has_write_token = self.publishing.tokens.iter().any(|token| {
                 token.scopes.contains(&TokenScope::Admin)
                     || token.scopes.contains(&TokenScope::Publish)
@@ -352,6 +392,13 @@ impl Config {
                 *token = toml::Value::String("<redacted>".to_string());
             }
         }
+        if let Some(admin) = value.get_mut("admin").and_then(toml::Value::as_table_mut)
+            && let Some(tokens) = admin.get_mut("tokens").and_then(toml::Value::as_array_mut)
+        {
+            for token in tokens {
+                *token = toml::Value::String("<redacted>".to_string());
+            }
+        }
         if let Some(publishing) = value
             .get_mut("publishing")
             .and_then(toml::Value::as_table_mut)
@@ -372,6 +419,13 @@ impl Config {
 
     pub fn authorize_bearer_token(&self, token: &str) -> bool {
         self.auth
+            .tokens
+            .iter()
+            .any(|allowed| constant_time_eq(allowed.as_bytes(), token.as_bytes()))
+    }
+
+    pub fn authorize_admin_token(&self, token: &str) -> bool {
+        self.admin
             .tokens
             .iter()
             .any(|allowed| constant_time_eq(allowed.as_bytes(), token.as_bytes()))
@@ -399,6 +453,7 @@ impl Default for Config {
             upstream: default_upstreams(),
             policies: PolicyConfig::default(),
             auth: AuthConfig::default(),
+            admin: AdminConfig::default(),
             publishing: PublishingConfig::default(),
             encryption: EncryptionConfig::default(),
         }
@@ -719,6 +774,54 @@ mod tests {
     }
 
     #[test]
+    fn startup_validation_rejects_admin_without_tokens() {
+        let config: Config = toml::from_str("[admin]\nenabled = true\n").unwrap();
+        let err = config.validate_mvp().unwrap_err().to_string();
+        assert!(err.contains("admin.enabled requires"));
+    }
+
+    #[test]
+    fn startup_validation_rejects_non_local_publishing_mode() {
+        let config: Config = toml::from_str(
+            r#"
+[publishing]
+enabled = true
+mode = "forward-only"
+
+[[publishing.tokens]]
+token = "publish-secret"
+scopes = ["publish"]
+"#,
+        )
+        .unwrap();
+
+        let err = config.validate_mvp().unwrap_err().to_string();
+        assert!(err.contains("only supports mode = \"local\""));
+    }
+
+    #[test]
+    fn startup_validation_rejects_enabled_publishing_upstream_forwarding() {
+        let config: Config = toml::from_str(
+            r#"
+[publishing]
+enabled = true
+
+[[publishing.tokens]]
+token = "publish-secret"
+scopes = ["publish"]
+
+[publishing.upstream.npm]
+enabled = true
+token_env = "NPM_TOKEN"
+"#,
+        )
+        .unwrap();
+
+        let err = config.validate_mvp().unwrap_err().to_string();
+        assert!(err.contains("publishing upstream forwarding is not implemented"));
+    }
+
+    #[test]
     fn scoped_publish_token_authorizes_matching_package() {
         let config: Config = toml::from_str(
             r#"
@@ -770,6 +873,22 @@ scopes = ["publish"]
 
         let output = toml::to_string_pretty(&config.redacted_value()).unwrap();
         assert!(!output.contains("publish-secret"));
+        assert!(output.contains("<redacted>"));
+    }
+
+    #[test]
+    fn redacted_value_hides_admin_tokens() {
+        let config: Config = toml::from_str(
+            r#"
+[admin]
+enabled = true
+tokens = ["admin-secret"]
+"#,
+        )
+        .unwrap();
+
+        let output = toml::to_string_pretty(&config.redacted_value()).unwrap();
+        assert!(!output.contains("admin-secret"));
         assert!(output.contains("<redacted>"));
     }
 
@@ -843,5 +962,20 @@ tokens = ["secret-token"]
 
         assert!(config.authorize_bearer_token("secret-token"));
         assert!(!config.authorize_bearer_token("secret"));
+    }
+
+    #[test]
+    fn admin_token_authorization_uses_exact_match() {
+        let config: Config = toml::from_str(
+            r#"
+[admin]
+enabled = true
+tokens = ["admin-token"]
+"#,
+        )
+        .unwrap();
+
+        assert!(config.authorize_admin_token("admin-token"));
+        assert!(!config.authorize_admin_token("admin"));
     }
 }

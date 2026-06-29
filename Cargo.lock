@@ -3299,6 +3299,7 @@ name = "starmetal-server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "serde",
  "starmetal-adapters",
  "starmetal-core",
  "starmetal-storage",

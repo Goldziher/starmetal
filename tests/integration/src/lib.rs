@@ -39,15 +39,38 @@ impl TestServer {
     /// - `STARMETAL_TEST_UPSTREAM_NUGET_URL`: override NuGet upstream (default: https://api.nuget.org/v3/index.json)
     /// - `STARMETAL_TEST_UPSTREAM_PUB_URL`: override pub.dev upstream (default: https://pub.dev)
     pub async fn start() -> Self {
-        Self::start_with_all_enabled(false).await
+        Self::start_with_all_enabled_and_config(false, |_| {}).await
     }
 
     /// Start a starmetal server with all configured registry routes enabled.
     pub async fn start_all_enabled() -> Self {
-        Self::start_with_all_enabled(true).await
+        Self::start_with_all_enabled_and_config(true, |_| {}).await
     }
 
-    async fn start_with_all_enabled(enable_all: bool) -> Self {
+    /// Start a starmetal server with the admin API enabled.
+    pub async fn start_with_admin() -> Self {
+        Self::start_with_all_enabled_and_config(false, |config| {
+            config.admin.enabled = true;
+            config.admin.tokens.push("admin-token".to_string());
+        })
+        .await
+    }
+
+    /// Start a starmetal server with read auth and admin API enabled.
+    pub async fn start_with_admin_and_read_auth() -> Self {
+        Self::start_with_all_enabled_and_config(false, |config| {
+            config.auth.enabled = true;
+            config.auth.tokens.push("read-token".to_string());
+            config.admin.enabled = true;
+            config.admin.tokens.push("admin-token".to_string());
+        })
+        .await
+    }
+
+    async fn start_with_all_enabled_and_config(
+        enable_all: bool,
+        configure: impl FnOnce(&mut Config),
+    ) -> Self {
         let storage = OpenDalStorage::memory().expect("failed to create memory storage");
         let mut upstream_clients: AHashMap<Ecosystem, Arc<dyn UpstreamClient>> = AHashMap::new();
 
@@ -117,6 +140,7 @@ impl TestServer {
                     .enabled = true;
             }
         }
+        configure(&mut config);
         let upstreams = UpstreamClients {
             pypi_upstream: pypi_client,
             cargo_upstream: cargo_client,
@@ -127,7 +151,7 @@ impl TestServer {
             nuget_upstream: nuget_client,
             pub_upstream: pub_client,
         };
-        let state = AppState::new(config, service.clone(), service, upstreams);
+        let state = AppState::new(config, service.clone(), service.clone(), service, upstreams);
         let app = starmetal_server::app::build_app(state);
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")

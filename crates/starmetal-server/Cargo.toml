@@ -21,6 +21,7 @@ pub = ["starmetal-adapters/pub"]
 
 [dependencies]
 axum.workspace = true
+serde.workspace = true
 starmetal-adapters = { workspace = true, default-features = false }
 starmetal-core.workspace = true
 starmetal-storage = { workspace = true, default-features = false }
