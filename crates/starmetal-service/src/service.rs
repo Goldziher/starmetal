@@ -137,7 +137,11 @@ impl CachingPackageService {
         }
 
         if let Some(upstream) = self.upstream_clients.get(&ecosystem) {
-            return upstream.fetch_versions(name).await;
+            return match upstream.fetch_versions(name).await {
+                Ok(versions) => Ok(versions),
+                Err(StarmetalError::PackageNotFound { .. }) => Ok(Vec::new()),
+                Err(err) => Err(err),
+            };
         }
 
         Ok(Vec::new())
@@ -745,6 +749,52 @@ mod tests {
         CachingPackageService::new(storage, clients, policy)
     }
 
+    struct MissingPackageUpstream {
+        eco: Ecosystem,
+    }
+
+    #[async_trait]
+    impl UpstreamClient for MissingPackageUpstream {
+        fn ecosystem(&self) -> Ecosystem {
+            self.eco
+        }
+
+        async fn fetch_versions(&self, name: &PackageName) -> Result<Vec<VersionInfo>> {
+            Err(StarmetalError::PackageNotFound {
+                ecosystem: self.eco.to_string(),
+                name: name.as_str().to_string(),
+            })
+        }
+
+        async fn fetch_metadata(
+            &self,
+            name: &PackageName,
+            version: &str,
+        ) -> Result<VersionMetadata> {
+            Err(StarmetalError::VersionNotFound {
+                ecosystem: self.eco.to_string(),
+                name: name.as_str().to_string(),
+                version: version.to_string(),
+            })
+        }
+
+        async fn fetch_artifact(&self, artifact_id: &ArtifactId) -> Result<Bytes> {
+            Err(StarmetalError::ArtifactNotFound(artifact_id.storage_key()))
+        }
+    }
+
+    fn build_service_with_missing_package_upstream(
+        storage: Arc<MockStorage>,
+        ecosystem: Ecosystem,
+    ) -> CachingPackageService {
+        let mut clients: AHashMap<Ecosystem, Arc<dyn UpstreamClient>> = AHashMap::new();
+        clients.insert(
+            ecosystem,
+            Arc::new(MissingPackageUpstream { eco: ecosystem }),
+        );
+        CachingPackageService::new(storage, clients, PolicyConfig::default())
+    }
+
     #[tokio::test]
     async fn cache_hit_returns_stored_artifact() {
         let artifact_id = ArtifactId {
@@ -986,6 +1036,36 @@ mod tests {
             .await
             .unwrap();
         assert!(manifest.is_some(), "published manifest should be stored");
+    }
+
+    #[tokio::test]
+    async fn publish_package_allows_new_local_package_when_upstream_package_not_found() {
+        let storage = Arc::new(MockStorage::new());
+        let service = build_service_with_missing_package_upstream(storage, Ecosystem::Npm);
+        let name = PackageName::new("local-pnpm");
+
+        service
+            .publish_package(PublishRequest {
+                ecosystem: Ecosystem::Npm,
+                name: name.clone(),
+                version: "1.0.0".to_string(),
+                license: Some("MIT".to_string()),
+                yanked: false,
+                artifacts: vec![PublishedArtifact {
+                    filename: "local-pnpm-1.0.0.tgz".to_string(),
+                    data: Bytes::from_static(b"published artifact"),
+                    upstream_hashes: AHashMap::new(),
+                }],
+                allow_overwrite: false,
+                allow_shadowing: false,
+            })
+            .await
+            .unwrap();
+
+        let versions = service.list_versions(Ecosystem::Npm, &name).await.unwrap();
+        assert_eq!(versions.len(), 1);
+        assert_eq!(versions[0].version, "1.0.0");
+        assert!(!versions[0].yanked);
     }
 
     #[tokio::test]
