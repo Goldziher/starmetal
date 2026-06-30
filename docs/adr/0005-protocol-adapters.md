@@ -40,16 +40,20 @@ Each adapter owns:
 
 - Pull-through read routes for all eight adapters behind feature flags.
 - Runtime default enablement for all implemented adapters.
-- Route-level conformance and ignored live E2E tests.
+- Route-level conformance, deterministic Docker HTTP proxy E2E, and ignored live E2E tests.
+- Docker native-client proxy E2E for PyPI, npm, Cargo, Maven, RubyGems, NuGet, and pub.dev.
 - Raw upstream response preservation where native fields would be lost by domain conversion.
 - npm packument handling with raw `serde_json::Value`.
 - Hex protobuf registry proxy for mix checksum behavior.
+- RubyGems Compact Index compatibility, including Bundler-native `checksum:<sha256>` metadata and
+  legacy upstream `checksum:sha256=<sha256>` parsing.
 - Experimental local publish route plumbing when `publishing.enabled = true`.
 
 ## Deferred
 
 - Public support claims for read paths before live native-client E2E passes.
 - Native publishing support.
+- Deterministic native Hex/Mix fixture coverage until a local signed registry fixture is proven.
 - Search APIs.
 - Owner, organization, invitation, and admin APIs.
 - Cross-registry sharing of protocol-specific logic.
@@ -62,8 +66,10 @@ A read adapter can be documented beyond experimental only when it has:
 
 1. Source linkage in `schemas/sources.toml`.
 2. Fixture or route conformance coverage.
-3. Live native-client E2E evidence for the claimed workflow.
-4. Accurate README and deployment documentation.
+3. Deterministic Docker proxy E2E evidence for route shape, container config, storage cache, and
+   restart behavior.
+4. Live native-client E2E evidence for the claimed workflow.
+5. Accurate README and deployment documentation.
 
 Publishing cannot be documented as supported until a later ADR scopes native publish behavior,
 credential semantics, failure modes, and native publish-then-install E2E evidence.

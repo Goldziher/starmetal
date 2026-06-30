@@ -16,12 +16,13 @@ publishing, but native publishing is not supported.
 
 `starmetal-server` composes the axum application with Tower middleware in `crates/starmetal-server/src/app.rs`.
 
-Implemented stack, from request entry inward:
+Implemented stack:
 
 | Layer | Implemented behavior |
 |-------|----------------------|
 | `TraceLayer` | Structured request tracing |
-| `CorsLayer::permissive()` | Broad CORS policy for experimental development and local clients |
+| `RequestBodyLimitLayer` | Configured upload/body cap from `server.max_upload_bytes` |
+| `CorsLayer` | Explicit origin allowlist from `server.cors_allowed_origins` |
 | Bearer auth middleware | Optional read-token enforcement when `auth.enabled = true` |
 | `CompressionLayer` | Response compression |
 
@@ -42,12 +43,14 @@ Adapter routers are mounted by feature flag and runtime upstream enablement:
 
 - Optional bearer-token auth for server requests.
 - Runtime route mounting based on `Config::upstream_enabled`.
-- Compression, tracing, and permissive CORS.
+- Compression and tracing.
+- Restrictive CORS based on configured allowed origins. An empty origin list does not enable a broad
+  allow-origin policy.
+- Configured request body limit for uploads and other request bodies.
 - Experimental write-route token checks inside adapters against scoped publishing tokens.
 
 ## Deferred
 
-- Production CORS allowlist configuration.
 - Rate limiting.
 - Integrity response headers beyond ecosystem-native metadata.
 - Central middleware-owned scoped write authorization.
@@ -57,4 +60,5 @@ Adapter routers are mounted by feature flag and runtime upstream enablement:
 
 - Read middleware behavior is uniform across adapters.
 - Write authorization is currently adapter-owned because native credential shapes differ.
-- The permissive CORS policy must be tightened before any non-private deployment.
+- Private deployments must configure `server.cors_allowed_origins` explicitly when browser clients
+  need cross-origin access.

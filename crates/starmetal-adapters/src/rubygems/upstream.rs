@@ -77,8 +77,7 @@ impl UpstreamClient for RubyGemsUpstreamClient {
             if !line.starts_with(version) {
                 continue;
             }
-            if let Some((_, checksum)) = line.split_once("checksum:sha256=") {
-                let checksum = checksum.split_whitespace().next().unwrap_or(checksum);
+            if let Some(checksum) = checksum_from_info_line(line) {
                 upstream_hashes.insert("sha256".to_string(), checksum.to_string());
             }
         }
@@ -99,5 +98,45 @@ impl UpstreamClient for RubyGemsUpstreamClient {
     async fn fetch_artifact(&self, artifact_id: &ArtifactId) -> Result<Bytes> {
         self.fetch_path(&format!("gems/{}", artifact_id.filename))
             .await
+    }
+}
+
+fn checksum_from_info_line(line: &str) -> Option<&str> {
+    if let Some((_, checksum)) = line.split_once("checksum:sha256=") {
+        return checksum_token(checksum);
+    }
+    let (_, checksum) = line.split_once("checksum:")?;
+    checksum_token(checksum)
+}
+
+fn checksum_token(value: &str) -> Option<&str> {
+    value
+        .split(|character: char| character.is_whitespace() || character == ',' || character == '|')
+        .find(|part| !part.is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::checksum_from_info_line;
+
+    #[test]
+    fn parses_legacy_sha256_checksum_metadata() {
+        let line = "1.0.0 |checksum:sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+        assert_eq!(
+            checksum_from_info_line(line),
+            Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        );
+    }
+
+    #[test]
+    fn parses_native_bundler_checksum_metadata() {
+        let line =
+            "1.0.0 |checksum:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+        assert_eq!(
+            checksum_from_info_line(line),
+            Some("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+        );
     }
 }

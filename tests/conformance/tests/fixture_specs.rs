@@ -796,12 +796,17 @@ fn maven_fixtures_conform_to_metadata_and_pom_expectations() {
 #[test]
 fn rubygems_compact_index_fixtures_conform_to_text_grammar() {
     let versions = compact_index_body_lines(fixture("rubygems/versions"));
-    assert_eq!(versions, ["rack 2.2.8,3.0.8", "rails 7.1.3"]);
+    assert_eq!(versions.len(), 2);
 
     for line in versions {
-        let (name, versions) = line
-            .split_once(' ')
-            .expect("versions line should contain gem name and versions");
+        let mut parts = line.split_whitespace();
+        let name = parts.next().expect("versions line should contain gem name");
+        let versions = parts
+            .next()
+            .expect("versions line should contain comma-separated versions");
+        let checksum = parts
+            .next()
+            .expect("versions line should contain info checksum");
         assert!(
             name.chars()
                 .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
@@ -812,6 +817,8 @@ fn rubygems_compact_index_fixtures_conform_to_text_grammar() {
                 .all(|version| !version.is_empty() && !version.contains('/')),
             "versions should be comma-separated tokens"
         );
+        assert_eq!(checksum.len(), 64);
+        assert!(checksum.chars().all(|c| c.is_ascii_hexdigit()));
     }
 
     let info = compact_index_body_lines(fixture("rubygems/info-rack"));
@@ -821,7 +828,7 @@ fn rubygems_compact_index_fixtures_conform_to_text_grammar() {
         assert!(!version.is_empty());
         if !metadata.is_empty() {
             assert!(
-                metadata.contains("checksum:sha256=") || metadata.contains(':'),
+                metadata.contains("checksum:") || metadata.contains(':'),
                 "metadata should contain dependencies or checksums"
             );
         }

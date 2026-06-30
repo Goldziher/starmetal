@@ -569,7 +569,23 @@ async fn rubygems_publish_route_serves_compact_index_and_gem() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert!(std::str::from_utf8(&body).unwrap().contains("sample 1.0.0"));
+    let versions = std::str::from_utf8(&body).unwrap();
+    let sample_line = versions
+        .lines()
+        .find(|line| line.starts_with("sample "))
+        .expect("versions index should include published sample gem");
+    let mut sample_parts = sample_line.split_whitespace();
+    assert_eq!(sample_parts.next(), Some("sample"));
+    assert_eq!(sample_parts.next(), Some("1.0.0"));
+    let checksum = sample_parts
+        .next()
+        .expect("versions index should include info checksum");
+    assert_eq!(checksum.len(), 64);
+    assert!(
+        checksum
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
+    );
 
     let (status, body) = response(
         router.clone(),
@@ -580,11 +596,9 @@ async fn rubygems_publish_route_serves_compact_index_and_gem() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert!(
-        std::str::from_utf8(&body)
-            .unwrap()
-            .contains("1.0.0 checksum:sha256=")
-    );
+    let info = std::str::from_utf8(&body).unwrap();
+    assert!(info.contains("1.0.0 |checksum:"));
+    assert!(!info.contains("checksum:sha256="));
 
     let (status, body) = response(
         router,

@@ -166,23 +166,6 @@ async fn update_compact_index(
     version: &str,
     sha256: &str,
 ) -> Result<(), (StatusCode, String)> {
-    let versions_key = PackageName::new("_versions");
-    let mut versions = service
-        .get_raw_upstream(Ecosystem::RubyGems, &versions_key)
-        .await
-        .map_err(|err| map_error(&err))?
-        .map(|bytes| String::from_utf8_lossy(&bytes).to_string())
-        .unwrap_or_else(|| "---\n".to_string());
-    let versions_line = format!("{} {version}", name.as_str());
-    if !versions.lines().any(|line| line == versions_line) {
-        versions.push_str(&versions_line);
-        versions.push('\n');
-    }
-    service
-        .put_raw_upstream(Ecosystem::RubyGems, &versions_key, Bytes::from(versions))
-        .await
-        .map_err(|err| map_error(&err))?;
-
     let info_key = PackageName::new(format!("info/{}", name.as_str()));
     let mut info = service
         .get_raw_upstream(Ecosystem::RubyGems, &info_key)
@@ -190,15 +173,74 @@ async fn update_compact_index(
         .map_err(|err| map_error(&err))?
         .map(|bytes| String::from_utf8_lossy(&bytes).to_string())
         .unwrap_or_else(|| "---\n".to_string());
-    let info_line = format!("{version} checksum:sha256={sha256}");
-    if !info.lines().any(|line| line == info_line) {
-        info.push_str(&info_line);
-        info.push('\n');
-    }
+    upsert_compact_index_line(
+        &mut info,
+        &format!("{version} "),
+        &format!("{version} |checksum:{sha256}"),
+    );
+    let info_checksum = hex::encode(sha2::Sha256::digest(info.as_bytes()));
     service
         .put_raw_upstream(Ecosystem::RubyGems, &info_key, Bytes::from(info))
         .await
+        .map_err(|err| map_error(&err))?;
+
+    let versions_key = PackageName::new("_versions");
+    let mut versions = service
+        .get_raw_upstream(Ecosystem::RubyGems, &versions_key)
+        .await
+        .map_err(|err| map_error(&err))?
+        .map(|bytes| String::from_utf8_lossy(&bytes).to_string())
+        .unwrap_or_else(|| "---\n".to_string());
+    upsert_versions_line(&mut versions, name.as_str(), version, &info_checksum);
+    service
+        .put_raw_upstream(Ecosystem::RubyGems, &versions_key, Bytes::from(versions))
+        .await
         .map_err(|err| map_error(&err))
+}
+
+fn upsert_versions_line(body: &mut String, name: &str, version: &str, checksum: &str) {
+    let line_prefix = format!("{name} ");
+    let mut versions = body
+        .lines()
+        .find_map(|line| {
+            let rest = line.strip_prefix(&line_prefix)?;
+            rest.split_whitespace().next()
+        })
+        .map(|tokens| {
+            tokens
+                .split(',')
+                .filter(|token| !token.is_empty())
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    if !versions.iter().any(|existing| existing == version) {
+        versions.push(version.to_string());
+    }
+    let line = format!("{name} {} {checksum}", versions.join(","));
+    upsert_compact_index_line(body, &line_prefix, &line);
+}
+
+fn upsert_compact_index_line(body: &mut String, line_prefix: &str, line: &str) {
+    let mut replaced = false;
+    let mut updated = String::new();
+    for existing in body.lines() {
+        if existing.starts_with(line_prefix) {
+            if !replaced {
+                updated.push_str(line);
+                updated.push('\n');
+                replaced = true;
+            }
+        } else {
+            updated.push_str(existing);
+            updated.push('\n');
+        }
+    }
+    if !replaced {
+        updated.push_str(line);
+        updated.push('\n');
+    }
+    *body = updated;
 }
 
 fn authorize_publish<S: HasRubyGemsState>(
