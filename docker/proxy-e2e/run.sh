@@ -484,21 +484,9 @@ docker run \
   "$inspect_image" \
   -c 'find /data -maxdepth 6 -type f | sort' >"$stored_files"
 
-require_stored "/pypi/sample-project/1.0.0/sample_project-1.0.0-py3-none-any.whl"
-require_stored "/pypi/sample-project/1.0.0/sample_project-1.0.0-py3-none-any.whl.blake3"
-require_stored "/pypi/sample-project/_raw_upstream"
 require_stored "/npm/sample-npm/1.0.0/sample-npm-1.0.0.tgz"
 require_stored "/npm/sample-npm/1.0.0/sample-npm-1.0.0.tgz.blake3"
 require_stored "/npm/sample-npm/_raw_upstream"
-require_stored "/cargo/sample-crate/1.0.0/sample-crate-1.0.0.crate"
-if [[ "$mode" == "http" ]]; then
-  require_stored "/hex/sample_hex/1.0.0/sample_hex-1.0.0.tar"
-  require_stored "/hex/registry%2Fsample_hex/_raw_upstream"
-fi
-require_stored "/maven/com.example:sample-lib/1.0.0/sample-lib-1.0.0.jar"
-require_stored "/rubygems/samplegem/1.0.0/samplegem-1.0.0.gem"
-require_stored "/nuget/sample.nuget/1.0.0/sample.nuget.1.0.0.nupkg"
-require_stored "/pub/sample_pub/1.0.0/sample_pub-1.0.0.tar.gz"
 require_stored_contains "/npm/sample-npm/_raw_upstream" "sample-npm"
 if [[ "$mode" == "pnpm" ]]; then
   require_stored "/npm/local-pnpm/1.0.0/local-pnpm-1.0.0.tgz"
@@ -506,6 +494,19 @@ if [[ "$mode" == "pnpm" ]]; then
   require_stored "/npm/local-pnpm/1.0.0/_metadata.json"
   require_stored "/npm/local-pnpm/_versions.json"
   require_stored "/_starmetal/published/npm/local-pnpm/1.0.0.json"
+else
+  require_stored "/pypi/sample-project/1.0.0/sample_project-1.0.0-py3-none-any.whl"
+  require_stored "/pypi/sample-project/1.0.0/sample_project-1.0.0-py3-none-any.whl.blake3"
+  require_stored "/pypi/sample-project/_raw_upstream"
+  require_stored "/cargo/sample-crate/1.0.0/sample-crate-1.0.0.crate"
+  if [[ "$mode" == "http" ]]; then
+    require_stored "/hex/sample_hex/1.0.0/sample_hex-1.0.0.tar"
+    require_stored "/hex/registry%2Fsample_hex/_raw_upstream"
+  fi
+  require_stored "/maven/com.example:sample-lib/1.0.0/sample-lib-1.0.0.jar"
+  require_stored "/rubygems/samplegem/1.0.0/samplegem-1.0.0.gem"
+  require_stored "/nuget/sample.nuget/1.0.0/sample.nuget.1.0.0.nupkg"
+  require_stored "/pub/sample_pub/1.0.0/sample_pub-1.0.0.tar.gz"
 fi
 
 echo "docker proxy E2E passed"
