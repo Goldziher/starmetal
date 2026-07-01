@@ -6,6 +6,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Result, StarmetalError};
+use crate::publishing::ProtocolMetadata;
 
 const RESERVED_STORAGE_PREFIX: &str = "_starmetal";
 
@@ -337,6 +338,10 @@ pub struct VersionMetadata {
     pub artifacts: Vec<ArtifactDigest>,
     pub license: Option<String>,
     pub yanked: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub listed: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protocol_metadata: Option<ProtocolMetadata>,
 }
 
 /// Summary info for a version (used in listings).

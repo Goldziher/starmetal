@@ -538,6 +538,8 @@ fn generate_policy_test(
     )
     .unwrap();
     writeln!(output, "        }}],").unwrap();
+    writeln!(output, "        listed: None,").unwrap();
+    writeln!(output, "        protocol_metadata: None,").unwrap();
     writeln!(output, "    }};").unwrap();
 
     writeln!(output, "    let result = policy.check(&metadata);").unwrap();

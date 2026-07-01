@@ -63,6 +63,10 @@ pub fn extract_version_metadata(
         artifacts: vec![artifact],
         license,
         yanked: false,
+        listed: None,
+        protocol_metadata: Some(starmetal_core::publishing::ProtocolMetadata::Npm {
+            packument: ver.clone(),
+        }),
     })
 }
 

@@ -16,11 +16,12 @@ use axum::routing::get;
 use axum::{Json, Router};
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
+use sha2::Digest;
 use starmetal_core::config::Config;
 use starmetal_core::error::StarmetalError;
 use starmetal_core::package::{ArtifactId, Ecosystem, PackageName};
 use starmetal_core::ports::{PackageService, PublishingService};
-use starmetal_core::publishing::{PublishRequest, PublishedArtifact, TokenScope};
+use starmetal_core::publishing::{ProtocolMetadata, PublishRequest, PublishedArtifact, TokenScope};
 
 use self::upstream::NpmUpstreamClient;
 
@@ -82,16 +83,43 @@ async fn publish_packument<S: HasNpmState>(
     payload: serde_json::Value,
 ) -> Result<axum::response::Response, (StatusCode, String)> {
     authorize_publish(&state, headers, &name)?;
-    let version = payload["dist-tags"]["latest"]
-        .as_str()
+    if !payload.is_object() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "npm publish payload must be an object".to_string(),
+        ));
+    }
+    let versions = payload["versions"].as_object().ok_or_else(|| {
+        (
+            StatusCode::BAD_REQUEST,
+            "missing npm versions object".to_string(),
+        )
+    })?;
+    let latest = match payload.get("dist-tags") {
+        Some(tags) => {
+            let tags = tags.as_object().ok_or_else(|| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    "npm dist-tags must be an object".to_string(),
+                )
+            })?;
+            match tags.get("latest") {
+                Some(value) => Some(value.as_str().ok_or_else(|| {
+                    (
+                        StatusCode::BAD_REQUEST,
+                        "npm dist-tags.latest must be a string".to_string(),
+                    )
+                })?),
+                None => None,
+            }
+        }
+        None => None,
+    };
+    let version = latest
         .map(str::to_string)
-        .or_else(|| {
-            payload["versions"]
-                .as_object()
-                .and_then(|versions| versions.keys().next().cloned())
-        })
+        .or_else(|| versions.keys().next().cloned())
         .ok_or_else(|| (StatusCode::BAD_REQUEST, "missing npm version".to_string()))?;
-    let version_payload = payload["versions"].get(&version).ok_or_else(|| {
+    let version_payload = versions.get(&version).ok_or_else(|| {
         (
             StatusCode::BAD_REQUEST,
             "missing npm version metadata".to_string(),
@@ -103,6 +131,7 @@ async fn publish_packument<S: HasNpmState>(
             "missing npm tarball attachment".to_string(),
         )
     })?;
+    let upstream_hashes = validated_npm_dist_hashes(&data, version_payload)?;
 
     state
         .publishing_service()
@@ -112,14 +141,31 @@ async fn publish_packument<S: HasNpmState>(
             version: version.clone(),
             license: version_payload["license"].as_str().map(str::to_string),
             yanked: false,
+            listed: true,
             artifacts: vec![PublishedArtifact {
                 filename,
                 data,
-                upstream_hashes: Default::default(),
+                upstream_hashes,
             }],
+            protocol_metadata: ProtocolMetadata::Npm {
+                packument: version_payload.clone(),
+            },
             allow_overwrite: state.config().publishing.allow_overwrite,
             allow_shadowing: state.config().publishing.allow_shadowing,
         })
+        .await
+        .map_err(|err| map_error(&err))?;
+    let sanitized_packument = sanitized_published_packument(payload, &version);
+    state
+        .package_service()
+        .put_raw_upstream(
+            Ecosystem::Npm,
+            &name,
+            bytes::Bytes::from(
+                serde_json::to_vec(&sanitized_packument)
+                    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?,
+            ),
+        )
         .await
         .map_err(|err| map_error(&err))?;
 
@@ -134,6 +180,74 @@ async fn publish_packument<S: HasNpmState>(
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?,
     )
         .into_response())
+}
+
+fn sanitized_published_packument(
+    mut payload: serde_json::Value,
+    latest_version: &str,
+) -> serde_json::Value {
+    if let Some(object) = payload.as_object_mut() {
+        object.remove("_attachments");
+        let dist_tags = object
+            .entry("dist-tags".to_string())
+            .or_insert_with(|| serde_json::json!({}));
+        if let Some(tags) = dist_tags.as_object_mut() {
+            tags.entry("latest".to_string())
+                .or_insert_with(|| serde_json::Value::String(latest_version.to_string()));
+        } else {
+            *dist_tags = serde_json::json!({ "latest": latest_version });
+        }
+    }
+    payload
+}
+
+fn validated_npm_dist_hashes(
+    data: &bytes::Bytes,
+    version_payload: &serde_json::Value,
+) -> Result<ahash::AHashMap<String, String>, (StatusCode, String)> {
+    let mut upstream_hashes = ahash::AHashMap::new();
+    if let Some(shasum) = version_payload["dist"]["shasum"].as_str() {
+        let actual = hex::encode(sha1::Sha1::digest(data));
+        if !actual.eq_ignore_ascii_case(shasum) {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "npm dist.shasum does not match uploaded tarball".to_string(),
+            ));
+        }
+        upstream_hashes.insert("sha1".to_string(), shasum.to_string());
+    }
+    if let Some(integrity) = version_payload["dist"]["integrity"].as_str() {
+        verify_npm_integrity(data, integrity)?;
+        upstream_hashes.insert("integrity".to_string(), integrity.to_string());
+    }
+    Ok(upstream_hashes)
+}
+
+fn verify_npm_integrity(data: &bytes::Bytes, integrity: &str) -> Result<(), (StatusCode, String)> {
+    let mut saw_supported_hash = false;
+    for token in integrity.split_whitespace() {
+        let hash_token = token.split_once('?').map_or(token, |(hash, _options)| hash);
+        let Some((algorithm, expected)) = hash_token.split_once('-') else {
+            continue;
+        };
+        let actual = match algorithm {
+            "sha512" => BASE64_STANDARD.encode(sha2::Sha512::digest(data)),
+            "sha384" => BASE64_STANDARD.encode(sha2::Sha384::digest(data)),
+            "sha256" => BASE64_STANDARD.encode(sha2::Sha256::digest(data)),
+            "sha1" => BASE64_STANDARD.encode(sha1::Sha1::digest(data)),
+            _ => continue,
+        };
+        saw_supported_hash = true;
+        if actual == expected {
+            return Ok(());
+        }
+    }
+    let message = if saw_supported_hash {
+        "npm dist.integrity does not match uploaded tarball"
+    } else {
+        "npm dist.integrity does not contain a supported hash"
+    };
+    Err((StatusCode::BAD_REQUEST, message.to_string()))
 }
 
 /// GET /{package} -- return packument JSON for an unscoped package.
@@ -230,16 +344,45 @@ async fn build_local_packument(
         let Some(artifact) = metadata.artifacts.first() else {
             continue;
         };
+        let mut version_payload = metadata
+            .protocol_metadata
+            .as_ref()
+            .and_then(|metadata| match metadata {
+                ProtocolMetadata::Npm { packument } => packument.as_object().cloned(),
+                _ => None,
+            })
+            .unwrap_or_default();
+        version_payload
+            .entry("name".to_string())
+            .or_insert_with(|| serde_json::Value::String(name.as_str().to_string()));
+        version_payload
+            .entry("version".to_string())
+            .or_insert_with(|| serde_json::Value::String(version.version.clone()));
+        if let Some(license) = &metadata.license {
+            version_payload
+                .entry("license".to_string())
+                .or_insert_with(|| serde_json::Value::String(license.clone()));
+        }
+        let dist = version_payload
+            .entry("dist".to_string())
+            .or_insert_with(|| serde_json::json!({}));
+        if !dist.is_object() {
+            *dist = serde_json::json!({});
+        }
+        dist["tarball"] = serde_json::Value::String(format!(
+            "{base_url}/npm/{}/-/{}",
+            name.as_str(),
+            artifact.filename
+        ));
+        if let Some(shasum) = artifact.upstream_hashes.get("sha1") {
+            dist["shasum"] = serde_json::Value::String(shasum.clone());
+        }
+        if let Some(integrity) = artifact.upstream_hashes.get("integrity") {
+            dist["integrity"] = serde_json::Value::String(integrity.clone());
+        }
         version_map.insert(
             version.version.clone(),
-            serde_json::json!({
-                "name": name.as_str(),
-                "version": version.version,
-                "license": metadata.license,
-                "dist": {
-                    "tarball": format!("{base_url}/npm/{}/-/{}", name.as_str(), artifact.filename),
-                }
-            }),
+            serde_json::Value::Object(version_payload),
         );
     }
     let latest = versions.last().map(|version| version.version.clone());
@@ -418,6 +561,58 @@ mod tests {
         assert_eq!(
             extract_version_from_filename("is-odd", "is-odd-1.0.0.tar.gz"),
             None
+        );
+    }
+
+    #[test]
+    fn should_sanitize_malformed_dist_tags_without_panicking() {
+        let payload = serde_json::json!({
+            "name": "demo",
+            "dist-tags": "bad",
+            "_attachments": {
+                "demo-1.0.0.tgz": { "data": "ZmFrZQ==" }
+            }
+        });
+
+        let sanitized = sanitized_published_packument(payload, "1.0.0");
+
+        assert!(sanitized.get("_attachments").is_none());
+        assert_eq!(sanitized["dist-tags"]["latest"], "1.0.0");
+    }
+
+    #[test]
+    fn should_reject_mismatched_npm_shasum() {
+        let data = bytes::Bytes::from_static(b"package");
+        let metadata = serde_json::json!({
+            "dist": {
+                "shasum": "0000000000000000000000000000000000000000"
+            }
+        });
+
+        let err = validated_npm_dist_hashes(&data, &metadata).unwrap_err();
+
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.1, "npm dist.shasum does not match uploaded tarball");
+    }
+
+    #[test]
+    fn should_accept_matching_npm_integrity() {
+        let data = bytes::Bytes::from_static(b"package");
+        let integrity = format!(
+            "sha512-{}",
+            BASE64_STANDARD.encode(sha2::Sha512::digest(&data))
+        );
+        let metadata = serde_json::json!({
+            "dist": {
+                "integrity": integrity
+            }
+        });
+
+        let hashes = validated_npm_dist_hashes(&data, &metadata).unwrap();
+
+        assert_eq!(
+            hashes.get("integrity").map(String::as_str),
+            metadata["dist"]["integrity"].as_str()
         );
     }
 }

@@ -92,6 +92,8 @@ impl UpstreamClient for RubyGemsUpstreamClient {
             }],
             license: None,
             yanked: false,
+            listed: None,
+            protocol_metadata: None,
         })
     }
 

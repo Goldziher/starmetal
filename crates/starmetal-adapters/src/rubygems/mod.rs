@@ -15,7 +15,7 @@ use starmetal_core::config::Config;
 use starmetal_core::error::StarmetalError;
 use starmetal_core::package::{ArtifactId, Ecosystem, PackageName};
 use starmetal_core::ports::{PackageService, PublishingService};
-use starmetal_core::publishing::{PublishRequest, PublishedArtifact, TokenScope};
+use starmetal_core::publishing::{ProtocolMetadata, PublishRequest, PublishedArtifact, TokenScope};
 
 use self::upstream::RubyGemsUpstreamClient;
 use crate::archive;
@@ -53,13 +53,21 @@ async fn publish_gem<S: HasRubyGemsState>(
             ecosystem: Ecosystem::RubyGems,
             name: name.clone(),
             version: metadata.version.clone(),
-            license: metadata.license,
+            license: metadata.license.clone(),
             yanked: false,
+            listed: true,
             artifacts: vec![PublishedArtifact {
                 filename,
                 data: body,
                 upstream_hashes,
             }],
+            protocol_metadata: ProtocolMetadata::RubyGems {
+                metadata: serde_json::json!({
+                    "name": metadata.name,
+                    "version": metadata.version,
+                    "license": metadata.license,
+                }),
+            },
             allow_overwrite: state.config().publishing.allow_overwrite,
             allow_shadowing: state.config().publishing.allow_shadowing,
         })

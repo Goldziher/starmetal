@@ -44,6 +44,7 @@ chrono = { version = "0.4", features = ["serde"] }
 
 # CLI
 clap = { version = "4", features = ["derive"] }
+ed25519-dalek = { version = "2", features = ["pkcs8"] }
 
 # Compression
 flate2 = "1"
@@ -59,7 +60,10 @@ memchr = "2"
 
 # Storage
 opendal = "0.56"
+pem-rfc7468 = "1"
+pkcs8 = { version = "0.10", features = ["pem"] }
 prost = "0.14"
+rand_core = "0.6"
 
 # HTTP client
 reqwest = { version = "0.13", default-features = false, features = [
@@ -77,6 +81,7 @@ rmcp = { version = "1.7.0", default-features = false, features = [
 
 # JSON schema generation
 schemars = "1.2"
+secrecy = "0.10"
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
@@ -114,4 +119,6 @@ tower-http = { version = "0.6", features = [
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2"
+x509-parser = "0.18"
+zeroize = "1"
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }

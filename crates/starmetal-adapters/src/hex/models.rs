@@ -52,6 +52,8 @@ pub fn hex_release_to_metadata(
         }],
         license,
         yanked: release.is_retired(),
+        listed: None,
+        protocol_metadata: None,
     })
 }
 

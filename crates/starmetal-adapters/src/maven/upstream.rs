@@ -119,6 +119,8 @@ impl UpstreamClient for MavenUpstreamClient {
             artifacts,
             license: None,
             yanked: false,
+            listed: None,
+            protocol_metadata: None,
         })
     }
 

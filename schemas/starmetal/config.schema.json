@@ -263,6 +263,150 @@
       },
       "type": "object"
     },
+    "SigningAlgorithm": {
+      "enum": [
+        "ed25519",
+        "ecdsa-p256-sha256",
+        "ml-dsa65"
+      ],
+      "type": "string"
+    },
+    "SigningConfig": {
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "keys": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SigningKeyConfig"
+          },
+          "type": "array"
+        },
+        "mode": {
+          "$ref": "#/$defs/SigningMode",
+          "default": "sign-and-verify"
+        },
+        "sign_cached_upstream": {
+          "default": false,
+          "type": "boolean"
+        },
+        "trust_roots": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SigningTrustRootConfig"
+          },
+          "type": "array"
+        },
+        "verify_on_read": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "SigningKeyConfig": {
+      "properties": {
+        "algorithm": {
+          "$ref": "#/$defs/SigningAlgorithm"
+        },
+        "certificate_chain_file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "certificate_file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ecosystems": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Ecosystem"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "packages": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "private_key_file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "private_key_password_env": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "public_key_file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/SigningKeyStatus",
+          "default": "active"
+        }
+      },
+      "required": [
+        "id",
+        "algorithm"
+      ],
+      "type": "object"
+    },
+    "SigningKeyStatus": {
+      "enum": [
+        "active",
+        "verify-only",
+        "disabled"
+      ],
+      "type": "string"
+    },
+    "SigningMode": {
+      "enum": [
+        "sign-only",
+        "sign-and-verify",
+        "verify-only"
+      ],
+      "type": "string"
+    },
+    "SigningTrustRootConfig": {
+      "properties": {
+        "allowed_algorithms": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SigningAlgorithm"
+          },
+          "type": "array"
+        },
+        "certificate_file": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "certificate_file"
+      ],
+      "type": "object"
+    },
     "StorageConfig": {
       "properties": {
         "backend": {
@@ -415,6 +559,17 @@
         "cors_allowed_origins": [],
         "max_upload_bytes": 536870912,
         "public_base_url": null
+      }
+    },
+    "signing": {
+      "$ref": "#/$defs/SigningConfig",
+      "default": {
+        "enabled": false,
+        "keys": [],
+        "mode": "sign-and-verify",
+        "sign_cached_upstream": false,
+        "trust_roots": [],
+        "verify_on_read": false
       }
     },
     "storage": {

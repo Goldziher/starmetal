@@ -21,7 +21,7 @@ use starmetal_core::config::Config;
 use starmetal_core::error::StarmetalError;
 use starmetal_core::package::{ArtifactId, Ecosystem, PackageName, VersionMetadata};
 use starmetal_core::ports::{PackageService, PublishingService};
-use starmetal_core::publishing::{PublishRequest, PublishedArtifact, TokenScope};
+use starmetal_core::publishing::{ProtocolMetadata, PublishRequest, PublishedArtifact, TokenScope};
 
 use self::upstream::PypiUpstreamClient;
 
@@ -66,6 +66,7 @@ async fn legacy_upload<S: HasPypiState>(
     let mut version = None;
     let mut license = None;
     let mut file = None;
+    let mut form_fields = serde_json::Map::new();
 
     while let Some(field) = multipart
         .next_field()
@@ -95,6 +96,7 @@ async fn legacy_upload<S: HasPypiState>(
             .text()
             .await
             .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?;
+        insert_form_field(&mut form_fields, &field_name, value.clone());
         match field_name.as_str() {
             "name" => name = Some(value),
             "version" => version = Some(value),
@@ -122,7 +124,24 @@ async fn legacy_upload<S: HasPypiState>(
     })?;
     let sha256 = hex::encode(sha2::Sha256::digest(&data));
     let mut upstream_hashes = ahash::AHashMap::new();
-    upstream_hashes.insert("sha256".to_string(), sha256);
+    upstream_hashes.insert("sha256".to_string(), sha256.clone());
+    let requires_python = form_fields
+        .get("requires_python")
+        .or_else(|| form_fields.get("requires-python"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    let gpg_sig = form_fields
+        .get("gpg_signature")
+        .or_else(|| form_fields.get("gpg-sig"))
+        .and_then(serde_json::Value::as_str)
+        .map(|value| value == "true" || value == "1");
+    let file_metadata = serde_json::json!({
+        "filename": filename.clone(),
+        "size": data.len(),
+        "hashes": { "sha256": sha256 },
+        "requires-python": requires_python,
+        "gpg-sig": gpg_sig,
+    });
 
     state
         .publishing_service()
@@ -132,11 +151,18 @@ async fn legacy_upload<S: HasPypiState>(
             version: version.clone(),
             license,
             yanked: false,
+            listed: true,
             artifacts: vec![PublishedArtifact {
                 filename,
                 data,
                 upstream_hashes,
             }],
+            protocol_metadata: ProtocolMetadata::PyPI {
+                fields: serde_json::json!({
+                    "form": form_fields,
+                    "file": file_metadata,
+                }),
+            },
             allow_overwrite: state.config().publishing.allow_overwrite,
             allow_shadowing: state.config().publishing.allow_shadowing,
         })
@@ -147,6 +173,27 @@ async fn legacy_upload<S: HasPypiState>(
         StatusCode::OK,
         format!("uploaded {} {version}", name.as_str()),
     ))
+}
+
+fn insert_form_field(
+    form: &mut serde_json::Map<String, serde_json::Value>,
+    key: &str,
+    value: String,
+) {
+    match form.get_mut(key) {
+        Some(existing) => {
+            if let Some(values) = existing.as_array_mut() {
+                values.push(serde_json::Value::String(value));
+            } else {
+                let previous = std::mem::replace(existing, serde_json::Value::Null);
+                *existing =
+                    serde_json::Value::Array(vec![previous, serde_json::Value::String(value)]);
+            }
+        }
+        None => {
+            form.insert(key.to_string(), serde_json::Value::String(value));
+        }
+    }
 }
 
 /// GET /simple/{project} (without trailing slash) -- redirect to canonical URL.
@@ -295,21 +342,41 @@ fn pypi_files_from_metadata(
     metadata
         .artifacts
         .iter()
-        .map(|artifact| starmetal_core::registry::pypi::PypiFile {
-            filename: artifact.filename.clone(),
-            url: format!(
-                "/pypi/packages/{}/{}/{}",
-                metadata.name.as_str(),
-                metadata.version,
-                artifact.filename
-            ),
-            hashes: artifact.upstream_hashes.clone().into_iter().collect(),
-            requires_python: None,
-            yanked: starmetal_core::registry::pypi::PypiYanked::Bool(metadata.yanked),
-            size: Some(artifact.size),
-            upload_time: None,
-            dist_info_metadata: None,
-            gpg_sig: None,
+        .map(|artifact| {
+            let protocol_file =
+                metadata
+                    .protocol_metadata
+                    .as_ref()
+                    .and_then(|metadata| match metadata {
+                        ProtocolMetadata::PyPI { fields } => fields.get("file"),
+                        _ => None,
+                    });
+            starmetal_core::registry::pypi::PypiFile {
+                filename: artifact.filename.clone(),
+                url: format!(
+                    "/pypi/packages/{}/{}/{}",
+                    metadata.name.as_str(),
+                    metadata.version,
+                    artifact.filename
+                ),
+                hashes: artifact.upstream_hashes.clone().into_iter().collect(),
+                requires_python: protocol_file
+                    .and_then(|file| file.get("requires-python"))
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string),
+                yanked: starmetal_core::registry::pypi::PypiYanked::Bool(metadata.yanked),
+                size: Some(artifact.size),
+                upload_time: protocol_file
+                    .and_then(|file| file.get("upload-time"))
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string),
+                dist_info_metadata: protocol_file
+                    .and_then(|file| file.get("dist-info-metadata"))
+                    .cloned(),
+                gpg_sig: protocol_file
+                    .and_then(|file| file.get("gpg-sig"))
+                    .and_then(serde_json::Value::as_bool),
+            }
         })
         .collect()
 }

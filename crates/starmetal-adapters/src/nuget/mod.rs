@@ -16,7 +16,7 @@ use starmetal_core::config::Config;
 use starmetal_core::error::StarmetalError;
 use starmetal_core::package::{ArtifactId, Ecosystem, PackageName};
 use starmetal_core::ports::{PackageService, PublishingService};
-use starmetal_core::publishing::{PublishRequest, PublishedArtifact, TokenScope};
+use starmetal_core::publishing::{ProtocolMetadata, PublishRequest, PublishedArtifact, TokenScope};
 
 use self::upstream::NuGetUpstreamClient;
 use crate::archive;
@@ -107,11 +107,19 @@ async fn publish_package<S: HasNuGetState>(
         .publishing_service()
         .publish_package(PublishRequest {
             ecosystem: Ecosystem::NuGet,
-            name,
-            version: metadata.version,
-            license: metadata.license,
+            name: name.clone(),
+            version: metadata.version.clone(),
+            license: metadata.license.clone(),
             yanked: false,
+            listed: true,
             artifacts,
+            protocol_metadata: ProtocolMetadata::NuGet {
+                nuspec: serde_json::json!({
+                    "id": name.as_str(),
+                    "version": metadata.version,
+                    "license": metadata.license,
+                }),
+            },
             allow_overwrite: state.config().publishing.allow_overwrite,
             allow_shadowing: state.config().publishing.allow_shadowing,
         })

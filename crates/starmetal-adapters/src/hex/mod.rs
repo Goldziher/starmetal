@@ -23,7 +23,7 @@ use starmetal_core::config::Config;
 use starmetal_core::error::StarmetalError;
 use starmetal_core::package::{ArtifactId, Ecosystem, PackageName};
 use starmetal_core::ports::{PackageService, PublishingService};
-use starmetal_core::publishing::{PublishRequest, PublishedArtifact, TokenScope};
+use starmetal_core::publishing::{ProtocolMetadata, PublishRequest, PublishedArtifact, TokenScope};
 use starmetal_core::registry::hex::{HexMeta, HexPackage, HexRelease};
 
 use self::upstream::HexUpstreamClient;
@@ -71,11 +71,19 @@ async fn publish_package<S: HasHexState>(
             version: metadata.version.clone(),
             license: metadata.license.clone(),
             yanked: false,
+            listed: true,
             artifacts: vec![PublishedArtifact {
                 filename,
                 data: body,
                 upstream_hashes,
             }],
+            protocol_metadata: ProtocolMetadata::Hex {
+                package: serde_json::json!({
+                    "name": metadata.name.clone(),
+                    "version": metadata.version.clone(),
+                    "license": metadata.license.clone(),
+                }),
+            },
             allow_overwrite: state.config().publishing.allow_overwrite,
             allow_shadowing: state.config().publishing.allow_shadowing,
         })

@@ -151,6 +151,8 @@ pub fn pypi_files_to_metadata(
         artifacts,
         license: None,
         yanked,
+        listed: None,
+        protocol_metadata: None,
     })
 }
 

@@ -128,6 +128,8 @@ impl UpstreamClient for NuGetUpstreamClient {
             ],
             license: None,
             yanked: false,
+            listed: None,
+            protocol_metadata: None,
         })
     }
 
