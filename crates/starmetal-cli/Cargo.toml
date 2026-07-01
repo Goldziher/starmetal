@@ -45,6 +45,8 @@ backend-fs = ["starmetal-ops/backend-fs", "starmetal-storage/backend-fs"]
 backend-memory = ["starmetal-ops/backend-memory", "starmetal-storage/backend-memory"]
 backend-s3 = ["starmetal-ops/backend-s3", "starmetal-storage/backend-s3"]
 backend-gcs = ["starmetal-ops/backend-gcs", "starmetal-storage/backend-gcs"]
+pq = ["starmetal-core/pq", "starmetal-ops/pq"]
+signing-x509 = ["starmetal-core/signing-x509", "starmetal-ops/signing-x509"]
 
 [dependencies]
 axum.workspace = true

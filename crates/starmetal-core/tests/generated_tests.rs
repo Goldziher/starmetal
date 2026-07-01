@@ -537,6 +537,8 @@ fn policy_01_policy_checks_allow_everything_by_default() {
             size: 0,
             upstream_hashes: ahash::AHashMap::new(),
         }],
+        listed: None,
+        protocol_metadata: None,
     };
     let result = policy.check(&metadata);
     assert!(
@@ -566,6 +568,8 @@ fn policy_01_policy_checks_block_explicitly_blocked_package() {
             size: 0,
             upstream_hashes: ahash::AHashMap::new(),
         }],
+        listed: None,
+        protocol_metadata: None,
     };
     let result = policy.check(&metadata);
     let err = result.expect_err("fixture 'block explicitly blocked package' should be blocked");
@@ -596,6 +600,8 @@ fn policy_01_policy_checks_block_unlicensed_when_configured() {
             size: 0,
             upstream_hashes: ahash::AHashMap::new(),
         }],
+        listed: None,
+        protocol_metadata: None,
     };
     let result = policy.check(&metadata);
     let err = result.expect_err("fixture 'block unlicensed when configured' should be blocked");
@@ -626,6 +632,8 @@ fn policy_01_policy_checks_allow_unlicensed_when_not_configured() {
             size: 0,
             upstream_hashes: ahash::AHashMap::new(),
         }],
+        listed: None,
+        protocol_metadata: None,
     };
     let result = policy.check(&metadata);
     assert!(
@@ -655,6 +663,8 @@ fn policy_01_policy_checks_block_license_not_in_allowlist() {
             size: 0,
             upstream_hashes: ahash::AHashMap::new(),
         }],
+        listed: None,
+        protocol_metadata: None,
     };
     let result = policy.check(&metadata);
     let err = result.expect_err("fixture 'block license not in allowlist' should be blocked");
@@ -685,6 +695,8 @@ fn policy_01_policy_checks_allow_license_in_allowlist() {
             size: 0,
             upstream_hashes: ahash::AHashMap::new(),
         }],
+        listed: None,
+        protocol_metadata: None,
     };
     let result = policy.check(&metadata);
     assert!(
@@ -714,6 +726,8 @@ fn policy_01_policy_checks_empty_allowlist_allows_all_licenses() {
             size: 0,
             upstream_hashes: ahash::AHashMap::new(),
         }],
+        listed: None,
+        protocol_metadata: None,
     };
     let result = policy.check(&metadata);
     assert!(
@@ -743,6 +757,8 @@ fn policy_01_policy_checks_non_blocked_package_passes() {
             size: 0,
             upstream_hashes: ahash::AHashMap::new(),
         }],
+        listed: None,
+        protocol_metadata: None,
     };
     let result = policy.check(&metadata);
     assert!(

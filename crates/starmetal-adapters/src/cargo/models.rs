@@ -34,6 +34,10 @@ pub fn cargo_entry_to_metadata(name: &PackageName, entry: &CargoIndexEntry) -> V
         artifacts: vec![artifact],
         license: None,
         yanked: entry.yanked,
+        listed: None,
+        protocol_metadata: Some(starmetal_core::publishing::ProtocolMetadata::Cargo {
+            index_entry: serde_json::to_value(entry).unwrap_or(serde_json::Value::Null),
+        }),
     }
 }
 

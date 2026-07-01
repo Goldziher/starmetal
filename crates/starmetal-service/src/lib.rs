@@ -1,3 +1,3 @@
 mod service;
 
-pub use service::CachingPackageService;
+pub use service::{CachingPackageService, SigningService};

@@ -17,7 +17,7 @@ use starmetal_core::config::Config;
 use starmetal_core::error::StarmetalError;
 use starmetal_core::package::{ArtifactId, Ecosystem, PackageName};
 use starmetal_core::ports::{PackageService, PublishingService};
-use starmetal_core::publishing::{PublishRequest, PublishedArtifact, TokenScope};
+use starmetal_core::publishing::{ProtocolMetadata, PublishRequest, PublishedArtifact, TokenScope};
 
 use self::upstream::MavenUpstreamClient;
 
@@ -86,11 +86,15 @@ async fn put_path<S: HasMavenState>(
             version: artifact_id.version,
             license: None,
             yanked: false,
+            listed: true,
             artifacts: vec![PublishedArtifact {
                 filename: artifact_id.filename,
                 data: body,
                 upstream_hashes: Default::default(),
             }],
+            protocol_metadata: ProtocolMetadata::Maven {
+                path: path.to_string(),
+            },
             allow_overwrite: true,
             allow_shadowing: state.config().publishing.allow_shadowing,
         })

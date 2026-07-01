@@ -13,13 +13,17 @@ ahash.workspace = true
 async-trait.workspace = true
 base64.workspace = true
 bytes.workspace = true
+ed25519-dalek.workspace = true
 hex.workspace = true
+pkcs8.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha1.workspace = true
 sha2.workspace = true
 starmetal-core.workspace = true
 tracing.workspace = true
+zeroize.workspace = true
 
 [dev-dependencies]
+tempfile.workspace = true
 tokio = { workspace = true, features = ["full"] }

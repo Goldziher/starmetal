@@ -20,7 +20,7 @@ use starmetal_core::config::Config;
 use starmetal_core::error::StarmetalError;
 use starmetal_core::package::{ArtifactId, Ecosystem, PackageName};
 use starmetal_core::ports::{PackageService, PublishingService};
-use starmetal_core::publishing::{PublishRequest, PublishedArtifact, TokenScope};
+use starmetal_core::publishing::{ProtocolMetadata, PublishRequest, PublishedArtifact, TokenScope};
 use starmetal_core::registry::cargo::CargoIndexEntry;
 
 use self::upstream::CargoUpstreamClient;
@@ -95,6 +95,7 @@ async fn publish_crate<S: HasCargoState>(
     let filename = format!("{}-{version}.crate", package_name.as_str());
     let mut upstream_hashes = ahash::AHashMap::new();
     upstream_hashes.insert("sha256".to_string(), sha256.clone());
+    let entry = cargo_entry_from_publish_metadata(&metadata, &sha256)?;
 
     state
         .publishing_service()
@@ -104,18 +105,22 @@ async fn publish_crate<S: HasCargoState>(
             version: version.to_string(),
             license: metadata["license"].as_str().map(str::to_string),
             yanked: false,
+            listed: true,
             artifacts: vec![PublishedArtifact {
                 filename,
                 data: crate_bytes,
                 upstream_hashes,
             }],
+            protocol_metadata: ProtocolMetadata::Cargo {
+                index_entry: serde_json::to_value(&entry)
+                    .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?,
+            },
             allow_overwrite: state.config().publishing.allow_overwrite,
             allow_shadowing: state.config().publishing.allow_shadowing,
         })
         .await
         .map_err(|err| map_error(&err))?;
 
-    let entry = cargo_entry_from_publish_metadata(&metadata, &sha256)?;
     store_cargo_index_entry(state.package_service().as_ref(), &package_name, entry).await?;
 
     Ok(json_response(serde_json::json!({

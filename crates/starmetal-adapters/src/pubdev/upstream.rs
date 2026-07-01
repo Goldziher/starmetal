@@ -128,5 +128,7 @@ pub fn metadata_from_version(
         }],
         license: None,
         yanked: false,
+        listed: None,
+        protocol_metadata: None,
     }
 }

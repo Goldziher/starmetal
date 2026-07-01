@@ -20,7 +20,7 @@ use starmetal_core::config::Config;
 use starmetal_core::error::StarmetalError;
 use starmetal_core::package::{ArtifactId, Ecosystem, PackageName};
 use starmetal_core::ports::{PackageService, PublishingService};
-use starmetal_core::publishing::{PublishRequest, PublishedArtifact, TokenScope};
+use starmetal_core::publishing::{ProtocolMetadata, PublishRequest, PublishedArtifact, TokenScope};
 
 use self::upstream::NpmUpstreamClient;
 
@@ -103,6 +103,13 @@ async fn publish_packument<S: HasNpmState>(
             "missing npm tarball attachment".to_string(),
         )
     })?;
+    let mut upstream_hashes = ahash::AHashMap::new();
+    if let Some(shasum) = version_payload["dist"]["shasum"].as_str() {
+        upstream_hashes.insert("sha1".to_string(), shasum.to_string());
+    }
+    if let Some(integrity) = version_payload["dist"]["integrity"].as_str() {
+        upstream_hashes.insert("integrity".to_string(), integrity.to_string());
+    }
 
     state
         .publishing_service()
@@ -112,14 +119,31 @@ async fn publish_packument<S: HasNpmState>(
             version: version.clone(),
             license: version_payload["license"].as_str().map(str::to_string),
             yanked: false,
+            listed: true,
             artifacts: vec![PublishedArtifact {
                 filename,
                 data,
-                upstream_hashes: Default::default(),
+                upstream_hashes,
             }],
+            protocol_metadata: ProtocolMetadata::Npm {
+                packument: version_payload.clone(),
+            },
             allow_overwrite: state.config().publishing.allow_overwrite,
             allow_shadowing: state.config().publishing.allow_shadowing,
         })
+        .await
+        .map_err(|err| map_error(&err))?;
+    let sanitized_packument = sanitized_published_packument(payload, &version);
+    state
+        .package_service()
+        .put_raw_upstream(
+            Ecosystem::Npm,
+            &name,
+            bytes::Bytes::from(
+                serde_json::to_vec(&sanitized_packument)
+                    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?,
+            ),
+        )
         .await
         .map_err(|err| map_error(&err))?;
 
@@ -134,6 +158,22 @@ async fn publish_packument<S: HasNpmState>(
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?,
     )
         .into_response())
+}
+
+fn sanitized_published_packument(
+    mut payload: serde_json::Value,
+    latest_version: &str,
+) -> serde_json::Value {
+    if let Some(object) = payload.as_object_mut() {
+        object.remove("_attachments");
+        object
+            .entry("dist-tags".to_string())
+            .or_insert_with(|| serde_json::json!({ "latest": latest_version }));
+        if object["dist-tags"]["latest"].is_null() {
+            object["dist-tags"]["latest"] = serde_json::Value::String(latest_version.to_string());
+        }
+    }
+    payload
 }
 
 /// GET /{package} -- return packument JSON for an unscoped package.
@@ -230,16 +270,45 @@ async fn build_local_packument(
         let Some(artifact) = metadata.artifacts.first() else {
             continue;
         };
+        let mut version_payload = metadata
+            .protocol_metadata
+            .as_ref()
+            .and_then(|metadata| match metadata {
+                ProtocolMetadata::Npm { packument } => packument.as_object().cloned(),
+                _ => None,
+            })
+            .unwrap_or_default();
+        version_payload
+            .entry("name".to_string())
+            .or_insert_with(|| serde_json::Value::String(name.as_str().to_string()));
+        version_payload
+            .entry("version".to_string())
+            .or_insert_with(|| serde_json::Value::String(version.version.clone()));
+        if let Some(license) = &metadata.license {
+            version_payload
+                .entry("license".to_string())
+                .or_insert_with(|| serde_json::Value::String(license.clone()));
+        }
+        let dist = version_payload
+            .entry("dist".to_string())
+            .or_insert_with(|| serde_json::json!({}));
+        if !dist.is_object() {
+            *dist = serde_json::json!({});
+        }
+        dist["tarball"] = serde_json::Value::String(format!(
+            "{base_url}/npm/{}/-/{}",
+            name.as_str(),
+            artifact.filename
+        ));
+        if let Some(shasum) = artifact.upstream_hashes.get("sha1") {
+            dist["shasum"] = serde_json::Value::String(shasum.clone());
+        }
+        if let Some(integrity) = artifact.upstream_hashes.get("integrity") {
+            dist["integrity"] = serde_json::Value::String(integrity.clone());
+        }
         version_map.insert(
             version.version.clone(),
-            serde_json::json!({
-                "name": name.as_str(),
-                "version": version.version,
-                "license": metadata.license,
-                "dist": {
-                    "tarball": format!("{base_url}/npm/{}/-/{}", name.as_str(), artifact.filename),
-                }
-            }),
+            serde_json::Value::Object(version_payload),
         );
     }
     let latest = versions.last().map(|version| version.version.clone());

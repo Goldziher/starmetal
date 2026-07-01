@@ -8,6 +8,7 @@ use crate::error::{Result, StarmetalError};
 use crate::package::{Ecosystem, PackageName};
 use crate::policy::PolicyConfig;
 use crate::publishing::{PublishMode, PublishTokenConfig, TokenScope};
+use crate::signing::{SigningAlgorithm, SigningConfig, SigningKeyStatus, SigningMode};
 
 pub const DEFAULT_MAX_UPLOAD_BYTES: u64 = 512 * 1024 * 1024;
 pub const DEFAULT_MAX_UPSTREAM_BYTES: u64 = 512 * 1024 * 1024;
@@ -30,6 +31,8 @@ pub struct Config {
     pub publishing: PublishingConfig,
     #[serde(default)]
     pub encryption: EncryptionConfig,
+    #[serde(default)]
+    pub signing: SigningConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -319,11 +322,8 @@ impl Config {
             }
         }
 
-        if self.encryption.enabled {
-            return Err(StarmetalError::Config(
-                "at-rest encryption is not implemented in this MVP".to_string(),
-            ));
-        }
+        validate_encryption_config(&self.encryption)?;
+        validate_signing_config(&self.signing)?;
 
         if self.auth.enabled && self.auth.tokens.is_empty() {
             return Err(StarmetalError::Config(
@@ -414,6 +414,7 @@ impl Config {
                 }
             }
         }
+        redact_signing_config(&mut value);
         value
     }
 
@@ -456,6 +457,7 @@ impl Default for Config {
             admin: AdminConfig::default(),
             publishing: PublishingConfig::default(),
             encryption: EncryptionConfig::default(),
+            signing: SigningConfig::default(),
         }
     }
 }
@@ -620,6 +622,122 @@ fn is_private_host(host: &str) -> bool {
     }
 }
 
+fn validate_encryption_config(config: &EncryptionConfig) -> Result<()> {
+    if config.enabled {
+        return Err(StarmetalError::Config(
+            "at-rest encryption is not implemented; config is reserved for the signing/PQ roadmap"
+                .to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_signing_config(config: &SigningConfig) -> Result<()> {
+    if !config.enabled {
+        return Ok(());
+    }
+
+    if config.keys.is_empty() {
+        return Err(StarmetalError::Config(
+            "signing.enabled requires at least one signing key".to_string(),
+        ));
+    }
+
+    let mut ids = std::collections::HashSet::new();
+    let mut active_keys = 0usize;
+    for key in &config.keys {
+        if key.id.trim().is_empty() {
+            return Err(StarmetalError::Config(
+                "signing key id must not be empty".to_string(),
+            ));
+        }
+        if !ids.insert(key.id.as_str()) {
+            return Err(StarmetalError::Config(format!(
+                "duplicate signing key id: {}",
+                key.id
+            )));
+        }
+        if key.algorithm != SigningAlgorithm::Ed25519 {
+            return Err(StarmetalError::Config(format!(
+                "signing key {} uses unsupported algorithm {:?}; only ed25519 is implemented",
+                key.id, key.algorithm
+            )));
+        }
+        if matches!(
+            config.mode,
+            SigningMode::SignOnly | SigningMode::SignAndVerify
+        ) && key.status == SigningKeyStatus::Active
+        {
+            active_keys += 1;
+            if key.private_key_file.is_none() {
+                return Err(StarmetalError::Config(format!(
+                    "active signing key {} requires private_key_file",
+                    key.id
+                )));
+            }
+        }
+        if key.private_key_password_env.as_deref() == Some("") {
+            return Err(StarmetalError::Config(format!(
+                "signing key {} private_key_password_env must not be empty",
+                key.id
+            )));
+        }
+    }
+
+    if matches!(
+        config.mode,
+        SigningMode::SignOnly | SigningMode::SignAndVerify
+    ) && active_keys == 0
+    {
+        return Err(StarmetalError::Config(
+            "signing requires at least one active signing key".to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
+fn redact_signing_config(value: &mut toml::Value) {
+    let Some(signing) = value.get_mut("signing").and_then(toml::Value::as_table_mut) else {
+        return;
+    };
+    if let Some(keys) = signing.get_mut("keys").and_then(toml::Value::as_array_mut) {
+        for key in keys {
+            let Some(table) = key.as_table_mut() else {
+                continue;
+            };
+            for field in [
+                "private_key_file",
+                "private_key_password_env",
+                "certificate_file",
+                "certificate_chain_file",
+            ] {
+                if table.contains_key(field) {
+                    table.insert(
+                        field.to_string(),
+                        toml::Value::String("<redacted>".to_string()),
+                    );
+                }
+            }
+        }
+    }
+    if let Some(roots) = signing
+        .get_mut("trust_roots")
+        .and_then(toml::Value::as_array_mut)
+    {
+        for root in roots {
+            if let Some(table) = root.as_table_mut()
+                && table.contains_key("certificate_file")
+            {
+                table.insert(
+                    "certificate_file".to_string(),
+                    toml::Value::String("<redacted>".to_string()),
+                );
+            }
+        }
+    }
+}
+
 fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
     let max_len = left.len().max(right.len());
     let mut diff = left.len() ^ right.len();
@@ -758,6 +876,94 @@ mod tests {
     }
 
     #[test]
+    fn startup_validation_rejects_signing_without_keys() {
+        let config: Config = toml::from_str("[signing]\nenabled = true\n").unwrap();
+        let err = config.validate_mvp().unwrap_err().to_string();
+        assert!(err.contains("signing.enabled requires"));
+    }
+
+    #[test]
+    fn startup_validation_rejects_duplicate_signing_key_ids() {
+        let config: Config = toml::from_str(
+            r#"
+[signing]
+enabled = true
+
+[[signing.keys]]
+id = "release"
+algorithm = "ed25519"
+private_key_file = "/run/secrets/starmetal/signing-a.pk8"
+
+[[signing.keys]]
+id = "release"
+algorithm = "ed25519"
+private_key_file = "/run/secrets/starmetal/signing-b.pk8"
+"#,
+        )
+        .unwrap();
+
+        let err = config.validate_mvp().unwrap_err().to_string();
+        assert!(err.contains("duplicate signing key id: release"));
+    }
+
+    #[test]
+    fn startup_validation_rejects_unsupported_signing_algorithm() {
+        let config: Config = toml::from_str(
+            r#"
+[signing]
+enabled = true
+
+[[signing.keys]]
+id = "release"
+algorithm = "ecdsa-p256-sha256"
+private_key_file = "/run/secrets/starmetal/signing.pk8"
+"#,
+        )
+        .unwrap();
+
+        let err = config.validate_mvp().unwrap_err().to_string();
+        assert!(err.contains("unsupported algorithm"));
+    }
+
+    #[test]
+    fn startup_validation_rejects_active_signing_key_without_private_key_file() {
+        let config: Config = toml::from_str(
+            r#"
+[signing]
+enabled = true
+
+[[signing.keys]]
+id = "release"
+algorithm = "ed25519"
+"#,
+        )
+        .unwrap();
+
+        let err = config.validate_mvp().unwrap_err().to_string();
+        assert!(err.contains("requires private_key_file"));
+    }
+
+    #[test]
+    fn startup_validation_rejects_empty_signing_password_env() {
+        let config: Config = toml::from_str(
+            r#"
+[signing]
+enabled = true
+
+[[signing.keys]]
+id = "release"
+algorithm = "ed25519"
+private_key_file = "/run/secrets/starmetal/signing.pk8"
+private_key_password_env = ""
+"#,
+        )
+        .unwrap();
+
+        let err = config.validate_mvp().unwrap_err().to_string();
+        assert!(err.contains("private_key_password_env must not be empty"));
+    }
+
+    #[test]
     fn redacted_value_hides_auth_tokens() {
         let config: Config =
             toml::from_str("[auth]\nenabled = true\ntokens = [\"secret-token\"]\n").unwrap();
@@ -889,6 +1095,35 @@ tokens = ["admin-secret"]
 
         let output = toml::to_string_pretty(&config.redacted_value()).unwrap();
         assert!(!output.contains("admin-secret"));
+        assert!(output.contains("<redacted>"));
+    }
+
+    #[test]
+    fn redacted_value_hides_signing_paths_and_trust_roots() {
+        let config: Config = toml::from_str(
+            r#"
+[signing]
+enabled = true
+
+[[signing.keys]]
+id = "release"
+algorithm = "ed25519"
+private_key_file = "/run/secrets/starmetal/signing.pk8"
+private_key_password_env = "STARMETAL_SIGNING_KEY_PASSWORD"
+certificate_file = "/run/secrets/starmetal/signing.crt.pem"
+certificate_chain_file = "/run/secrets/starmetal/chain.pem"
+
+[[signing.trust_roots]]
+id = "internal-ca"
+certificate_file = "/etc/starmetal/trust/internal-ca.pem"
+"#,
+        )
+        .unwrap();
+
+        let output = toml::to_string_pretty(&config.redacted_value()).unwrap();
+        assert!(!output.contains("/run/secrets"));
+        assert!(!output.contains("STARMETAL_SIGNING_KEY_PASSWORD"));
+        assert!(!output.contains("/etc/starmetal/trust"));
         assert!(output.contains("<redacted>"));
     }
 

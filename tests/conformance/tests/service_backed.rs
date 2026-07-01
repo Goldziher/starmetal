@@ -68,6 +68,8 @@ fn metadata(
         }],
         license: Some("MIT".to_string()),
         yanked: false,
+        listed: None,
+        protocol_metadata: None,
     }
 }
 

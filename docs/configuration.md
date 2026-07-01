@@ -59,6 +59,11 @@ docker run --rm \
 - `publishing.enabled = true` only supports `publishing.mode = "local"` in the MVP.
 - `publishing.enabled = true` rejects any enabled `publishing.upstream.*` forwarding config.
 - `publishing.enabled = true` requires at least one publish, yank, or admin scoped token.
+- `signing.enabled = true` requires at least one signing key.
+- Signing currently supports Starmetal DSSE-style Ed25519 PKCS#8 keys. Other configured algorithms
+  are rejected until protocol-native or PQ signing implementations are added.
+- Active signing keys require `private_key_file`; inline keys and empty password environment names
+  are rejected.
 - `encryption.enabled = true` is rejected because at-rest encryption is not implemented yet.
 
 ## Server
@@ -232,10 +237,65 @@ At-rest encryption config is accepted by the schema but not implemented in the M
 | `encryption.enabled` | `false` | Must remain false. Validation rejects true. |
 | `encryption.key_file` | `null` | Reserved key-file path for future encryption support. |
 
+## Signing
+
+Signing is disabled by default. When enabled, Starmetal signs immutable local publish statements and
+metadata sidecars with DSSE-style Ed25519 signatures. Private keys are loaded from PKCS#8 PEM files;
+inline keys and inline passphrases are not supported. On Unix, private key files must not grant group
+or world permissions.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `signing.enabled` | `false` | Enables Starmetal signature generation and verification. |
+| `signing.mode` | `"sign-and-verify"` | `sign-only`, `sign-and-verify`, or `verify-only`. Runtime verification currently requires configured key material. |
+| `signing.verify_on_read` | `false` | Verifies Starmetal signature sidecars before serving signed cached metadata or artifacts. |
+| `signing.sign_cached_upstream` | `false` | Signs policy-accepted upstream artifacts as Starmetal cache observations. |
+| `signing.keys.*.id` | Required | Unique key identifier stored in signature envelopes. |
+| `signing.keys.*.algorithm` | Required | Currently only `ed25519` is implemented. `ecdsa-p256-sha256` and `ml-dsa65` are reserved. |
+| `signing.keys.*.private_key_file` | Required for active signing keys | Path to an Ed25519 PKCS#8 PEM private key file. |
+| `signing.keys.*.private_key_password_env` | `null` | Reserved for encrypted private keys. Empty values are rejected. |
+| `signing.keys.*.certificate_file` | `null` | Optional certificate file. Its SHA-256 fingerprint is embedded for identity pinning metadata. |
+| `signing.keys.*.certificate_chain_file` | `null` | Optional PEM chain embedded in signature metadata. |
+| `signing.keys.*.ecosystems` | `[]` | Optional ecosystem allowlist for this signing key. Empty means all ecosystems. |
+| `signing.keys.*.packages` | `[]` | Optional package-name allowlist for this signing key. Empty means all packages. |
+| `signing.keys.*.status` | `"active"` | `active`, `verify-only`, or `disabled`. |
+| `signing.trust_roots` | `[]` | Reserved trust-root metadata for certificate pinning and future verify-only operation. |
+| `signing.trust_roots.*.id` | Required for each trust root | Unique trust-root identifier. |
+| `signing.trust_roots.*.certificate_file` | Required for each trust root | Path to a PEM certificate reserved for future trust-root validation. |
+| `signing.trust_roots.*.allowed_algorithms` | `[]` | Optional algorithm allowlist for the trust root. |
+
+Example:
+
+```toml
+[signing]
+enabled = true
+mode = "sign-and-verify"
+verify_on_read = true
+sign_cached_upstream = false
+
+[[signing.keys]]
+id = "release-2026q3"
+algorithm = "ed25519"
+private_key_file = "/run/secrets/starmetal/signing.pk8"
+certificate_file = "/run/secrets/starmetal/signing.crt.pem"
+certificate_chain_file = "/run/secrets/starmetal/chain.pem"
+ecosystems = ["npm", "cargo"]
+packages = []
+status = "active"
+```
+
+## PQ Readiness
+
+The `pq` feature flag reserves Starmetal-level ML-DSA/ML-KEM configuration and schema surface for
+future countersignature and hybrid key-wrapping work. Native package clients do not currently verify
+Starmetal PQ signatures, so do not claim package-client post-quantum verification until a native
+client path exists.
+
 ## Operational Notes
 
 - The admin config endpoint returns a redacted config; it does not expose auth, admin, or publishing
-  token values.
+  token values, signing key paths, signing password environment names, certificate paths, or trust
+  root paths.
 - Metrics are in-memory process counters exposed through `GET /admin/api/v1/metrics`; they reset on
   restart.
 - Blake3 sidecar files are stored beside artifacts and verified before cached artifacts are served.

@@ -117,6 +117,8 @@ mod tests {
                 size: 0,
                 upstream_hashes: AHashMap::new(),
             }],
+            listed: None,
+            protocol_metadata: None,
         }
     }
 

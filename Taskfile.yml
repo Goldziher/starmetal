@@ -118,6 +118,11 @@ tasks:
     cmds:
       - ./docker/proxy-e2e/run.sh --pnpm
 
+  docker:publish:e2e:
+    desc: Run deterministic Docker publish E2E tests currently supported by local npm/pnpm
+    cmds:
+      - task: docker:proxy:e2e:pnpm
+
   docker:proxy:e2e:live:
     desc: Run live Docker proxy E2E tests when available
     cmds:
@@ -291,6 +296,8 @@ tasks:
       - cargo check -p starmetal-cli --no-default-features --features rubygems,backend-memory
       - cargo check -p starmetal-cli --no-default-features --features nuget,backend-memory
       - cargo check -p starmetal-cli --no-default-features --features pub,backend-memory
+      - cargo check -p starmetal-cli --no-default-features --features signing-x509,backend-memory
+      - cargo check -p starmetal-cli --no-default-features --features pq,backend-memory
       - cargo check -p starmetal-cli --all-features
 
   deny:

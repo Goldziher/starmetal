@@ -11,9 +11,11 @@ use starmetal_core::package::{ArtifactId, Ecosystem, PackageName, VersionMetadat
 use starmetal_core::ports::{
     PackageService, PublishingService, StatisticsService, StoragePort, UpstreamClient,
 };
-use starmetal_core::publishing::{PublishRequest, PublishedArtifact, YankRequest};
+use starmetal_core::publishing::{
+    ProtocolMetadata, PublishRequest, PublishedArtifact, YankRequest,
+};
 use starmetal_server::state::{AppState, UpstreamClients};
-use starmetal_service::CachingPackageService;
+use starmetal_service::{CachingPackageService, SigningService};
 use starmetal_storage::OpenDalStorage;
 
 #[derive(Debug, Clone, Default)]
@@ -112,10 +114,12 @@ impl StarmetalRuntime {
         #[cfg(feature = "pub")]
         let pub_upstream = register_pub_upstream(&config, &mut clients);
 
-        let service = Arc::new(CachingPackageService::new(
+        let signing = SigningService::from_config(&config.signing)?;
+        let service = Arc::new(CachingPackageService::new_with_signing(
             storage.clone(),
             clients,
             config.policies.clone(),
+            signing,
         ));
         let upstreams = UpstreamClients {
             #[cfg(feature = "pypi")]
@@ -240,11 +244,13 @@ impl StarmetalRuntime {
                 version: version.to_string(),
                 license,
                 yanked: false,
+                listed: true,
                 artifacts: vec![PublishedArtifact {
                     filename,
                     data,
                     upstream_hashes: Default::default(),
                 }],
+                protocol_metadata: ProtocolMetadata::default_for(ecosystem),
                 allow_overwrite: self.config.publishing.allow_overwrite,
                 allow_shadowing: self.config.publishing.allow_shadowing,
             })
