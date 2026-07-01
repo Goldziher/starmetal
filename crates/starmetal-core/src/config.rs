@@ -645,6 +645,7 @@ fn validate_signing_config(config: &SigningConfig) -> Result<()> {
 
     let mut ids = std::collections::HashSet::new();
     let mut active_keys = 0usize;
+    let mut verification_keys = 0usize;
     for key in &config.keys {
         if key.id.trim().is_empty() {
             return Err(StarmetalError::Config(
@@ -663,6 +664,18 @@ fn validate_signing_config(config: &SigningConfig) -> Result<()> {
                 key.id, key.algorithm
             )));
         }
+        if key.status == SigningKeyStatus::VerifyOnly && key.private_key_file.is_some() {
+            return Err(StarmetalError::Config(format!(
+                "verify-only signing key {} must use public_key_file instead of private_key_file",
+                key.id
+            )));
+        }
+        if key.status == SigningKeyStatus::VerifyOnly && key.public_key_file.is_none() {
+            return Err(StarmetalError::Config(format!(
+                "verify-only signing key {} requires public_key_file",
+                key.id
+            )));
+        }
         if matches!(
             config.mode,
             SigningMode::SignOnly | SigningMode::SignAndVerify
@@ -675,6 +688,14 @@ fn validate_signing_config(config: &SigningConfig) -> Result<()> {
                     key.id
                 )));
             }
+        }
+        if matches!(
+            config.mode,
+            SigningMode::SignAndVerify | SigningMode::VerifyOnly
+        ) && key.status != SigningKeyStatus::Disabled
+            && (key.public_key_file.is_some() || key.private_key_file.is_some())
+        {
+            verification_keys += 1;
         }
         if key.private_key_password_env.as_deref() == Some("") {
             return Err(StarmetalError::Config(format!(
@@ -693,6 +714,15 @@ fn validate_signing_config(config: &SigningConfig) -> Result<()> {
             "signing requires at least one active signing key".to_string(),
         ));
     }
+    if matches!(
+        config.mode,
+        SigningMode::SignAndVerify | SigningMode::VerifyOnly
+    ) && verification_keys == 0
+    {
+        return Err(StarmetalError::Config(
+            "signature verification requires at least one public or active signing key".to_string(),
+        ));
+    }
 
     Ok(())
 }
@@ -708,6 +738,7 @@ fn redact_signing_config(value: &mut toml::Value) {
             };
             for field in [
                 "private_key_file",
+                "public_key_file",
                 "private_key_password_env",
                 "certificate_file",
                 "certificate_chain_file",
@@ -944,6 +975,46 @@ algorithm = "ed25519"
     }
 
     #[test]
+    fn startup_validation_rejects_verify_only_key_without_public_key_file() {
+        let config: Config = toml::from_str(
+            r#"
+[signing]
+enabled = true
+mode = "verify-only"
+
+[[signing.keys]]
+id = "release"
+algorithm = "ed25519"
+status = "verify-only"
+"#,
+        )
+        .unwrap();
+
+        let err = config.validate_mvp().unwrap_err().to_string();
+        assert!(err.contains("requires public_key_file"));
+    }
+
+    #[test]
+    fn startup_validation_accepts_verify_only_public_key_file() {
+        let config: Config = toml::from_str(
+            r#"
+[signing]
+enabled = true
+mode = "verify-only"
+
+[[signing.keys]]
+id = "release"
+algorithm = "ed25519"
+public_key_file = "/run/secrets/starmetal/signing.pub.pem"
+status = "verify-only"
+"#,
+        )
+        .unwrap();
+
+        assert!(config.validate_mvp().is_ok());
+    }
+
+    #[test]
     fn startup_validation_rejects_empty_signing_password_env() {
         let config: Config = toml::from_str(
             r#"
@@ -1109,6 +1180,7 @@ enabled = true
 id = "release"
 algorithm = "ed25519"
 private_key_file = "/run/secrets/starmetal/signing.pk8"
+public_key_file = "/run/secrets/starmetal/signing.pub.pem"
 private_key_password_env = "STARMETAL_SIGNING_KEY_PASSWORD"
 certificate_file = "/run/secrets/starmetal/signing.crt.pem"
 certificate_chain_file = "/run/secrets/starmetal/chain.pem"

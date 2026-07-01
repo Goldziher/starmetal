@@ -13,7 +13,7 @@ use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
 use bytes::Bytes;
 use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey};
-use pkcs8::DecodePrivateKey;
+use pkcs8::{DecodePrivateKey, DecodePublicKey};
 use sha2::Digest;
 use starmetal_core::error::{Result, StarmetalError};
 use starmetal_core::integrity;
@@ -48,7 +48,8 @@ pub struct SigningService {
 struct SigningKeyMaterial {
     id: String,
     algorithm: SigningAlgorithm,
-    signing_key: SigningKey,
+    status: SigningKeyStatus,
+    signing_key: Option<SigningKey>,
     verifying_key: VerifyingKey,
     certificate_fingerprint_sha256: Option<String>,
     certificate_chain_pem: Vec<String>,
@@ -79,28 +80,62 @@ impl SigningService {
             if key.status == SigningKeyStatus::Disabled {
                 continue;
             }
-            let Some(private_key_file) = &key.private_key_file else {
-                continue;
-            };
-            if key.private_key_password_env.is_some() {
+            if key.status == SigningKeyStatus::VerifyOnly && key.private_key_file.is_some() {
                 return Err(StarmetalError::Config(format!(
-                    "signing key {} uses encrypted private keys, which are not implemented yet",
+                    "verify-only signing key {} must use public_key_file instead of private_key_file",
                     key.id
                 )));
             }
-            validate_private_key_permissions(private_key_file)?;
-            let private_key_pem = Zeroizing::new(fs::read_to_string(private_key_file)?);
-            let signing_key =
-                SigningKey::from_pkcs8_pem(private_key_pem.as_str()).map_err(|err| {
-                    StarmetalError::Config(format!("invalid signing key {}: {err}", key.id))
-                })?;
-            let verifying_key = signing_key.verifying_key();
+            let signing_key = if let Some(private_key_file) = &key.private_key_file {
+                if key.private_key_password_env.is_some() {
+                    return Err(StarmetalError::Config(format!(
+                        "signing key {} uses encrypted private keys, which are not implemented yet",
+                        key.id
+                    )));
+                }
+                validate_private_key_permissions(private_key_file)?;
+                let private_key_pem = Zeroizing::new(fs::read_to_string(private_key_file)?);
+                Some(
+                    SigningKey::from_pkcs8_pem(private_key_pem.as_str()).map_err(|err| {
+                        StarmetalError::Config(format!("invalid signing key {}: {err}", key.id))
+                    })?,
+                )
+            } else {
+                None
+            };
+            let verifying_key = if let Some(public_key_file) = &key.public_key_file {
+                let public_key_pem = fs::read_to_string(public_key_file)?;
+                let verifying_key =
+                    VerifyingKey::from_public_key_pem(&public_key_pem).map_err(|err| {
+                        StarmetalError::Config(format!(
+                            "invalid verification key {}: {err}",
+                            key.id
+                        ))
+                    })?;
+                if let Some(signing_key) = &signing_key
+                    && signing_key.verifying_key().to_bytes() != verifying_key.to_bytes()
+                {
+                    return Err(StarmetalError::Config(format!(
+                        "signing key {} private_key_file does not match public_key_file",
+                        key.id
+                    )));
+                }
+                verifying_key
+            } else if let Some(signing_key) = &signing_key {
+                signing_key.verifying_key()
+            } else {
+                return Err(StarmetalError::Config(format!(
+                    "signing key {} requires private_key_file or public_key_file",
+                    key.id
+                )));
+            };
             let certificate_fingerprint_sha256 =
                 optional_file_sha256(key.certificate_file.as_deref())?;
             let certificate_chain_pem = optional_pem_chain(key.certificate_chain_file.as_deref())?;
             keys.push(SigningKeyMaterial {
                 id: key.id.clone(),
                 algorithm: key.algorithm,
+                status: key.status,
                 signing_key,
                 verifying_key,
                 certificate_fingerprint_sha256,
@@ -113,18 +148,32 @@ impl SigningService {
         if matches!(
             config.mode,
             SigningMode::SignOnly | SigningMode::SignAndVerify
-        ) && !keys
-            .iter()
-            .any(|key| key.algorithm == SigningAlgorithm::Ed25519)
-        {
+        ) && !keys.iter().any(|key| {
+            key.status == SigningKeyStatus::Active
+                && key.algorithm == SigningAlgorithm::Ed25519
+                && key.signing_key.is_some()
+        }) {
             return Err(StarmetalError::Config(
                 "signing requires a loadable active ed25519 key".to_string(),
+            ));
+        }
+        if matches!(
+            config.mode,
+            SigningMode::SignAndVerify | SigningMode::VerifyOnly
+        ) && keys.is_empty()
+        {
+            return Err(StarmetalError::Config(
+                "signature verification requires at least one verification key".to_string(),
             ));
         }
 
         Ok(Some(Self {
             mode: config.mode,
-            verify_on_read: config.verify_on_read,
+            verify_on_read: config.verify_on_read
+                || matches!(
+                    config.mode,
+                    SigningMode::SignAndVerify | SigningMode::VerifyOnly
+                ),
             sign_cached_upstream: config.sign_cached_upstream,
             keys,
         }))
@@ -146,7 +195,7 @@ impl SigningService {
             )
     }
 
-    fn select_key(
+    fn select_signing_key(
         &self,
         ecosystem: Ecosystem,
         package: &PackageName,
@@ -154,6 +203,9 @@ impl SigningService {
         self.keys
             .iter()
             .find(|key| {
+                if key.status != SigningKeyStatus::Active || key.signing_key.is_none() {
+                    return false;
+                }
                 let ecosystem_allowed =
                     key.ecosystems.is_empty() || key.ecosystems.contains(&ecosystem);
                 let package_allowed = key.packages.is_empty()
@@ -168,7 +220,7 @@ impl SigningService {
     }
 
     fn statement(&self, input: StatementInput) -> Result<SignatureStatement> {
-        let key = self.select_key(input.ecosystem, &input.package)?;
+        let key = self.select_signing_key(input.ecosystem, &input.package)?;
         Ok(SignatureStatement {
             ecosystem: input.ecosystem,
             package: input.package,
@@ -197,10 +249,16 @@ impl SigningService {
                 "signing service is not configured for signing".to_string(),
             ));
         }
-        let key = self.select_key(statement.ecosystem, &statement.package)?;
+        let key = self.select_signing_key(statement.ecosystem, &statement.package)?;
+        let signing_key = key.signing_key.as_ref().ok_or_else(|| {
+            StarmetalError::Config(format!(
+                "signing key {} has no private key material",
+                key.id
+            ))
+        })?;
         let payload = serde_json::to_vec(&statement)?;
         let pae = dsse_pae(STARMETAL_DSSE_PAYLOAD_TYPE.as_bytes(), &payload);
-        let signature = key.signing_key.sign(&pae);
+        let signature = signing_key.sign(&pae);
         Ok(DsseEnvelope {
             payload_type: STARMETAL_DSSE_PAYLOAD_TYPE.to_string(),
             payload: BASE64_STANDARD.encode(payload),
@@ -253,7 +311,14 @@ impl SigningService {
                     }
                 })?;
             if key.verifying_key.verify(&pae, &signature).is_ok() {
-                return Ok(serde_json::from_slice(&payload)?);
+                let statement: SignatureStatement = serde_json::from_slice(&payload)?;
+                if statement.key_id != key.id
+                    || statement.certificate_fingerprint_sha256
+                        != key.certificate_fingerprint_sha256
+                {
+                    continue;
+                }
+                return Ok(statement);
             }
         }
         Err(StarmetalError::IntegrityError {
@@ -283,6 +348,11 @@ struct StoredObjectSignatureCheck<'a> {
     storage_key: &'a str,
     data: &'a Bytes,
     source: SignatureSource,
+}
+
+struct StagedWrite {
+    key: String,
+    previous: Option<Bytes>,
 }
 
 impl CachingPackageService {
@@ -444,17 +514,32 @@ impl CachingPackageService {
         &self,
         key: &str,
         data: Bytes,
-        staged_keys: &mut Vec<String>,
+        staged_writes: &mut Vec<StagedWrite>,
     ) -> Result<()> {
+        if !staged_writes.iter().any(|write| write.key == key) {
+            let previous = self.storage.get(key).await?;
+            staged_writes.push(StagedWrite {
+                key: key.to_string(),
+                previous,
+            });
+        }
         self.storage.put(key, data).await?;
-        staged_keys.push(key.to_string());
         Ok(())
     }
 
-    async fn rollback_staged_keys(&self, keys: &[String]) {
-        for key in keys.iter().rev() {
-            if let Err(err) = self.storage.delete(key).await {
-                tracing::warn!(key, error = %err, "failed to roll back staged publish key");
+    async fn rollback_staged_writes(&self, writes: &[StagedWrite]) {
+        for write in writes.iter().rev() {
+            let result = if let Some(previous) = &write.previous {
+                self.storage.put(&write.key, previous.clone()).await
+            } else {
+                self.storage.delete(&write.key).await
+            };
+            if let Err(err) = result {
+                tracing::warn!(
+                    key = %write.key,
+                    error = %err,
+                    "failed to roll back staged storage write"
+                );
             }
         }
     }
@@ -464,16 +549,16 @@ impl CachingPackageService {
         statement: SignatureStatement,
         sidecar_key: &str,
         bundle_key: &str,
-        staged_keys: &mut Vec<String>,
+        staged_writes: &mut Vec<StagedWrite>,
     ) -> Result<()> {
         let Some(signing) = &self.signing else {
             return Ok(());
         };
         let envelope = signing.sign_statement(statement)?;
         let bytes = Bytes::from(serde_json::to_vec(&envelope)?);
-        self.put_and_track(sidecar_key, bytes.clone(), staged_keys)
+        self.put_and_track(sidecar_key, bytes.clone(), staged_writes)
             .await?;
-        self.put_and_track(bundle_key, bytes, staged_keys).await
+        self.put_and_track(bundle_key, bytes, staged_writes).await
     }
 
     fn verify_on_read(&self) -> bool {
@@ -587,18 +672,6 @@ impl CachingPackageService {
         Ok(Vec::new())
     }
 
-    async fn store_versions(
-        &self,
-        ecosystem: Ecosystem,
-        name: &PackageName,
-        versions: &[VersionInfo],
-    ) -> Result<()> {
-        let key = Self::versions_key(ecosystem, name)?;
-        self.storage
-            .put(&key, Bytes::from(serde_json::to_vec(versions)?))
-            .await
-    }
-
     fn record_statistics(
         &self,
         ecosystem: Ecosystem,
@@ -705,8 +778,42 @@ impl PackageService for CachingPackageService {
 
         self.policy.check(&metadata)?;
 
-        let serialized = serde_json::to_vec(&metadata)?;
-        self.storage.put(&key, Bytes::from(serialized)).await?;
+        let serialized = Bytes::from(serde_json::to_vec(&metadata)?);
+        let mut staged_writes = Vec::new();
+        let result = async {
+            if let Some(signing) = &self.signing
+                && signing.sign_cached_upstream()
+            {
+                let statement = signing.statement(StatementInput {
+                    ecosystem,
+                    package: name.clone(),
+                    version: version.to_string(),
+                    filename: None,
+                    storage_key: key.clone(),
+                    size: serialized.len() as u64,
+                    blake3: integrity::blake3_hex(&serialized),
+                    upstream_hashes: AHashMap::new(),
+                    source: SignatureSource::Metadata,
+                })?;
+                let sidecar_key = Self::signature_sidecar_key(&key);
+                let bundle_key =
+                    Self::signature_bundle_key(ecosystem, name, version, "metadata.sig.json")?;
+                self.sign_and_store_statement(
+                    statement,
+                    &sidecar_key,
+                    &bundle_key,
+                    &mut staged_writes,
+                )
+                .await?;
+            }
+            self.put_and_track(&key, serialized, &mut staged_writes)
+                .await
+        }
+        .await;
+        if let Err(err) = result {
+            self.rollback_staged_writes(&staged_writes).await;
+            return Err(err);
+        }
 
         Ok(metadata)
     }
@@ -776,32 +883,46 @@ impl PackageService for CachingPackageService {
         }
 
         let hash = integrity::blake3_hex(&data);
-        self.storage.put(&hash_key, Bytes::from(hash)).await?;
-        self.storage.put(&key, data.clone()).await?;
-        if let Some(signing) = &self.signing
-            && signing.sign_cached_upstream()
-        {
-            let statement = signing.statement(StatementInput {
-                ecosystem: artifact_id.ecosystem,
-                package: artifact_id.name.clone(),
-                version: artifact_id.version.clone(),
-                filename: Some(artifact_id.filename.clone()),
-                storage_key: key.clone(),
-                size: data.len() as u64,
-                blake3: integrity::blake3_hex(&data),
-                upstream_hashes: artifact_digest.upstream_hashes.clone(),
-                source: SignatureSource::UpstreamCache,
-            })?;
-            let sidecar_key = Self::signature_sidecar_key(&key);
-            let bundle_key = Self::signature_bundle_key(
-                artifact_id.ecosystem,
-                &artifact_id.name,
-                &artifact_id.version,
-                &format!("{}.sig.json", artifact_id.filename),
-            )?;
-            let mut staged_keys = Vec::new();
-            self.sign_and_store_statement(statement, &sidecar_key, &bundle_key, &mut staged_keys)
+        let mut staged_writes = Vec::new();
+        let result = async {
+            if let Some(signing) = &self.signing
+                && signing.sign_cached_upstream()
+            {
+                let statement = signing.statement(StatementInput {
+                    ecosystem: artifact_id.ecosystem,
+                    package: artifact_id.name.clone(),
+                    version: artifact_id.version.clone(),
+                    filename: Some(artifact_id.filename.clone()),
+                    storage_key: key.clone(),
+                    size: data.len() as u64,
+                    blake3: hash.clone(),
+                    upstream_hashes: artifact_digest.upstream_hashes.clone(),
+                    source: SignatureSource::UpstreamCache,
+                })?;
+                let sidecar_key = Self::signature_sidecar_key(&key);
+                let bundle_key = Self::signature_bundle_key(
+                    artifact_id.ecosystem,
+                    &artifact_id.name,
+                    &artifact_id.version,
+                    &format!("{}.sig.json", artifact_id.filename),
+                )?;
+                self.sign_and_store_statement(
+                    statement,
+                    &sidecar_key,
+                    &bundle_key,
+                    &mut staged_writes,
+                )
                 .await?;
+            }
+            self.put_and_track(&hash_key, Bytes::from(hash), &mut staged_writes)
+                .await?;
+            self.put_and_track(&key, data.clone(), &mut staged_writes)
+                .await
+        }
+        .await;
+        if let Err(err) = result {
+            self.rollback_staged_writes(&staged_writes).await;
+            return Err(err);
         }
         self.record_statistics(artifact_id.ecosystem, |stats| {
             stats.bytes_served = stats.bytes_served.saturating_add(data.len() as u64);
@@ -1078,7 +1199,7 @@ impl PublishingService for CachingPackageService {
         let result = match result {
             Ok(result) => result,
             Err(err) => {
-                self.rollback_staged_keys(&staged_keys).await;
+                self.rollback_staged_writes(&staged_keys).await;
                 return Err(err);
             }
         };
@@ -1104,73 +1225,91 @@ impl PublishingService for CachingPackageService {
         metadata.yanked = request.yanked;
         self.policy.check(&metadata)?;
 
-        let metadata_bytes = Bytes::from(serde_json::to_vec(&metadata)?);
-        self.storage
-            .put(&metadata_key, metadata_bytes.clone())
-            .await?;
-        let metadata_statement = self
-            .signing
-            .as_ref()
-            .map(|signing| {
-                signing.statement(StatementInput {
-                    ecosystem: request.ecosystem,
-                    package: request.name.clone(),
-                    version: request.version.clone(),
-                    filename: None,
-                    storage_key: metadata_key.clone(),
-                    size: metadata_bytes.len() as u64,
-                    blake3: integrity::blake3_hex(&metadata_bytes),
-                    upstream_hashes: AHashMap::new(),
-                    source: SignatureSource::Metadata,
+        let mut staged_writes = Vec::new();
+        let result = async {
+            let metadata_bytes = Bytes::from(serde_json::to_vec(&metadata)?);
+            let metadata_statement = self
+                .signing
+                .as_ref()
+                .map(|signing| {
+                    signing.statement(StatementInput {
+                        ecosystem: request.ecosystem,
+                        package: request.name.clone(),
+                        version: request.version.clone(),
+                        filename: None,
+                        storage_key: metadata_key.clone(),
+                        size: metadata_bytes.len() as u64,
+                        blake3: integrity::blake3_hex(&metadata_bytes),
+                        upstream_hashes: AHashMap::new(),
+                        source: SignatureSource::Metadata,
+                    })
                 })
-            })
-            .transpose()?;
-        if let Some(statement) = metadata_statement {
-            let sidecar_key = Self::signature_sidecar_key(&metadata_key);
-            let bundle_key = Self::signature_bundle_key(
+                .transpose()?;
+            if let Some(statement) = metadata_statement {
+                let sidecar_key = Self::signature_sidecar_key(&metadata_key);
+                let bundle_key = Self::signature_bundle_key(
+                    request.ecosystem,
+                    &request.name,
+                    &request.version,
+                    "metadata.sig.json",
+                )?;
+                self.sign_and_store_statement(
+                    statement,
+                    &sidecar_key,
+                    &bundle_key,
+                    &mut staged_writes,
+                )
+                .await?;
+            }
+            self.put_and_track(&metadata_key, metadata_bytes.clone(), &mut staged_writes)
+                .await?;
+            let published_manifest_key = Self::published_legacy_manifest_key(
                 request.ecosystem,
                 &request.name,
                 &request.version,
-                "metadata.sig.json",
             )?;
-            let mut staged_keys = Vec::new();
-            self.sign_and_store_statement(statement, &sidecar_key, &bundle_key, &mut staged_keys)
+            self.put_and_track(&published_manifest_key, metadata_bytes, &mut staged_writes)
                 .await?;
-        }
-        let published_manifest_key = Self::published_legacy_manifest_key(
-            request.ecosystem,
-            &request.name,
-            &request.version,
-        )?;
-        self.storage
-            .put(&published_manifest_key, metadata_bytes)
-            .await?;
-        let record_key =
-            Self::published_record_key(request.ecosystem, &request.name, &request.version)?;
-        if let Some(record_bytes) = self.storage.get(&record_key).await? {
-            let mut record: PublishRecord = serde_json::from_slice(&record_bytes)?;
-            record.yanked = request.yanked;
-            self.storage
-                .put(&record_key, Bytes::from(serde_json::to_vec(&record)?))
+            let record_key =
+                Self::published_record_key(request.ecosystem, &request.name, &request.version)?;
+            if let Some(record_bytes) = self.storage.get(&record_key).await? {
+                let mut record: PublishRecord = serde_json::from_slice(&record_bytes)?;
+                record.yanked = request.yanked;
+                self.put_and_track(
+                    &record_key,
+                    Bytes::from(serde_json::to_vec(&record)?),
+                    &mut staged_writes,
+                )
                 .await?;
-        }
+            }
 
-        let mut versions = self
-            .load_versions_for_publish(request.ecosystem, &request.name)
-            .await?;
-        if let Some(version) = versions
-            .iter_mut()
-            .find(|version| version.version == request.version)
-        {
-            version.yanked = request.yanked;
-        } else {
-            versions.push(VersionInfo {
-                version: request.version.clone(),
-                yanked: request.yanked,
-            });
+            let mut versions = self
+                .load_versions_for_publish(request.ecosystem, &request.name)
+                .await?;
+            if let Some(version) = versions
+                .iter_mut()
+                .find(|version| version.version == request.version)
+            {
+                version.yanked = request.yanked;
+            } else {
+                versions.push(VersionInfo {
+                    version: request.version.clone(),
+                    yanked: request.yanked,
+                });
+            }
+            let versions_key = Self::versions_key(request.ecosystem, &request.name)?;
+            self.put_and_track(
+                &versions_key,
+                Bytes::from(serde_json::to_vec(&versions)?),
+                &mut staged_writes,
+            )
+            .await
         }
-        self.store_versions(request.ecosystem, &request.name, &versions)
-            .await?;
+        .await;
+        if let Err(err) = result {
+            self.rollback_staged_writes(&staged_writes).await;
+            return Err(err);
+        }
         self.record_statistics(request.ecosystem, |stats| {
             stats.yanks = stats.yanks.saturating_add(1);
         });
@@ -1317,7 +1456,7 @@ mod tests {
 
     use super::*;
     #[cfg(unix)]
-    use pkcs8::{EncodePrivateKey, LineEnding};
+    use pkcs8::{EncodePrivateKey, EncodePublicKey, LineEnding};
     use starmetal_core::package::ArtifactDigest;
     use starmetal_core::publishing::PublishedArtifact;
     #[cfg(unix)]
@@ -1523,6 +1662,18 @@ mod tests {
     }
 
     #[cfg(unix)]
+    fn write_test_verification_key(path: &Path, mode: u32) {
+        let secret = [7_u8; 32];
+        let signing_key = SigningKey::from_bytes(&secret);
+        let pem = signing_key
+            .verifying_key()
+            .to_public_key_pem(LineEnding::LF)
+            .unwrap();
+        fs::write(path, pem.as_bytes()).unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap();
+    }
+
+    #[cfg(unix)]
     fn signing_config(private_key_file: PathBuf) -> SigningConfig {
         SigningConfig {
             enabled: true,
@@ -1533,6 +1684,7 @@ mod tests {
                 id: "test-key".to_string(),
                 algorithm: SigningAlgorithm::Ed25519,
                 private_key_file: Some(private_key_file),
+                public_key_file: None,
                 private_key_password_env: None,
                 certificate_file: None,
                 certificate_chain_file: None,
@@ -1624,6 +1776,62 @@ mod tests {
         assert_eq!(
             stored, artifact_data,
             "stored data should match fetched data"
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn sign_cached_upstream_signs_metadata_cache_hits() {
+        let dir = tempfile::tempdir().unwrap();
+        let key_path = dir.path().join("signing.pk8");
+        write_test_signing_key(&key_path, 0o600);
+        let mut config = signing_config(key_path);
+        config.sign_cached_upstream = true;
+        let signing = SigningService::from_config(&config).unwrap().unwrap();
+        let storage = Arc::new(MockStorage::new());
+        let name = PackageName::new("requests");
+        let mut metadata = AHashMap::new();
+        metadata.insert(
+            "2.31.0".to_string(),
+            test_metadata_with_artifact(
+                "requests",
+                "2.31.0",
+                "requests-2.31.0.tar.gz",
+                AHashMap::new(),
+            ),
+        );
+        let upstream = MockUpstream {
+            eco: Ecosystem::PyPI,
+            versions: vec![],
+            metadata,
+            artifacts: AHashMap::new(),
+        };
+        let mut clients: AHashMap<Ecosystem, Arc<dyn UpstreamClient>> = AHashMap::new();
+        clients.insert(Ecosystem::PyPI, Arc::new(upstream));
+        let service = CachingPackageService::new_with_signing(
+            storage.clone(),
+            clients,
+            PolicyConfig::default(),
+            Some(signing),
+        );
+
+        let first = service
+            .get_version_metadata(Ecosystem::PyPI, &name, "2.31.0")
+            .await
+            .unwrap();
+        let second = service
+            .get_version_metadata(Ecosystem::PyPI, &name, "2.31.0")
+            .await
+            .unwrap();
+
+        assert_eq!(first.version, "2.31.0");
+        assert_eq!(second.version, "2.31.0");
+        let metadata_key =
+            CachingPackageService::metadata_key(Ecosystem::PyPI, &name, "2.31.0").unwrap();
+        let sidecar_key = CachingPackageService::signature_sidecar_key(&metadata_key);
+        assert!(
+            storage.get(&sidecar_key).await.unwrap().is_some(),
+            "upstream metadata signature sidecar should be stored"
         );
     }
 
@@ -1956,6 +2164,79 @@ mod tests {
         };
 
         assert!(err.contains("must not be group/world-readable or writable"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn signing_service_rejects_verify_only_private_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let key_path = dir.path().join("verify-only.pk8");
+        write_test_signing_key(&key_path, 0o600);
+        let mut config = signing_config(key_path.clone());
+        config.mode = SigningMode::VerifyOnly;
+        config.keys[0].status = SigningKeyStatus::VerifyOnly;
+
+        let err = match SigningService::from_config(&config) {
+            Ok(_) => panic!("verify-only key with private material should be rejected"),
+            Err(err) => err,
+        };
+
+        assert!(err.to_string().contains("must use public_key_file"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn verify_only_public_key_verifies_existing_envelope() {
+        let dir = tempfile::tempdir().unwrap();
+        let private_key_path = dir.path().join("signing.pk8");
+        let public_key_path = dir.path().join("signing.pub.pem");
+        write_test_signing_key(&private_key_path, 0o600);
+        write_test_verification_key(&public_key_path, 0o644);
+        let signing = SigningService::from_config(&signing_config(private_key_path))
+            .unwrap()
+            .unwrap();
+        let statement = signing
+            .statement(StatementInput {
+                ecosystem: Ecosystem::PyPI,
+                package: PackageName::new("signed"),
+                version: "1.0.0".to_string(),
+                filename: None,
+                storage_key: "pypi/signed/1.0.0/_metadata.json".to_string(),
+                size: 2,
+                blake3: integrity::blake3_hex(&Bytes::from_static(b"{}")),
+                upstream_hashes: AHashMap::new(),
+                source: SignatureSource::Metadata,
+            })
+            .unwrap();
+        let envelope = signing.sign_statement(statement).unwrap();
+        let envelope_bytes = serde_json::to_vec(&envelope).unwrap();
+        let verify_config = SigningConfig {
+            enabled: true,
+            mode: SigningMode::VerifyOnly,
+            verify_on_read: true,
+            sign_cached_upstream: false,
+            keys: vec![SigningKeyConfig {
+                id: "test-key".to_string(),
+                algorithm: SigningAlgorithm::Ed25519,
+                private_key_file: None,
+                public_key_file: Some(public_key_path),
+                private_key_password_env: None,
+                certificate_file: None,
+                certificate_chain_file: None,
+                ecosystems: vec![Ecosystem::PyPI],
+                packages: Vec::new(),
+                status: SigningKeyStatus::VerifyOnly,
+            }],
+            trust_roots: Vec::new(),
+        };
+        let verifier = SigningService::from_config(&verify_config)
+            .unwrap()
+            .unwrap();
+
+        let verified = verifier.verify_envelope(&envelope_bytes).unwrap();
+
+        assert_eq!(verified.key_id, "test-key");
+        assert_eq!(verified.package, PackageName::new("signed"));
     }
 
     #[tokio::test]

@@ -352,6 +352,12 @@
             "null"
           ]
         },
+        "public_key_file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "status": {
           "$ref": "#/$defs/SigningKeyStatus",
           "default": "active"

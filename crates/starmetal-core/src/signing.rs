@@ -69,6 +69,7 @@ pub struct SigningKeyConfig {
     pub id: String,
     pub algorithm: SigningAlgorithm,
     pub private_key_file: Option<PathBuf>,
+    pub public_key_file: Option<PathBuf>,
     pub private_key_password_env: Option<String>,
     pub certificate_file: Option<PathBuf>,
     pub certificate_chain_file: Option<PathBuf>,

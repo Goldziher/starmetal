@@ -587,7 +587,7 @@
       ],
       "generated_by": "starmetal-schema-manager",
       "validated_by": "crates/starmetal-core/tests/schema_validation.rs",
-      "blake3": "1e5f9b341f02c5d8881546f634aa8e071ce8149800e9d4e2b31ef592d174aff3"
+      "blake3": "28f45e4912cdee79cff792fa7bef652db71affb6c8de1a390f8c4365921bb884"
     },
     {
       "id": "nuget-v3-service-index",
