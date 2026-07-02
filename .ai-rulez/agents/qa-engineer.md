@@ -16,7 +16,7 @@ You are the quality assurance specialist for Starmetal. Your scope spans the ent
 - Write live ignored native-client E2E tests only where public upstream access is intentional
 - Maintain CI pipeline configuration
 - Ensure feature flag combinations are tested
-- Maintain prek hook configuration
+- Maintain poly configuration
 
 ## Constraints
 

@@ -19,9 +19,9 @@ task security
 task ci
 ```
 
-## Pre-commit
+## Commit step
 
-Use `prek run --all-files` (NOT `pre-commit`). Hooks enforce formatting, linting, sorted Cargo.toml, unused deps, markdown lint, spell check, and actionlint.
+Use `poly lint .` and `poly fmt --check .` (apply fixes with `poly fmt --fix .`). poly enforces formatting, linting, sorted Cargo.toml, unused deps, markdown lint, spell check, and actionlint. poly runs in CI via the shared reusable validate workflow.
 
 ## Commits
 

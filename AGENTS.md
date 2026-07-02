@@ -1,7 +1,7 @@
 <!--
 🤖 AI-RULEZ :: GENERATED FILE — DO NOT EDIT DIRECTLY
 Project: starmetal
-Generated: 2026-06-29 20:28:09
+Generated: 2026-07-02 13:43:02
 Source: .ai-rulez/config.toml
 Target: AGENTS.md
 Content: rules=39, sections=0, agents=9
@@ -46,8 +46,8 @@ INSTRUCTIONS FOR AI AGENTS
    c. Commit both .ai-rulez/ and generated files
 
 Documentation: https://github.com/Goldziher/ai-rulez
-Content-Hash: blake3:a6f638f08c222e12fd264315a19894add7b5e99c72f7b1151928045063301ee5
-Source-Hash: blake3:0a7f7340ea1e19de55e77848e58143d8cb09e1bb6cfb5bb969e7dbe1a72a61f0
+Content-Hash: blake3:1a425d5122df853c2bc6d9b7c40b78097d700503617b863cde15995146eaca5c
+Source-Hash: blake3:15b9ef91aa58b783851a85186d3d76c974f4977d353826f02ff278ecb78fc068
 -->
 
 # starmetal
@@ -406,9 +406,9 @@ task security
 task ci
 ```
 
-## Pre-commit
+## Commit step
 
-Use `prek run --all-files` (NOT `pre-commit`). Hooks enforce formatting, linting, sorted Cargo.toml, unused deps, markdown lint, spell check, and actionlint.
+Use `poly lint .` and `poly fmt --check .` (apply fixes with `poly fmt --fix .`). poly enforces formatting, linting, sorted Cargo.toml, unused deps, markdown lint, spell check, and actionlint. poly runs in CI via the shared reusable validate workflow.
 
 ## Commits
 
@@ -438,6 +438,31 @@ Do NOT add AI co-author signatures.
 8. **Data Integrity Failures** — verify software updates, use signed artifacts and checksums.
 9. **Logging Failures** — log all security events with context, protect log data from tampering.
 10. **SSRF** — validate and allowlist URLs, restrict outbound network requests.
+
+### poly
+
+poly (polylint) is a single-binary, multi-language linter and formatter. It bundles engines (ruff, oxc, taplo, rumdl) and delegates to native tools (cargo fmt/clippy, golangci-lint, actionlint, shellcheck, shfmt) when present.
+
+## Commands
+
+- Lint: `poly lint .`
+- Check formatting (dry-run): `poly fmt --check .`
+- Apply formatting: `poly fmt --fix .`
+- Apply lint autofixes: `poly lint --fix .`
+
+## Configuration
+
+Per-repo `poly.toml`. Cache dir `.polylint/` (gitignored).
+
+## Severity
+
+`poly lint` exits non-zero only on error-severity findings; warnings don't fail CI.
+
+## CI
+
+Validation runs via `uses: xberg-io/actions/.github/workflows/reusable-validate.yml@v1`.
+
+Run `poly fmt --check .` and `poly lint .` after changes to verify compliance.
 
 ## Agents
 
