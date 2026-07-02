@@ -42,11 +42,7 @@ impl CargoUpstreamClient {
         Self::with_max_response_bytes(index_url, dl_url, DEFAULT_MAX_UPSTREAM_BYTES)
     }
 
-    pub fn with_max_response_bytes(
-        index_url: String,
-        dl_url: String,
-        max_response_bytes: u64,
-    ) -> Self {
+    pub fn with_max_response_bytes(index_url: String, dl_url: String, max_response_bytes: u64) -> Self {
         let client = reqwest::Client::builder()
             .connect_timeout(std::time::Duration::from_secs(30))
             .timeout(std::time::Duration::from_secs(60))
@@ -96,25 +92,17 @@ impl CargoUpstreamClient {
             });
         }
         if !status.is_success() {
-            return Err(StarmetalError::Upstream(format!(
-                "upstream returned HTTP {status}"
-            )));
+            return Err(StarmetalError::Upstream(format!("upstream returned HTTP {status}")));
         }
 
-        let body = crate::upstream_http::text_limited(
-            response,
-            self.max_response_bytes,
-            "Cargo sparse index",
-        )
-        .await?;
+        let body = crate::upstream_http::text_limited(response, self.max_response_bytes, "Cargo sparse index").await?;
 
         let entries: Vec<CargoIndexEntry> = body
             .lines()
             .filter(|line| !line.is_empty())
             .map(|line| {
-                serde_json::from_str(line).map_err(|err| {
-                    StarmetalError::Upstream(format!("failed to parse index line: {err}"))
-                })
+                serde_json::from_str(line)
+                    .map_err(|err| StarmetalError::Upstream(format!("failed to parse index line: {err}")))
             })
             .collect::<Result<Vec<_>>>()?;
 
@@ -192,11 +180,6 @@ impl UpstreamClient for CargoUpstreamClient {
             )));
         }
 
-        crate::upstream_http::bytes_limited(
-            response,
-            self.max_response_bytes,
-            "Cargo crate download",
-        )
-        .await
+        crate::upstream_http::bytes_limited(response, self.max_response_bytes, "Cargo crate download").await
     }
 }

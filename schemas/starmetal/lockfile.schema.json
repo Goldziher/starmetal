@@ -2,16 +2,7 @@
   "$defs": {
     "Ecosystem": {
       "description": "Supported package ecosystems.",
-      "enum": [
-        "pypi",
-        "npm",
-        "cargo",
-        "hex",
-        "maven",
-        "rubygems",
-        "nuget",
-        "pub"
-      ],
+      "enum": ["pypi", "npm", "cargo", "hex", "maven", "rubygems", "nuget", "pub"],
       "type": "string"
     },
     "LockMetadata": {
@@ -28,11 +19,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "schema_version",
-        "generated_at",
-        "starmetal_version"
-      ],
+      "required": ["schema_version", "generated_at", "starmetal_version"],
       "type": "object"
     },
     "LockedArtifact": {
@@ -49,11 +36,7 @@
           "type": "integer"
         }
       },
-      "required": [
-        "filename",
-        "blake3",
-        "size"
-      ],
+      "required": ["filename", "blake3", "size"],
       "type": "object"
     },
     "LockedPackage": {
@@ -81,13 +64,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "ecosystem",
-        "name",
-        "version",
-        "artifacts",
-        "resolved_from"
-      ],
+      "required": ["ecosystem", "name", "version", "artifacts", "resolved_from"],
       "type": "object"
     }
   },
@@ -106,21 +83,15 @@
       "type": "array"
     }
   },
-  "required": [
-    "metadata"
-  ],
+  "required": ["metadata"],
   "title": "Starmetal Lock File",
   "type": "object",
   "x-starmetal-source": {
     "generated_by": "starmetal-schema-manager",
     "schema_kind": "starmetal-owned-json-schema",
     "source_file": "crates/starmetal-core/src/lockfile.rs",
-    "source_ids": [
-      "starmetal-lockfile"
-    ],
-    "source_kinds": [
-      "starmetal-rust-type"
-    ],
+    "source_ids": ["starmetal-lockfile"],
+    "source_kinds": ["starmetal-rust-type"],
     "source_type": "starmetal_core::lockfile::LockFile",
     "validated_by": "crates/starmetal-core/tests/schema_validation.rs"
   }

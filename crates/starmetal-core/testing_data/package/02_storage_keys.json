@@ -1,46 +1,46 @@
 [
-	{
-		"name": "pypi storage key",
-		"input": {
-			"ecosystem": "pypi",
-			"name": "requests",
-			"version": "2.31.0",
-			"filename": "requests-2.31.0.tar.gz"
-		},
-		"expected": { "key": "pypi/requests/2.31.0/requests-2.31.0.tar.gz" },
-		"error": null
-	},
-	{
-		"name": "npm storage key",
-		"input": {
-			"ecosystem": "npm",
-			"name": "lodash",
-			"version": "4.17.21",
-			"filename": "lodash-4.17.21.tgz"
-		},
-		"expected": { "key": "npm/lodash/4.17.21/lodash-4.17.21.tgz" },
-		"error": null
-	},
-	{
-		"name": "cargo storage key",
-		"input": {
-			"ecosystem": "cargo",
-			"name": "serde",
-			"version": "1.0.200",
-			"filename": "serde-1.0.200.crate"
-		},
-		"expected": { "key": "cargo/serde/1.0.200/serde-1.0.200.crate" },
-		"error": null
-	},
-	{
-		"name": "hex storage key",
-		"input": {
-			"ecosystem": "hex",
-			"name": "phoenix",
-			"version": "1.7.12",
-			"filename": "phoenix-1.7.12.tar"
-		},
-		"expected": { "key": "hex/phoenix/1.7.12/phoenix-1.7.12.tar" },
-		"error": null
-	}
+  {
+    "name": "pypi storage key",
+    "input": {
+      "ecosystem": "pypi",
+      "name": "requests",
+      "version": "2.31.0",
+      "filename": "requests-2.31.0.tar.gz"
+    },
+    "expected": { "key": "pypi/requests/2.31.0/requests-2.31.0.tar.gz" },
+    "error": null
+  },
+  {
+    "name": "npm storage key",
+    "input": {
+      "ecosystem": "npm",
+      "name": "lodash",
+      "version": "4.17.21",
+      "filename": "lodash-4.17.21.tgz"
+    },
+    "expected": { "key": "npm/lodash/4.17.21/lodash-4.17.21.tgz" },
+    "error": null
+  },
+  {
+    "name": "cargo storage key",
+    "input": {
+      "ecosystem": "cargo",
+      "name": "serde",
+      "version": "1.0.200",
+      "filename": "serde-1.0.200.crate"
+    },
+    "expected": { "key": "cargo/serde/1.0.200/serde-1.0.200.crate" },
+    "error": null
+  },
+  {
+    "name": "hex storage key",
+    "input": {
+      "ecosystem": "hex",
+      "name": "phoenix",
+      "version": "1.7.12",
+      "filename": "phoenix-1.7.12.tar"
+    },
+    "expected": { "key": "hex/phoenix/1.7.12/phoenix-1.7.12.tar" },
+    "error": null
+  }
 ]

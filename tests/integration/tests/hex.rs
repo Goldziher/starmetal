@@ -48,10 +48,7 @@ async fn hex_package_metadata_returns_json() {
 
     let body: serde_json::Value = response.json().await.expect("invalid JSON response");
     assert_eq!(body["name"], "jason");
-    assert!(
-        body["releases"].is_array(),
-        "expected releases array in response"
-    );
+    assert!(body["releases"].is_array(), "expected releases array in response");
     assert!(
         !body["releases"].as_array().unwrap().is_empty(),
         "expected at least one release"
@@ -67,10 +64,7 @@ async fn hex_tarball_download() {
 
     let client = reqwest::Client::new();
     let response = client
-        .get(format!(
-            "{}/hex/tarballs/jason-1.4.1.tar",
-            server.base_url()
-        ))
+        .get(format!("{}/hex/tarballs/jason-1.4.1.tar", server.base_url()))
         .send()
         .await
         .expect("request failed");
@@ -125,10 +119,7 @@ async fn hex_package_has_license_info() {
 
     let body: serde_json::Value = response.json().await.expect("invalid JSON response");
     let meta = &body["meta"];
-    assert!(
-        meta["licenses"].is_array(),
-        "expected meta.licenses array in response"
-    );
+    assert!(meta["licenses"].is_array(), "expected meta.licenses array in response");
     assert!(
         !meta["licenses"].as_array().unwrap().is_empty(),
         "expected at least one license"
@@ -197,10 +188,7 @@ async fn mix_hex_package_fetch() {
         "mix hex.package fetch failed.\nstdout: {stdout}\nstderr: {stderr}"
     );
 
-    assert!(
-        output_path.exists(),
-        "tarball not written to {output_path:?}"
-    );
+    assert!(output_path.exists(), "tarball not written to {output_path:?}");
     let size = std::fs::metadata(&output_path).unwrap().len();
     assert!(size > 0, "tarball is empty");
 
@@ -290,10 +278,7 @@ async fn mix_hex_package_fetch_nonexistent_fails() {
         .await
         .expect("failed to run mix");
 
-    assert!(
-        !output.status.success(),
-        "mix should fail for nonexistent package"
-    );
+    assert!(!output.status.success(), "mix should fail for nonexistent package");
 
     server.shutdown();
 }

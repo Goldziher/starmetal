@@ -6,9 +6,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "name"
-      ],
+      "required": ["name"],
       "type": "object"
     },
     "PypiMeta": {
@@ -17,9 +15,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "api-version"
-      ],
+      "required": ["api-version"],
       "type": "object"
     }
   },
@@ -37,25 +33,15 @@
       "type": "array"
     }
   },
-  "required": [
-    "meta",
-    "projects"
-  ],
+  "required": ["meta", "projects"],
   "title": "PyPI Simple Repository API Project Index",
   "type": "object",
   "x-starmetal-source": {
     "generated_by": "starmetal-schema-manager",
     "schema_kind": "starmetal-derived-json-schema",
     "source_file": "crates/starmetal-core/src/registry/pypi.rs",
-    "source_ids": [
-      "pypa-specifications-index",
-      "pypi-simple-api",
-      "pypi-name-normalization"
-    ],
-    "source_kinds": [
-      "official-prose-index",
-      "official-prose"
-    ],
+    "source_ids": ["pypa-specifications-index", "pypi-simple-api", "pypi-name-normalization"],
+    "source_kinds": ["official-prose-index", "official-prose"],
     "source_type": "starmetal_core::registry::pypi::PypiIndex",
     "validated_by": "crates/starmetal-core/tests/schema_validation.rs; tests/conformance"
   }

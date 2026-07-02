@@ -11,16 +11,10 @@
         },
         "comment": {
           "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         }
       },
-      "required": [
-        "@id",
-        "@type"
-      ],
+      "required": ["@id", "@type"],
       "type": "object"
     }
   },
@@ -38,23 +32,15 @@
       "type": "string"
     }
   },
-  "required": [
-    "version",
-    "resources"
-  ],
+  "required": ["version", "resources"],
   "title": "NuGet V3 Service Index",
   "type": "object",
   "x-starmetal-source": {
     "generated_by": "starmetal-schema-manager",
     "schema_kind": "starmetal-derived-json-schema",
     "source_file": "crates/starmetal-core/src/registry/nuget.rs",
-    "source_ids": [
-      "nuget-v3-overview",
-      "nuget-v3-service-index"
-    ],
-    "source_kinds": [
-      "official-prose"
-    ],
+    "source_ids": ["nuget-v3-overview", "nuget-v3-service-index"],
+    "source_kinds": ["official-prose"],
     "source_type": "starmetal_core::registry::nuget::NugetServiceIndex",
     "validated_by": "crates/starmetal-core/tests/schema_validation.rs"
   }

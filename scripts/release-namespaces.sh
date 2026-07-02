@@ -16,7 +16,7 @@ SKIP_PYPI="false"
 SKIP_CARGO="false"
 
 usage() {
-  cat <<'USAGE'
+	cat <<'USAGE'
 Usage: scripts/release-namespaces.sh [--dry-run|--publish] [options]
 
 Options:
@@ -39,44 +39,44 @@ USAGE
 }
 
 while [[ $# -gt 0 ]]; do
-  case "$1" in
-  --dry-run) MODE="dry-run" ;;
-  --publish) MODE="publish" ;;
-  --yes) YES="true" ;;
-  --skip-npm) SKIP_NPM="true" ;;
-  --skip-pypi) SKIP_PYPI="true" ;;
-  --skip-cargo) SKIP_CARGO="true" ;;
-  --version)
-    shift
-    if [[ $# -eq 0 || "$1" == --* ]]; then
-      echo "--version requires a value" >&2
-      usage >&2
-      exit 2
-    fi
-    VERSION="${1#v}"
-    ;;
-  --version=*)
-    VERSION="${1#--version=}"
-    VERSION="${VERSION#v}"
-    ;;
-  -h | --help)
-    usage
-    exit 0
-    ;;
-  *)
-    echo "unknown argument: $1" >&2
-    usage >&2
-    exit 2
-    ;;
-  esac
-  shift
+	case "$1" in
+	--dry-run) MODE="dry-run" ;;
+	--publish) MODE="publish" ;;
+	--yes) YES="true" ;;
+	--skip-npm) SKIP_NPM="true" ;;
+	--skip-pypi) SKIP_PYPI="true" ;;
+	--skip-cargo) SKIP_CARGO="true" ;;
+	--version)
+		shift
+		if [[ $# -eq 0 || "$1" == --* ]]; then
+			echo "--version requires a value" >&2
+			usage >&2
+			exit 2
+		fi
+		VERSION="${1#v}"
+		;;
+	--version=*)
+		VERSION="${1#--version=}"
+		VERSION="${VERSION#v}"
+		;;
+	-h | --help)
+		usage
+		exit 0
+		;;
+	*)
+		echo "unknown argument: $1" >&2
+		usage >&2
+		exit 2
+		;;
+	esac
+	shift
 done
 
 require_cmd() {
-  if ! command -v "$1" >/dev/null 2>&1; then
-    echo "missing required command: $1" >&2
-    exit 1
-  fi
+	if ! command -v "$1" >/dev/null 2>&1; then
+		echo "missing required command: $1" >&2
+		exit 1
+	fi
 }
 
 require_cmd cargo
@@ -85,49 +85,49 @@ require_cmd npm
 require_cmd uv
 
 read_root_version() {
-  grep -E '^version = "' "${REPO_ROOT}/Cargo.toml" | head -1 | cut -d'"' -f2
+	grep -E '^version = "' "${REPO_ROOT}/Cargo.toml" | head -1 | cut -d'"' -f2
 }
 
 read_npm_version() {
-  node -p "require('${NPM_DIR}/package.json').version"
+	node -p "require('${NPM_DIR}/package.json').version"
 }
 
 read_pypi_version() {
-  grep -E '^version = "' "${PYPI_DIR}/pyproject.toml" | head -1 | cut -d'"' -f2
+	grep -E '^version = "' "${PYPI_DIR}/pyproject.toml" | head -1 | cut -d'"' -f2
 }
 
 read_crate_version() {
-  grep -E '^version = "' "$CRATE_MANIFEST" | head -1 | cut -d'"' -f2
+	grep -E '^version = "' "$CRATE_MANIFEST" | head -1 | cut -d'"' -f2
 }
 
 if [[ -z "$VERSION" ]]; then
-  VERSION="$(read_root_version)"
+	VERSION="$(read_root_version)"
 fi
 
 if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]]; then
-  echo "invalid version: $VERSION" >&2
-  exit 1
+	echo "invalid version: $VERSION" >&2
+	exit 1
 fi
 
 assert_version() {
-  local label="$1"
-  local actual="$2"
-  if [[ "$actual" != "$VERSION" ]]; then
-    echo "$label version mismatch: expected $VERSION, got $actual" >&2
-    exit 1
-  fi
+	local label="$1"
+	local actual="$2"
+	if [[ "$actual" != "$VERSION" ]]; then
+		echo "$label version mismatch: expected $VERSION, got $actual" >&2
+		exit 1
+	fi
 }
 
 npm_version_exists() {
-  npm view "${PACKAGE_NAME}@${VERSION}" version >/dev/null 2>&1
+	npm view "${PACKAGE_NAME}@${VERSION}" version >/dev/null 2>&1
 }
 
 pypi_version_exists() {
-  curl -fsS "https://pypi.org/pypi/${PACKAGE_NAME}/${VERSION}/json" >/dev/null 2>&1
+	curl -fsS "https://pypi.org/pypi/${PACKAGE_NAME}/${VERSION}/json" >/dev/null 2>&1
 }
 
 cargo_version_exists() {
-  curl -fsS "https://crates.io/api/v1/crates/${PACKAGE_NAME}/${VERSION}" >/dev/null 2>&1
+	curl -fsS "https://crates.io/api/v1/crates/${PACKAGE_NAME}/${VERSION}" >/dev/null 2>&1
 }
 
 assert_version "workspace" "$(read_root_version)"
@@ -140,62 +140,62 @@ echo "Mode: ${MODE}"
 echo
 
 if [[ "$MODE" == "publish" && "$YES" != "true" ]]; then
-  read -r -p "Publish ${PACKAGE_NAME} ${VERSION} to npm, PyPI, and crates.io? [y/N] " answer
-  case "$answer" in
-  y | Y | yes | YES) ;;
-  *)
-    echo "aborted"
-    exit 1
-    ;;
-  esac
+	read -r -p "Publish ${PACKAGE_NAME} ${VERSION} to npm, PyPI, and crates.io? [y/N] " answer
+	case "$answer" in
+	y | Y | yes | YES) ;;
+	*)
+		echo "aborted"
+		exit 1
+		;;
+	esac
 fi
 
 if [[ "$SKIP_NPM" != "true" ]]; then
-  echo "== npm =="
-  if npm_version_exists; then
-    echo "npm ${PACKAGE_NAME}@${VERSION} already exists; skipping"
-  elif [[ "$MODE" == "dry-run" ]]; then
-    (cd "$NPM_DIR" && npm publish --dry-run --access public)
-  else
-    if ! npm whoami >/dev/null 2>&1; then
-      echo "npm login required"
-      npm login
-    fi
-    (cd "$NPM_DIR" && npm publish --access public --tag latest)
-  fi
-  echo
+	echo "== npm =="
+	if npm_version_exists; then
+		echo "npm ${PACKAGE_NAME}@${VERSION} already exists; skipping"
+	elif [[ "$MODE" == "dry-run" ]]; then
+		(cd "$NPM_DIR" && npm publish --dry-run --access public)
+	else
+		if ! npm whoami >/dev/null 2>&1; then
+			echo "npm login required"
+			npm login
+		fi
+		(cd "$NPM_DIR" && npm publish --access public --tag latest)
+	fi
+	echo
 fi
 
 if [[ "$SKIP_PYPI" != "true" ]]; then
-  echo "== PyPI =="
-  if pypi_version_exists; then
-    echo "PyPI ${PACKAGE_NAME}==${VERSION} already exists; skipping"
-  else
-    uv build "$PYPI_DIR" --out-dir "${PYPI_DIR}/dist" --clear
-    if [[ "$MODE" == "dry-run" ]]; then
-      uv publish --dry-run --token "${UV_PUBLISH_TOKEN:-dry-run-token}" "${PYPI_DIR}"/dist/*
-    else
-      publish_token="${UV_PUBLISH_TOKEN:-${PYPI_TOKEN:-}}"
-      if [[ -z "$publish_token" ]]; then
-        read -r -s -p "PyPI API token: " publish_token
-        echo
-      fi
-      UV_PUBLISH_TOKEN="$publish_token" uv publish "${PYPI_DIR}"/dist/*
-    fi
-  fi
-  echo
+	echo "== PyPI =="
+	if pypi_version_exists; then
+		echo "PyPI ${PACKAGE_NAME}==${VERSION} already exists; skipping"
+	else
+		uv build "$PYPI_DIR" --out-dir "${PYPI_DIR}/dist" --clear
+		if [[ "$MODE" == "dry-run" ]]; then
+			uv publish --dry-run --token "${UV_PUBLISH_TOKEN:-dry-run-token}" "${PYPI_DIR}"/dist/*
+		else
+			publish_token="${UV_PUBLISH_TOKEN:-${PYPI_TOKEN:-}}"
+			if [[ -z "$publish_token" ]]; then
+				read -r -s -p "PyPI API token: " publish_token
+				echo
+			fi
+			UV_PUBLISH_TOKEN="$publish_token" uv publish "${PYPI_DIR}"/dist/*
+		fi
+	fi
+	echo
 fi
 
 if [[ "$SKIP_CARGO" != "true" ]]; then
-  echo "== crates.io =="
-  if cargo_version_exists; then
-    echo "crates.io ${PACKAGE_NAME} ${VERSION} already exists; skipping"
-  elif [[ "$MODE" == "dry-run" ]]; then
-    cargo publish --dry-run --allow-dirty --manifest-path "$CRATE_MANIFEST"
-  else
-    cargo publish --allow-dirty --manifest-path "$CRATE_MANIFEST"
-  fi
-  echo
+	echo "== crates.io =="
+	if cargo_version_exists; then
+		echo "crates.io ${PACKAGE_NAME} ${VERSION} already exists; skipping"
+	elif [[ "$MODE" == "dry-run" ]]; then
+		cargo publish --dry-run --allow-dirty --manifest-path "$CRATE_MANIFEST"
+	else
+		cargo publish --allow-dirty --manifest-path "$CRATE_MANIFEST"
+	fi
+	echo
 fi
 
 echo "namespace release ${MODE} complete"

@@ -1,62 +1,62 @@
 [
-	{
-		"name": "pypi underscore to hyphen",
-		"input": { "name": "my_package", "ecosystem": "pypi" },
-		"expected": { "normalized": "my-package" },
-		"error": null
-	},
-	{
-		"name": "pypi uppercase to lowercase",
-		"input": { "name": "MyPackage", "ecosystem": "pypi" },
-		"expected": { "normalized": "mypackage" },
-		"error": null
-	},
-	{
-		"name": "pypi mixed underscores and case",
-		"input": { "name": "My_Cool_Package", "ecosystem": "pypi" },
-		"expected": { "normalized": "my-cool-package" },
-		"error": null
-	},
-	{
-		"name": "pypi already normalized",
-		"input": { "name": "requests", "ecosystem": "pypi" },
-		"expected": { "normalized": "requests" },
-		"error": null
-	},
-	{
-		"name": "npm passthrough",
-		"input": { "name": "lodash", "ecosystem": "npm" },
-		"expected": { "normalized": "lodash" },
-		"error": null
-	},
-	{
-		"name": "npm scoped package",
-		"input": { "name": "@types/node", "ecosystem": "npm" },
-		"expected": { "normalized": "@types/node" },
-		"error": null
-	},
-	{
-		"name": "cargo lowercase",
-		"input": { "name": "Serde", "ecosystem": "cargo" },
-		"expected": { "normalized": "serde" },
-		"error": null
-	},
-	{
-		"name": "cargo underscore preserved",
-		"input": { "name": "serde_json", "ecosystem": "cargo" },
-		"expected": { "normalized": "serde_json" },
-		"error": null
-	},
-	{
-		"name": "hex lowercase",
-		"input": { "name": "Phoenix", "ecosystem": "hex" },
-		"expected": { "normalized": "phoenix" },
-		"error": null
-	},
-	{
-		"name": "pypi trailing separator",
-		"input": { "name": "my_package_", "ecosystem": "pypi" },
-		"expected": { "normalized": "my-package" },
-		"error": null
-	}
+  {
+    "name": "pypi underscore to hyphen",
+    "input": { "name": "my_package", "ecosystem": "pypi" },
+    "expected": { "normalized": "my-package" },
+    "error": null
+  },
+  {
+    "name": "pypi uppercase to lowercase",
+    "input": { "name": "MyPackage", "ecosystem": "pypi" },
+    "expected": { "normalized": "mypackage" },
+    "error": null
+  },
+  {
+    "name": "pypi mixed underscores and case",
+    "input": { "name": "My_Cool_Package", "ecosystem": "pypi" },
+    "expected": { "normalized": "my-cool-package" },
+    "error": null
+  },
+  {
+    "name": "pypi already normalized",
+    "input": { "name": "requests", "ecosystem": "pypi" },
+    "expected": { "normalized": "requests" },
+    "error": null
+  },
+  {
+    "name": "npm passthrough",
+    "input": { "name": "lodash", "ecosystem": "npm" },
+    "expected": { "normalized": "lodash" },
+    "error": null
+  },
+  {
+    "name": "npm scoped package",
+    "input": { "name": "@types/node", "ecosystem": "npm" },
+    "expected": { "normalized": "@types/node" },
+    "error": null
+  },
+  {
+    "name": "cargo lowercase",
+    "input": { "name": "Serde", "ecosystem": "cargo" },
+    "expected": { "normalized": "serde" },
+    "error": null
+  },
+  {
+    "name": "cargo underscore preserved",
+    "input": { "name": "serde_json", "ecosystem": "cargo" },
+    "expected": { "normalized": "serde_json" },
+    "error": null
+  },
+  {
+    "name": "hex lowercase",
+    "input": { "name": "Phoenix", "ecosystem": "hex" },
+    "expected": { "normalized": "phoenix" },
+    "error": null
+  },
+  {
+    "name": "pypi trailing separator",
+    "input": { "name": "my_package_", "ecosystem": "pypi" },
+    "expected": { "normalized": "my-package" },
+    "error": null
+  }
 ]

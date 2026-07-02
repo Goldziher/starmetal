@@ -23,44 +23,24 @@
         },
         "package": {
           "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "registry": {
           "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "req": {
           "type": "string"
         },
         "target": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         }
       },
-      "required": [
-        "name",
-        "req",
-        "features",
-        "optional",
-        "default_features",
-        "kind"
-      ],
+      "required": ["name", "req", "features", "optional", "default_features", "kind"],
       "type": "object"
     },
     "CargoDepKind": {
-      "enum": [
-        "normal",
-        "dev",
-        "build"
-      ],
+      "enum": ["normal", "dev", "build"],
       "type": "string"
     }
   },
@@ -95,36 +75,24 @@
         "type": "array"
       },
       "default": null,
-      "type": [
-        "object",
-        "null"
-      ]
+      "type": ["object", "null"]
     },
     "links": {
       "default": null,
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": ["string", "null"]
     },
     "name": {
       "type": "string"
     },
     "rust_version": {
       "default": null,
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": ["string", "null"]
     },
     "v": {
       "default": null,
       "format": "uint32",
       "minimum": 0,
-      "type": [
-        "integer",
-        "null"
-      ]
+      "type": ["integer", "null"]
     },
     "vers": {
       "type": "string"
@@ -133,25 +101,15 @@
       "type": "boolean"
     }
   },
-  "required": [
-    "name",
-    "vers",
-    "deps",
-    "cksum",
-    "yanked"
-  ],
+  "required": ["name", "vers", "deps", "cksum", "yanked"],
   "title": "Cargo Sparse Index Entry",
   "type": "object",
   "x-starmetal-source": {
     "generated_by": "starmetal-schema-manager",
     "schema_kind": "starmetal-derived-json-schema",
     "source_file": "crates/starmetal-core/src/registry/cargo.rs",
-    "source_ids": [
-      "cargo-registry-index"
-    ],
-    "source_kinds": [
-      "official-prose"
-    ],
+    "source_ids": ["cargo-registry-index"],
+    "source_kinds": ["official-prose"],
     "source_type": "starmetal_core::registry::cargo::CargoIndexEntry",
     "validated_by": "crates/starmetal-core/tests/schema_validation.rs; tests/conformance"
   }

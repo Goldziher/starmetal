@@ -71,12 +71,8 @@ async fn put_path<S: HasMavenState>(
         return Ok(StatusCode::CREATED.into_response());
     }
 
-    let artifact_id = artifact_id_from_path(&path).ok_or_else(|| {
-        (
-            StatusCode::BAD_REQUEST,
-            format!("invalid Maven path: {path}"),
-        )
-    })?;
+    let artifact_id =
+        artifact_id_from_path(&path).ok_or_else(|| (StatusCode::BAD_REQUEST, format!("invalid Maven path: {path}")))?;
     authorize_publish_for_package(&state, &headers, &artifact_id.name)?;
     state
         .publishing_service()
@@ -92,9 +88,7 @@ async fn put_path<S: HasMavenState>(
                 data: body,
                 upstream_hashes: Default::default(),
             }],
-            protocol_metadata: ProtocolMetadata::Maven {
-                path: path.to_string(),
-            },
+            protocol_metadata: ProtocolMetadata::Maven { path: path.to_string() },
             allow_overwrite: true,
             allow_shadowing: state.config().publishing.allow_shadowing,
         })
@@ -156,16 +150,9 @@ async fn serve_raw_xml<S: HasMavenState>(
     Ok(binary_response(method, "application/xml", data))
 }
 
-async fn artifact_bytes<S: HasMavenState>(
-    state: S,
-    path: &str,
-) -> Result<bytes::Bytes, (StatusCode, String)> {
-    let artifact_id = artifact_id_from_path(path).ok_or_else(|| {
-        (
-            StatusCode::BAD_REQUEST,
-            format!("invalid Maven path: {path}"),
-        )
-    })?;
+async fn artifact_bytes<S: HasMavenState>(state: S, path: &str) -> Result<bytes::Bytes, (StatusCode, String)> {
+    let artifact_id =
+        artifact_id_from_path(path).ok_or_else(|| (StatusCode::BAD_REQUEST, format!("invalid Maven path: {path}")))?;
     state
         .package_service()
         .get_artifact(&artifact_id)
@@ -193,10 +180,7 @@ fn artifact_id_from_path(path: &str) -> Option<ArtifactId> {
 fn checksum_request(path: &str) -> Option<(&str, &str)> {
     path.strip_suffix(".sha256")
         .map(|artifact_path| (artifact_path, "sha256"))
-        .or_else(|| {
-            path.strip_suffix(".sha1")
-                .map(|artifact_path| (artifact_path, "sha1"))
-        })
+        .or_else(|| path.strip_suffix(".sha1").map(|artifact_path| (artifact_path, "sha1")))
 }
 
 fn content_type(path: &str) -> &'static str {
@@ -207,17 +191,9 @@ fn content_type(path: &str) -> &'static str {
     }
 }
 
-fn authorize_publish<S: HasMavenState>(
-    state: &S,
-    headers: &HeaderMap,
-    path: &str,
-) -> Result<(), (StatusCode, String)> {
-    let artifact_id = artifact_id_from_path(path).ok_or_else(|| {
-        (
-            StatusCode::BAD_REQUEST,
-            format!("invalid Maven path: {path}"),
-        )
-    })?;
+fn authorize_publish<S: HasMavenState>(state: &S, headers: &HeaderMap, path: &str) -> Result<(), (StatusCode, String)> {
+    let artifact_id =
+        artifact_id_from_path(path).ok_or_else(|| (StatusCode::BAD_REQUEST, format!("invalid Maven path: {path}")))?;
     authorize_publish_for_package(state, headers, &artifact_id.name)
 }
 
@@ -227,25 +203,16 @@ fn authorize_publish_for_package<S: HasMavenState>(
     package_name: &PackageName,
 ) -> Result<(), (StatusCode, String)> {
     if !state.config().publishing.enabled {
-        return Err((
-            StatusCode::NOT_FOUND,
-            "publishing is not enabled".to_string(),
-        ));
+        return Err((StatusCode::NOT_FOUND, "publishing is not enabled".to_string()));
     }
 
-    let token = extract_write_token(headers).ok_or_else(|| {
-        (
-            StatusCode::UNAUTHORIZED,
-            "missing publishing token".to_string(),
-        )
-    })?;
+    let token = extract_write_token(headers)
+        .ok_or_else(|| (StatusCode::UNAUTHORIZED, "missing publishing token".to_string()))?;
 
-    if state.config().authorize_publish_token(
-        &token,
-        TokenScope::Publish,
-        Ecosystem::Maven,
-        package_name,
-    ) {
+    if state
+        .config()
+        .authorize_publish_token(&token, TokenScope::Publish, Ecosystem::Maven, package_name)
+    {
         Ok(())
     } else {
         Err((

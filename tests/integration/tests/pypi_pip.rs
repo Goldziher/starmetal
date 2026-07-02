@@ -75,9 +75,7 @@ async fn pip_install_small_package() {
     assert!(
         tmp.path().join("six.py").exists(),
         "six.py not found in install target. Contents: {:?}",
-        std::fs::read_dir(tmp.path()).map(|d| d
-            .filter_map(|e| e.ok().map(|e| e.file_name()))
-            .collect::<Vec<_>>())
+        std::fs::read_dir(tmp.path()).map(|d| d.filter_map(|e| e.ok().map(|e| e.file_name())).collect::<Vec<_>>())
     );
 
     server.shutdown();
@@ -157,10 +155,7 @@ async fn http_simple_index_returns_html() {
         .expect("missing content-type")
         .to_str()
         .expect("non-ascii content-type");
-    assert!(
-        content_type.contains("text/html"),
-        "expected HTML, got {content_type}"
-    );
+    assert!(content_type.contains("text/html"), "expected HTML, got {content_type}");
 
     let body = response.text().await.expect("failed to read body");
     assert!(body.contains("<!DOCTYPE html>"));
@@ -190,10 +185,7 @@ async fn http_project_detail_returns_files() {
         &body[..200.min(body.len())]
     );
     assert!(body.contains("#sha256="), "expected sha256 hashes in links");
-    assert!(
-        body.contains("/pypi/packages/"),
-        "expected local download URLs"
-    );
+    assert!(body.contains("/pypi/packages/"), "expected local download URLs");
 
     server.shutdown();
 }
@@ -225,10 +217,7 @@ async fn http_json_content_negotiation() {
 
     let body: serde_json::Value = response.json().await.expect("invalid JSON response");
     assert_eq!(body["name"], "six");
-    assert!(
-        body["files"].is_array(),
-        "expected files array in JSON response"
-    );
+    assert!(body["files"].is_array(), "expected files array in JSON response");
 
     server.shutdown();
 }

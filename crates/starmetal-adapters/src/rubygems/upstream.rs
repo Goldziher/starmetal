@@ -2,9 +2,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use starmetal_core::config::DEFAULT_MAX_UPSTREAM_BYTES;
 use starmetal_core::error::{Result, StarmetalError};
-use starmetal_core::package::{
-    ArtifactDigest, ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata,
-};
+use starmetal_core::package::{ArtifactDigest, ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata};
 use starmetal_core::ports::UpstreamClient;
 
 pub struct RubyGemsUpstreamClient {
@@ -40,8 +38,7 @@ impl RubyGemsUpstreamClient {
                 response.status()
             )));
         }
-        crate::upstream_http::bytes_limited(response, self.max_response_bytes, "RubyGems path")
-            .await
+        crate::upstream_http::bytes_limited(response, self.max_response_bytes, "RubyGems path").await
     }
 }
 
@@ -58,11 +55,7 @@ impl UpstreamClient for RubyGemsUpstreamClient {
             .lines()
             .filter(|line| !line.is_empty() && *line != "---")
             .map(|line| VersionInfo {
-                version: line
-                    .split_whitespace()
-                    .next()
-                    .unwrap_or_default()
-                    .to_string(),
+                version: line.split_whitespace().next().unwrap_or_default().to_string(),
                 yanked: false,
             })
             .filter(|info| !info.version.is_empty())
@@ -98,8 +91,7 @@ impl UpstreamClient for RubyGemsUpstreamClient {
     }
 
     async fn fetch_artifact(&self, artifact_id: &ArtifactId) -> Result<Bytes> {
-        self.fetch_path(&format!("gems/{}", artifact_id.filename))
-            .await
+        self.fetch_path(&format!("gems/{}", artifact_id.filename)).await
     }
 }
 
@@ -133,8 +125,7 @@ mod tests {
 
     #[test]
     fn parses_native_bundler_checksum_metadata() {
-        let line =
-            "1.0.0 |checksum:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        let line = "1.0.0 |checksum:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
         assert_eq!(
             checksum_from_info_line(line),

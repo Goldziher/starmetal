@@ -14,16 +14,14 @@ fn workspace_root() -> std::path::PathBuf {
 
 fn load_schema(relative_path: &str) -> Value {
     let path = workspace_root().join(relative_path);
-    let content = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("failed to read schema {}: {e}", path.display()));
-    serde_json::from_str(&content)
-        .unwrap_or_else(|e| panic!("failed to parse schema {}: {e}", path.display()))
+    let content =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("failed to read schema {}: {e}", path.display()));
+    serde_json::from_str(&content).unwrap_or_else(|e| panic!("failed to parse schema {}: {e}", path.display()))
 }
 
 fn load_text(relative_path: &str) -> String {
     let path = workspace_root().join(relative_path);
-    std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()))
+    std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()))
 }
 
 fn collect_config_schema_paths(schema: &Value) -> BTreeSet<String> {
@@ -91,22 +89,15 @@ fn collect_object_property_paths(
     }
 }
 
-fn definition_for_ref<'a>(
-    reference: &str,
-    definitions: &'a Map<String, Value>,
-) -> Option<&'a Value> {
+fn definition_for_ref<'a>(reference: &str, definitions: &'a Map<String, Value>) -> Option<&'a Value> {
     reference
         .strip_prefix("#/$defs/")
         .and_then(|name| definitions.get(name))
 }
 
 fn validate(schema_value: &Value, instance: &Value) -> std::result::Result<(), String> {
-    let validator =
-        jsonschema::validator_for(schema_value).map_err(|e| format!("invalid schema: {e}"))?;
-    let errors: Vec<String> = validator
-        .iter_errors(instance)
-        .map(|e| e.to_string())
-        .collect();
+    let validator = jsonschema::validator_for(schema_value).map_err(|e| format!("invalid schema: {e}"))?;
+    let errors: Vec<String> = validator.iter_errors(instance).map(|e| e.to_string()).collect();
     if errors.is_empty() {
         Ok(())
     } else {

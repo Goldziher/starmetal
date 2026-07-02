@@ -2,9 +2,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use starmetal_core::config::DEFAULT_MAX_UPSTREAM_BYTES;
 use starmetal_core::error::{Result, StarmetalError};
-use starmetal_core::package::{
-    ArtifactDigest, ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata,
-};
+use starmetal_core::package::{ArtifactDigest, ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata};
 use starmetal_core::ports::UpstreamClient;
 
 pub struct MavenUpstreamClient {
@@ -40,8 +38,7 @@ impl MavenUpstreamClient {
                 response.status()
             )));
         }
-        crate::upstream_http::bytes_limited(response, self.max_response_bytes, "Maven artifact")
-            .await
+        crate::upstream_http::bytes_limited(response, self.max_response_bytes, "Maven artifact").await
     }
 
     async fn fetch_optional_text(&self, path: &str) -> Result<Option<String>> {
@@ -79,26 +76,20 @@ impl UpstreamClient for MavenUpstreamClient {
         let text = String::from_utf8_lossy(&metadata);
         Ok(extract_versions(&text)
             .into_iter()
-            .map(|version| VersionInfo {
-                version,
-                yanked: false,
-            })
+            .map(|version| VersionInfo { version, yanked: false })
             .collect())
     }
 
     async fn fetch_metadata(&self, name: &PackageName, version: &str) -> Result<VersionMetadata> {
-        let (_, artifact) =
-            name.as_str()
-                .rsplit_once(':')
-                .ok_or_else(|| StarmetalError::PackageNotFound {
-                    ecosystem: "maven".to_string(),
-                    name: name.as_str().to_string(),
-                })?;
+        let (_, artifact) = name
+            .as_str()
+            .rsplit_once(':')
+            .ok_or_else(|| StarmetalError::PackageNotFound {
+                ecosystem: "maven".to_string(),
+                name: name.as_str().to_string(),
+            })?;
         let mut artifacts = Vec::new();
-        for filename in [
-            format!("{artifact}-{version}.pom"),
-            format!("{artifact}-{version}.jar"),
-        ] {
+        for filename in [format!("{artifact}-{version}.pom"), format!("{artifact}-{version}.jar")] {
             let path = format!("{}/{version}/{filename}", maven_path(name)?);
             let mut upstream_hashes = ahash::AHashMap::new();
             if let Some(sha256) = self.fetch_optional_text(&format!("{path}.sha256")).await? {
@@ -136,13 +127,13 @@ impl UpstreamClient for MavenUpstreamClient {
 }
 
 fn maven_path(name: &PackageName) -> Result<String> {
-    let (group, artifact) =
-        name.as_str()
-            .rsplit_once(':')
-            .ok_or_else(|| StarmetalError::PackageNotFound {
-                ecosystem: "maven".to_string(),
-                name: name.as_str().to_string(),
-            })?;
+    let (group, artifact) = name
+        .as_str()
+        .rsplit_once(':')
+        .ok_or_else(|| StarmetalError::PackageNotFound {
+            ecosystem: "maven".to_string(),
+            name: name.as_str().to_string(),
+        })?;
     Ok(format!("{}/{}", group.replace('.', "/"), artifact))
 }
 

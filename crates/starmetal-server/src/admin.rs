@@ -58,10 +58,7 @@ pub fn router() -> Router<AppState> {
         .route("/metrics", get(metrics))
 }
 
-async fn status(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+async fn status(State(state): State<AppState>, headers: HeaderMap) -> Result<impl IntoResponse, (StatusCode, String)> {
     authorize_admin(&state, &headers)?;
     Ok(Json(AdminStatus {
         version: env!("CARGO_PKG_VERSION"),
@@ -73,10 +70,7 @@ async fn status(
     }))
 }
 
-async fn config(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+async fn config(State(state): State<AppState>, headers: HeaderMap) -> Result<impl IntoResponse, (StatusCode, String)> {
     authorize_admin(&state, &headers)?;
     Ok(Json(state.config.redacted_value()))
 }
@@ -138,20 +132,14 @@ async fn metadata(
     Ok(Json(metadata))
 }
 
-async fn metrics(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+async fn metrics(State(state): State<AppState>, headers: HeaderMap) -> Result<impl IntoResponse, (StatusCode, String)> {
     authorize_admin(&state, &headers)?;
     Ok(Json(state.statistics_service.statistics()))
 }
 
 fn authorize_admin(state: &AppState, headers: &HeaderMap) -> Result<(), (StatusCode, String)> {
     if !state.config.admin.enabled {
-        return Err((
-            StatusCode::NOT_FOUND,
-            "admin API is not enabled".to_string(),
-        ));
+        return Err((StatusCode::NOT_FOUND, "admin API is not enabled".to_string()));
     }
 
     let token = headers
@@ -176,22 +164,13 @@ fn map_admin_error(err: starmetal_core::error::StarmetalError) -> (StatusCode, S
     match err {
         starmetal_core::error::StarmetalError::PackageNotFound { .. }
         | starmetal_core::error::StarmetalError::VersionNotFound { .. }
-        | starmetal_core::error::StarmetalError::ArtifactNotFound(_) => {
-            (StatusCode::NOT_FOUND, err.to_string())
+        | starmetal_core::error::StarmetalError::ArtifactNotFound(_) => (StatusCode::NOT_FOUND, err.to_string()),
+        starmetal_core::error::StarmetalError::PolicyViolation(_) => (StatusCode::FORBIDDEN, err.to_string()),
+        starmetal_core::error::StarmetalError::Adapter(_) => (StatusCode::BAD_REQUEST, err.to_string()),
+        starmetal_core::error::StarmetalError::Publish(_) => (StatusCode::CONFLICT, err.to_string()),
+        starmetal_core::error::StarmetalError::Upstream(_) => {
+            (StatusCode::BAD_GATEWAY, "upstream registry request failed".to_string())
         }
-        starmetal_core::error::StarmetalError::PolicyViolation(_) => {
-            (StatusCode::FORBIDDEN, err.to_string())
-        }
-        starmetal_core::error::StarmetalError::Adapter(_) => {
-            (StatusCode::BAD_REQUEST, err.to_string())
-        }
-        starmetal_core::error::StarmetalError::Publish(_) => {
-            (StatusCode::CONFLICT, err.to_string())
-        }
-        starmetal_core::error::StarmetalError::Upstream(_) => (
-            StatusCode::BAD_GATEWAY,
-            "upstream registry request failed".to_string(),
-        ),
         starmetal_core::error::StarmetalError::Config(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "server configuration error".to_string(),
@@ -214,8 +193,7 @@ fn map_admin_error(err: starmetal_core::error::StarmetalError) -> (StatusCode, S
             StatusCode::INTERNAL_SERVER_ERROR,
             "internal starmetal error".to_string(),
         ),
-        starmetal_core::error::StarmetalError::Toml(_)
-        | starmetal_core::error::StarmetalError::Json(_) => (
+        starmetal_core::error::StarmetalError::Toml(_) | starmetal_core::error::StarmetalError::Json(_) => (
             StatusCode::BAD_REQUEST,
             "invalid request or registry payload".to_string(),
         ),

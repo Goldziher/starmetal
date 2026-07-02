@@ -7,9 +7,7 @@ use starmetal_storage::OpenDalStorage;
 
 fn create_memory_storage() -> OpenDalStorage {
     let builder = opendal::services::Memory::default();
-    let operator = opendal::Operator::new(builder)
-        .expect("build memory operator")
-        .finish();
+    let operator = opendal::Operator::new(builder).expect("build memory operator").finish();
     OpenDalStorage::new(operator)
 }
 
@@ -23,16 +21,9 @@ async fn put_and_get() {
         .await
         .expect("put should succeed");
 
-    let result = storage
-        .get("test/key.txt")
-        .await
-        .expect("get should succeed");
+    let result = storage.get("test/key.txt").await.expect("get should succeed");
 
-    assert_eq!(
-        result,
-        Some(data),
-        "retrieved data should match stored data"
-    );
+    assert_eq!(result, Some(data), "retrieved data should match stored data");
 }
 
 #[tokio::test]
@@ -53,23 +44,14 @@ async fn exists_check() {
     let data = Bytes::from_static(b"content");
 
     assert!(
-        !storage
-            .exists("check/key.txt")
-            .await
-            .expect("exists should succeed"),
+        !storage.exists("check/key.txt").await.expect("exists should succeed"),
         "key should not exist before put"
     );
 
-    storage
-        .put("check/key.txt", data)
-        .await
-        .expect("put should succeed");
+    storage.put("check/key.txt", data).await.expect("put should succeed");
 
     assert!(
-        storage
-            .exists("check/key.txt")
-            .await
-            .expect("exists should succeed"),
+        storage.exists("check/key.txt").await.expect("exists should succeed"),
         "key should exist after put"
     );
 }
@@ -79,36 +61,21 @@ async fn delete_key() {
     let storage = create_memory_storage();
     let data = Bytes::from_static(b"to be deleted");
 
-    storage
-        .put("del/key.txt", data)
-        .await
-        .expect("put should succeed");
+    storage.put("del/key.txt", data).await.expect("put should succeed");
 
     assert!(
-        storage
-            .exists("del/key.txt")
-            .await
-            .expect("exists should succeed"),
+        storage.exists("del/key.txt").await.expect("exists should succeed"),
         "key should exist after put"
     );
 
-    storage
-        .delete("del/key.txt")
-        .await
-        .expect("delete should succeed");
+    storage.delete("del/key.txt").await.expect("delete should succeed");
 
     assert!(
-        !storage
-            .exists("del/key.txt")
-            .await
-            .expect("exists should succeed"),
+        !storage.exists("del/key.txt").await.expect("exists should succeed"),
         "key should not exist after delete"
     );
 
-    let result = storage
-        .get("del/key.txt")
-        .await
-        .expect("get should succeed");
+    let result = storage.get("del/key.txt").await.expect("get should succeed");
 
     assert_eq!(result, None, "deleted key should return None on get");
 }
@@ -135,31 +102,15 @@ async fn list_prefix_keys() {
         .await
         .expect("list_prefix should succeed");
 
-    assert_eq!(
-        pypi_keys.len(),
-        2,
-        "should list 2 keys under pypi/requests/2.31.0/"
-    );
+    assert_eq!(pypi_keys.len(), 2, "should list 2 keys under pypi/requests/2.31.0/");
 
-    let npm_keys = storage
-        .list_prefix("npm/")
-        .await
-        .expect("list_prefix should succeed");
+    let npm_keys = storage.list_prefix("npm/").await.expect("list_prefix should succeed");
 
-    assert!(
-        !npm_keys.is_empty(),
-        "should list at least 1 key under npm/"
-    );
+    assert!(!npm_keys.is_empty(), "should list at least 1 key under npm/");
 
-    let empty_keys = storage
-        .list_prefix("cargo/")
-        .await
-        .expect("list_prefix should succeed");
+    let empty_keys = storage.list_prefix("cargo/").await.expect("list_prefix should succeed");
 
-    assert!(
-        empty_keys.is_empty(),
-        "should list 0 keys under non-existent prefix"
-    );
+    assert!(empty_keys.is_empty(), "should list 0 keys under non-existent prefix");
 }
 
 #[tokio::test]

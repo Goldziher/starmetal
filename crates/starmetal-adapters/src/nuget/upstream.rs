@@ -2,9 +2,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use starmetal_core::config::DEFAULT_MAX_UPSTREAM_BYTES;
 use starmetal_core::error::{Result, StarmetalError};
-use starmetal_core::package::{
-    ArtifactDigest, ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata,
-};
+use starmetal_core::package::{ArtifactDigest, ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata};
 use starmetal_core::ports::UpstreamClient;
 
 pub struct NuGetUpstreamClient {
@@ -153,12 +151,7 @@ impl UpstreamClient for NuGetUpstreamClient {
                 response.status()
             )));
         }
-        crate::upstream_http::bytes_limited(
-            response,
-            self.max_response_bytes,
-            "NuGet artifact download",
-        )
-        .await
+        crate::upstream_http::bytes_limited(response, self.max_response_bytes, "NuGet artifact download").await
     }
 }
 

@@ -5,10 +5,7 @@
   "properties": {
     "api": {
       "default": null,
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": ["string", "null"]
     },
     "auth-required": {
       "default": false,
@@ -18,21 +15,15 @@
       "type": "string"
     }
   },
-  "required": [
-    "dl"
-  ],
+  "required": ["dl"],
   "title": "Cargo Sparse Registry Config",
   "type": "object",
   "x-starmetal-source": {
     "generated_by": "starmetal-schema-manager",
     "schema_kind": "starmetal-derived-json-schema",
     "source_file": "crates/starmetal-core/src/registry/cargo.rs",
-    "source_ids": [
-      "cargo-registry-index"
-    ],
-    "source_kinds": [
-      "official-prose"
-    ],
+    "source_ids": ["cargo-registry-index"],
+    "source_kinds": ["official-prose"],
     "source_type": "starmetal_core::registry::cargo::CargoConfig",
     "validated_by": "crates/starmetal-core/tests/schema_validation.rs; tests/conformance"
   }

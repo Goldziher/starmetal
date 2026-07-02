@@ -18,6 +18,11 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
+  validate:
+    uses: xberg-io/actions/.github/workflows/reusable-validate.yml@v1
+    with:
+      setup-rust: true
+
   fmt:
     name: fmt
     runs-on: ubuntu-latest

@@ -4,10 +4,7 @@
       "properties": {
         "description": {
           "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "licenses": {
           "default": [],
@@ -38,10 +35,7 @@
         },
         "inserted_at": {
           "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "retirement": {
           "anyOf": [
@@ -56,10 +50,7 @@
         },
         "updated_at": {
           "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "url": {
           "type": "string"
@@ -68,28 +59,20 @@
           "type": "string"
         }
       },
-      "required": [
-        "version",
-        "url"
-      ],
+      "required": ["version", "url"],
       "type": "object"
     },
     "HexRetirement": {
       "properties": {
         "message": {
           "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "reason": {
           "type": "string"
         }
       },
-      "required": [
-        "reason"
-      ],
+      "required": ["reason"],
       "type": "object"
     }
   },
@@ -99,24 +82,15 @@
   "properties": {
     "docs_html_url": {
       "default": null,
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": ["string", "null"]
     },
     "html_url": {
       "default": null,
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": ["string", "null"]
     },
     "inserted_at": {
       "default": null,
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": ["string", "null"]
     },
     "meta": {
       "anyOf": [
@@ -140,38 +114,22 @@
     },
     "updated_at": {
       "default": null,
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": ["string", "null"]
     },
     "url": {
       "default": null,
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": ["string", "null"]
     }
   },
-  "required": [
-    "name",
-    "releases"
-  ],
+  "required": ["name", "releases"],
   "title": "Hex Package HTTP API",
   "type": "object",
   "x-starmetal-source": {
     "generated_by": "starmetal-schema-manager",
     "schema_kind": "starmetal-derived-json-schema",
     "source_file": "crates/starmetal-core/src/registry/hex.rs",
-    "source_ids": [
-      "hex-registry-v2",
-      "hex-package-proto",
-      "hex-package-metadata"
-    ],
-    "source_kinds": [
-      "official-prose",
-      "official-protobuf"
-    ],
+    "source_ids": ["hex-registry-v2", "hex-package-proto", "hex-package-metadata"],
+    "source_kinds": ["official-prose", "official-protobuf"],
     "source_type": "starmetal_core::registry::hex::HexPackage",
     "validated_by": "crates/starmetal-core/tests/schema_validation.rs; tests/conformance"
   }

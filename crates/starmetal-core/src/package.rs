@@ -106,11 +106,7 @@ impl PackageName {
             }
             Ecosystem::Npm => normalize_npm(&self.0),
             Ecosystem::Maven => Cow::Borrowed(&self.0),
-            Ecosystem::Cargo
-            | Ecosystem::Hex
-            | Ecosystem::RubyGems
-            | Ecosystem::NuGet
-            | Ecosystem::Pub => {
+            Ecosystem::Cargo | Ecosystem::Hex | Ecosystem::RubyGems | Ecosystem::NuGet | Ecosystem::Pub => {
                 if self
                     .0
                     .bytes()
@@ -171,14 +167,10 @@ pub fn validate_storage_segment(label: &str, segment: &str) -> Result<()> {
         )));
     }
     if segment.starts_with('/') || segment.starts_with('\\') {
-        return Err(StarmetalError::Config(format!(
-            "{label} must not be an absolute path"
-        )));
+        return Err(StarmetalError::Config(format!("{label} must not be an absolute path")));
     }
     if segment.bytes().any(|byte| byte == 0) {
-        return Err(StarmetalError::Config(format!(
-            "{label} must not contain NUL"
-        )));
+        return Err(StarmetalError::Config(format!("{label} must not contain NUL")));
     }
     Ok(())
 }
@@ -190,8 +182,7 @@ pub fn decode_storage_segment(segment: &str) -> String {
     while index < bytes.len() {
         if bytes[index] == b'%'
             && index + 2 < bytes.len()
-            && let (Some(high), Some(low)) =
-                (hex_value(bytes[index + 1]), hex_value(bytes[index + 2]))
+            && let (Some(high), Some(low)) = (hex_value(bytes[index + 1]), hex_value(bytes[index + 2]))
         {
             decoded.push((high << 4) | low);
             index += 3;
@@ -241,10 +232,7 @@ fn normalize_pypi(name: &str) -> String {
 
 /// npm: lowercase, but preserve `@scope/` prefix.
 fn normalize_npm(name: &str) -> Cow<'_, str> {
-    if name
-        .bytes()
-        .all(|b| b.is_ascii_lowercase() || !b.is_ascii_alphabetic())
-    {
+    if name.bytes().all(|b| b.is_ascii_lowercase() || !b.is_ascii_alphabetic()) {
         return Cow::Borrowed(name);
     }
     Cow::Owned(name.to_ascii_lowercase())
@@ -292,9 +280,7 @@ impl ArtifactId {
 
 fn validate_package_name_for_storage(name: &str) -> Result<()> {
     if name.trim().is_empty() {
-        return Err(StarmetalError::Config(
-            "package name must not be empty".to_string(),
-        ));
+        return Err(StarmetalError::Config("package name must not be empty".to_string()));
     }
     if name == "." || name == ".." {
         return Err(StarmetalError::Config(
@@ -307,9 +293,7 @@ fn validate_package_name_for_storage(name: &str) -> Result<()> {
         ));
     }
     if name.bytes().any(|byte| byte == 0) {
-        return Err(StarmetalError::Config(
-            "package name must not contain NUL".to_string(),
-        ));
+        return Err(StarmetalError::Config("package name must not contain NUL".to_string()));
     }
     Ok(())
 }
@@ -318,9 +302,7 @@ fn encode_storage_segment(input: &str) -> String {
     let mut output = String::with_capacity(input.len());
     for byte in input.bytes() {
         match byte {
-            b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'.' | b'-' | b'_' | b'@' | b':' => {
-                output.push(char::from(byte))
-            }
+            b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'.' | b'-' | b'_' | b'@' | b':' => output.push(char::from(byte)),
             _ => {
                 use std::fmt::Write as _;
                 let _ = write!(&mut output, "%{byte:02X}");
@@ -475,20 +457,14 @@ mod tests {
     fn pypi_normalization_pep503() {
         // PEP 503 specific: runs of separators collapse to single hyphen
         let pkg = PackageName::new("My..Cool--Package__Name");
-        assert_eq!(
-            pkg.normalized(Ecosystem::PyPI).as_ref(),
-            "my-cool-package-name"
-        );
+        assert_eq!(pkg.normalized(Ecosystem::PyPI).as_ref(), "my-cool-package-name");
     }
 
     #[test]
     fn normalized_cow_borrows_when_unchanged() {
         let pkg = PackageName::new("serde_json");
         let cow = pkg.normalized(Ecosystem::Cargo);
-        assert!(
-            matches!(cow, Cow::Borrowed(_)),
-            "should borrow when already lowercase"
-        );
+        assert!(matches!(cow, Cow::Borrowed(_)), "should borrow when already lowercase");
     }
 
     #[test]

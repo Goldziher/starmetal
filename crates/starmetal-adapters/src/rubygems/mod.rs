@@ -73,19 +73,11 @@ async fn publish_gem<S: HasRubyGemsState>(
         })
         .await
         .map_err(|err| map_error(&err))?;
-    update_compact_index(
-        state.package_service().as_ref(),
-        &name,
-        &metadata.version,
-        &sha256,
-    )
-    .await?;
+    update_compact_index(state.package_service().as_ref(), &name, &metadata.version, &sha256).await?;
     Ok((StatusCode::CREATED, "created").into_response())
 }
 
-async fn versions<S: HasRubyGemsState>(
-    State(state): State<S>,
-) -> Result<Response, (StatusCode, String)> {
+async fn versions<S: HasRubyGemsState>(State(state): State<S>) -> Result<Response, (StatusCode, String)> {
     let key = PackageName::new("_versions");
     serve_raw(state, key, "versions").await
 }
@@ -129,12 +121,8 @@ async fn gem<S: HasRubyGemsState>(
     State(state): State<S>,
     Path(filename): Path<String>,
 ) -> Result<Response, (StatusCode, String)> {
-    let (name, version) = parse_gem_filename(&filename).ok_or_else(|| {
-        (
-            StatusCode::BAD_REQUEST,
-            format!("invalid gem filename: {filename}"),
-        )
-    })?;
+    let (name, version) = parse_gem_filename(&filename)
+        .ok_or_else(|| (StatusCode::BAD_REQUEST, format!("invalid gem filename: {filename}")))?;
     let artifact_id = ArtifactId {
         ecosystem: Ecosystem::RubyGems,
         name: PackageName::new(name),
@@ -146,22 +134,13 @@ async fn gem<S: HasRubyGemsState>(
         .get_artifact(&artifact_id)
         .await
         .map_err(|err| map_error(&err))?;
-    Ok((
-        [(header::CONTENT_TYPE, "application/octet-stream")],
-        Body::from(data),
-    )
-        .into_response())
+    Ok(([(header::CONTENT_TYPE, "application/octet-stream")], Body::from(data)).into_response())
 }
 
 fn parse_gem_filename(filename: &str) -> Option<(&str, &str)> {
     let stem = filename.strip_suffix(".gem")?;
     for idx in (1..stem.len()).rev() {
-        if stem.as_bytes()[idx] == b'-'
-            && stem
-                .as_bytes()
-                .get(idx + 1)
-                .is_some_and(|byte| byte.is_ascii_digit())
-        {
+        if stem.as_bytes()[idx] == b'-' && stem.as_bytes().get(idx + 1).is_some_and(|byte| byte.is_ascii_digit()) {
             return Some((&stem[..idx], &stem[idx + 1..]));
         }
     }
@@ -257,21 +236,13 @@ fn authorize_publish<S: HasRubyGemsState>(
     name: &PackageName,
 ) -> Result<(), (StatusCode, String)> {
     if !state.config().publishing.enabled {
-        return Err((
-            StatusCode::NOT_FOUND,
-            "publishing is not enabled".to_string(),
-        ));
+        return Err((StatusCode::NOT_FOUND, "publishing is not enabled".to_string()));
     }
     let token = headers
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
         .map(|value| value.strip_prefix("Bearer ").unwrap_or(value))
-        .ok_or_else(|| {
-            (
-                StatusCode::UNAUTHORIZED,
-                "missing publishing token".to_string(),
-            )
-        })?;
+        .ok_or_else(|| (StatusCode::UNAUTHORIZED, "missing publishing token".to_string()))?;
     if state
         .config()
         .authorize_publish_token(token, TokenScope::Publish, Ecosystem::RubyGems, name)

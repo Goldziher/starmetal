@@ -37,11 +37,9 @@ pub struct PublishTokenConfig {
 
 impl PublishTokenConfig {
     pub fn allows(&self, scope: TokenScope, ecosystem: Ecosystem, package: &PackageName) -> bool {
-        let scope_allowed =
-            self.scopes.contains(&TokenScope::Admin) || self.scopes.contains(&scope);
+        let scope_allowed = self.scopes.contains(&TokenScope::Admin) || self.scopes.contains(&scope);
         let ecosystem_allowed = self.ecosystems.is_empty() || self.ecosystems.contains(&ecosystem);
-        let package_allowed =
-            self.packages.is_empty() || self.packages.iter().any(|name| name == package.as_str());
+        let package_allowed = self.packages.is_empty() || self.packages.iter().any(|name| name == package.as_str());
         scope_allowed && ecosystem_allowed && package_allowed
     }
 }
@@ -158,9 +156,7 @@ impl ProtocolMetadata {
             Ecosystem::Hex => Self::Hex {
                 package: serde_json::Value::Null,
             },
-            Ecosystem::Maven => Self::Maven {
-                path: String::new(),
-            },
+            Ecosystem::Maven => Self::Maven { path: String::new() },
             Ecosystem::RubyGems => Self::RubyGems {
                 metadata: serde_json::Value::Null,
             },

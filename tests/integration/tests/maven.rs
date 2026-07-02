@@ -92,9 +92,7 @@ async fn maven_resolves_dependency_through_starmetal() {
         "mvn dependency resolve failed: {command}\nstdout: {stdout}\nstderr: {stderr}"
     );
     assert!(
-        repo.path()
-            .join("junit/junit/4.13.2/junit-4.13.2.jar")
-            .exists(),
+        repo.path().join("junit/junit/4.13.2/junit-4.13.2.jar").exists(),
         "expected junit jar in Maven local repository"
     );
 
@@ -108,11 +106,7 @@ async fn maven_serves_artifacts_and_checksum_sidecars() {
     let client = reqwest::Client::new();
     let base = format!("{}/maven/junit/junit/4.13.2", server.base_url());
 
-    for path in [
-        "junit-4.13.2.pom",
-        "junit-4.13.2.jar",
-        "junit-4.13.2.jar.sha1",
-    ] {
+    for path in ["junit-4.13.2.pom", "junit-4.13.2.jar", "junit-4.13.2.jar.sha1"] {
         let response = client
             .get(format!("{base}/{path}"))
             .send()
@@ -125,8 +119,7 @@ async fn maven_serves_artifacts_and_checksum_sidecars() {
         );
     }
 
-    let plugin_path =
-        "org/apache/maven/plugins/maven-clean-plugin/3.2.0/maven-clean-plugin-3.2.0.pom";
+    let plugin_path = "org/apache/maven/plugins/maven-clean-plugin/3.2.0/maven-clean-plugin-3.2.0.pom";
     let response = client
         .get(format!("{}/maven/{plugin_path}", server.base_url()))
         .send()

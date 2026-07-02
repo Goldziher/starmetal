@@ -168,9 +168,7 @@ def _verify_checksum(archive: Path, asset_name: str, checksums_url: str) -> None
 
     actual = hashlib.sha256(archive.read_bytes()).hexdigest().lower()
     if actual != expected:
-        raise RuntimeError(
-            f"checksum mismatch for {asset_name} (expected {expected}, got {actual})"
-        )
+        raise RuntimeError(f"checksum mismatch for {asset_name} (expected {expected}, got {actual})")
 
 
 def _safe_extract_tar(archive: Path, destination: Path) -> None:

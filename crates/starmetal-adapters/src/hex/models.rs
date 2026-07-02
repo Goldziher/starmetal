@@ -23,11 +23,7 @@ pub fn hex_package_to_version_infos(pkg: &HexPackage) -> Vec<VersionInfo> {
 /// Returns `None` when the requested version is not present in the releases list.
 /// The Hex JSON API does not include per-release checksums, so `upstream_hashes`
 /// is left empty. The tarball filename follows the `{name}-{version}.tar` convention.
-pub fn hex_release_to_metadata(
-    name: &PackageName,
-    pkg: &HexPackage,
-    version: &str,
-) -> Option<VersionMetadata> {
+pub fn hex_release_to_metadata(name: &PackageName, pkg: &HexPackage, version: &str) -> Option<VersionMetadata> {
     let release = pkg.releases.iter().find(|r| r.version == version)?;
 
     let filename = format!("{}-{version}.tar", name.as_str());

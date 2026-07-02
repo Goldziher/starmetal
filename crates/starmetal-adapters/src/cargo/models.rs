@@ -162,13 +162,11 @@ mod tests {
         let lines: Vec<&str> = ndjson.split('\n').collect();
 
         assert_eq!(lines.len(), 2);
-        let parsed_first: serde_json::Value =
-            serde_json::from_str(lines[0]).expect("valid JSON on line 1");
+        let parsed_first: serde_json::Value = serde_json::from_str(lines[0]).expect("valid JSON on line 1");
         assert_eq!(parsed_first["vers"], "1.0.0");
         assert_eq!(parsed_first["yanked"], false);
 
-        let parsed_second: serde_json::Value =
-            serde_json::from_str(lines[1]).expect("valid JSON on line 2");
+        let parsed_second: serde_json::Value = serde_json::from_str(lines[1]).expect("valid JSON on line 2");
         assert_eq!(parsed_second["vers"], "2.0.0");
         assert_eq!(parsed_second["yanked"], true);
     }

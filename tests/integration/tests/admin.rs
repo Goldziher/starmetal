@@ -44,13 +44,7 @@ async fn admin_api_requires_admin_bearer_token() {
     let body: Value = response.json().await.expect("status should be JSON");
     assert_eq!(body["admin_enabled"], true);
     assert_eq!(body["storage_backend"], "fs");
-    assert!(
-        body["registries"]
-            .as_array()
-            .expect("registries array")
-            .len()
-            >= 8
-    );
+    assert!(body["registries"].as_array().expect("registries array").len() >= 8);
 
     server.shutdown();
 }

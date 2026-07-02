@@ -287,10 +287,7 @@ fn run_config(
         ConfigAction::Init { path } => {
             starmetal_ops::write_minimal_config(&path)?;
             match output {
-                OutputFormat::Json => print_json(
-                    &serde_json::json!({"created": path.to_string_lossy()}),
-                    output,
-                ),
+                OutputFormat::Json => print_json(&serde_json::json!({"created": path.to_string_lossy()}), output),
                 OutputFormat::Human => {
                     println!("created {}", path.display());
                     Ok(())
@@ -325,9 +322,7 @@ async fn run_package(
             print_versions(&versions, output)
         }
         PackageAction::Metadata(args) => {
-            let metadata = runtime
-                .metadata(args.ecosystem, &args.name, &args.version)
-                .await?;
+            let metadata = runtime.metadata(args.ecosystem, &args.name, &args.version).await?;
             print_metadata(&metadata, output)
         }
         PackageAction::Fetch(args) => {
@@ -384,9 +379,7 @@ async fn run_cache(
                     "cache delete requires --yes".to_string(),
                 ));
             }
-            let result = runtime
-                .delete_cached_artifact(&artifact_id(&artifact))
-                .await?;
+            let result = runtime.delete_cached_artifact(&artifact_id(&artifact)).await?;
             match output {
                 OutputFormat::Json => print_json(&result, output),
                 OutputFormat::Human => {
@@ -426,17 +419,12 @@ fn init_tracing(verbose: u8) {
         _ => "starmetal=trace",
     };
     tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(filter)),
-        )
+        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(filter)))
         .without_time()
         .init();
 }
 
-fn print_json<T: serde::Serialize + ?Sized>(
-    value: &T,
-    output: OutputFormat,
-) -> starmetal_core::error::Result<()> {
+fn print_json<T: serde::Serialize + ?Sized>(value: &T, output: OutputFormat) -> starmetal_core::error::Result<()> {
     match output {
         OutputFormat::Json => {
             println!("{}", serde_json::to_string_pretty(value)?);
@@ -448,10 +436,7 @@ fn print_json<T: serde::Serialize + ?Sized>(
     Ok(())
 }
 
-fn print_registry_status(
-    runtime: &StarmetalRuntime,
-    output: OutputFormat,
-) -> starmetal_core::error::Result<()> {
+fn print_registry_status(runtime: &StarmetalRuntime, output: OutputFormat) -> starmetal_core::error::Result<()> {
     let status = runtime.status();
     if matches!(output, OutputFormat::Json) {
         return print_json(&status, output);
@@ -460,21 +445,10 @@ fn print_registry_status(
     println!("storage: {}", status.storage_backend);
     println!("registries:");
     for registry in status.registries {
-        let enabled = if registry.enabled {
-            "enabled"
-        } else {
-            "disabled"
-        };
-        let compiled = if registry.compiled {
-            "compiled"
-        } else {
-            "not compiled"
-        };
+        let enabled = if registry.enabled { "enabled" } else { "disabled" };
+        let compiled = if registry.compiled { "compiled" } else { "not compiled" };
         let url = registry.url.as_deref().unwrap_or("-");
-        println!(
-            "  {:<10} {:<8} {:<12} {}",
-            registry.ecosystem, enabled, compiled, url
-        );
+        println!("  {:<10} {:<8} {:<12} {}", registry.ecosystem, enabled, compiled, url);
     }
     Ok(())
 }
@@ -492,10 +466,7 @@ fn print_package_refs(
     Ok(())
 }
 
-fn print_versions(
-    versions: &[VersionInfo],
-    output: OutputFormat,
-) -> starmetal_core::error::Result<()> {
+fn print_versions(versions: &[VersionInfo], output: OutputFormat) -> starmetal_core::error::Result<()> {
     if matches!(output, OutputFormat::Json) {
         return print_json(&versions, output);
     }
@@ -509,10 +480,7 @@ fn print_versions(
     Ok(())
 }
 
-fn print_metadata(
-    metadata: &VersionMetadata,
-    output: OutputFormat,
-) -> starmetal_core::error::Result<()> {
+fn print_metadata(metadata: &VersionMetadata, output: OutputFormat) -> starmetal_core::error::Result<()> {
     if matches!(output, OutputFormat::Json) {
         return print_json(&metadata, output);
     }
@@ -532,11 +500,7 @@ fn print_metadata(
     Ok(())
 }
 
-fn print_fetch_result(
-    artifact: &ArtifactId,
-    bytes: usize,
-    output: OutputFormat,
-) -> starmetal_core::error::Result<()> {
+fn print_fetch_result(artifact: &ArtifactId, bytes: usize, output: OutputFormat) -> starmetal_core::error::Result<()> {
     let result = starmetal_ops::ArtifactFetchResult {
         bytes,
         artifact: artifact.clone(),
@@ -551,10 +515,7 @@ fn print_fetch_result(
     Ok(())
 }
 
-fn print_publish_result(
-    result: &PublishResult,
-    output: OutputFormat,
-) -> starmetal_core::error::Result<()> {
+fn print_publish_result(result: &PublishResult, output: OutputFormat) -> starmetal_core::error::Result<()> {
     if matches!(output, OutputFormat::Json) {
         return print_json(&result, output);
     }
@@ -593,9 +554,7 @@ fn artifact_id(args: &ArtifactArgs) -> ArtifactId {
 }
 
 fn parse_key_value(raw: &str) -> Result<(String, String), String> {
-    let (key, value) = raw
-        .split_once('=')
-        .ok_or_else(|| "expected key=value".to_string())?;
+    let (key, value) = raw.split_once('=').ok_or_else(|| "expected key=value".to_string())?;
     if key.trim().is_empty() {
         return Err("key must not be empty".to_string());
     }
@@ -614,15 +573,8 @@ mod tests {
 
     #[test]
     fn parses_no_config_registry_status() {
-        let cli = Cli::try_parse_from([
-            "sm",
-            "--no-config",
-            "--storage-backend",
-            "memory",
-            "registry",
-            "status",
-        ])
-        .expect("cli should parse");
+        let cli = Cli::try_parse_from(["sm", "--no-config", "--storage-backend", "memory", "registry", "status"])
+            .expect("cli should parse");
         assert!(cli.no_config);
         assert_eq!(cli.storage_backend.as_deref(), Some("memory"));
         assert!(matches!(
@@ -635,12 +587,9 @@ mod tests {
 
     #[test]
     fn parses_storage_options_as_key_value() {
-        let cli = Cli::try_parse_from(["sm", "--storage-option", "root=./data", "config", "show"])
-            .expect("cli should parse");
-        assert_eq!(
-            cli.storage_options,
-            vec![("root".to_string(), "./data".to_string())]
-        );
+        let cli =
+            Cli::try_parse_from(["sm", "--storage-option", "root=./data", "config", "show"]).expect("cli should parse");
+        assert_eq!(cli.storage_options, vec![("root".to_string(), "./data".to_string())]);
     }
 
     #[test]

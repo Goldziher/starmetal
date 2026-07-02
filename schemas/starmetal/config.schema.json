@@ -34,16 +34,7 @@
     },
     "Ecosystem": {
       "description": "Supported package ecosystems.",
-      "enum": [
-        "pypi",
-        "npm",
-        "cargo",
-        "hex",
-        "maven",
-        "rubygems",
-        "nuget",
-        "pub"
-      ],
+      "enum": ["pypi", "npm", "cargo", "hex", "maven", "rubygems", "nuget", "pub"],
       "type": "string"
     },
     "EncryptionConfig": {
@@ -53,10 +44,7 @@
           "type": "boolean"
         },
         "key_file": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         }
       },
       "type": "object"
@@ -67,21 +55,13 @@
           "type": "string"
         },
         "credential_path": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "endpoint": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         }
       },
-      "required": [
-        "bucket"
-      ],
+      "required": ["bucket"],
       "type": "object"
     },
     "PolicyConfig": {
@@ -112,11 +92,7 @@
       "type": "object"
     },
     "PublishMode": {
-      "enum": [
-        "local",
-        "local-and-forward",
-        "forward-only"
-      ],
+      "enum": ["local", "local-and-forward", "forward-only"],
       "type": "string"
     },
     "PublishTokenConfig": {
@@ -146,9 +122,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "token"
-      ],
+      "required": ["token"],
       "type": "object"
     },
     "PublishingConfig": {
@@ -193,22 +167,13 @@
           "type": "boolean"
         },
         "password_env": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "token_env": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "username_env": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         }
       },
       "type": "object"
@@ -219,19 +184,13 @@
           "type": "string"
         },
         "endpoint": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "region": {
           "type": "string"
         }
       },
-      "required": [
-        "bucket",
-        "region"
-      ],
+      "required": ["bucket", "region"],
       "type": "object"
     },
     "ServerConfig": {
@@ -255,20 +214,13 @@
         },
         "public_base_url": {
           "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         }
       },
       "type": "object"
     },
     "SigningAlgorithm": {
-      "enum": [
-        "ed25519",
-        "ecdsa-p256-sha256",
-        "ml-dsa65"
-      ],
+      "enum": ["ed25519", "ecdsa-p256-sha256", "ml-dsa65"],
       "type": "string"
     },
     "SigningConfig": {
@@ -312,16 +264,10 @@
           "$ref": "#/$defs/SigningAlgorithm"
         },
         "certificate_chain_file": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "certificate_file": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "ecosystems": {
           "default": [],
@@ -341,48 +287,28 @@
           "type": "array"
         },
         "private_key_file": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "private_key_password_env": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "public_key_file": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "status": {
           "$ref": "#/$defs/SigningKeyStatus",
           "default": "active"
         }
       },
-      "required": [
-        "id",
-        "algorithm"
-      ],
+      "required": ["id", "algorithm"],
       "type": "object"
     },
     "SigningKeyStatus": {
-      "enum": [
-        "active",
-        "verify-only",
-        "disabled"
-      ],
+      "enum": ["active", "verify-only", "disabled"],
       "type": "string"
     },
     "SigningMode": {
-      "enum": [
-        "sign-only",
-        "sign-and-verify",
-        "verify-only"
-      ],
+      "enum": ["sign-only", "sign-and-verify", "verify-only"],
       "type": "string"
     },
     "SigningTrustRootConfig": {
@@ -401,10 +327,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "id",
-        "certificate_file"
-      ],
+      "required": ["id", "certificate_file"],
       "type": "object"
     },
     "StorageConfig": {
@@ -433,10 +356,7 @@
         },
         "path": {
           "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "s3": {
           "anyOf": [
@@ -453,12 +373,7 @@
       "type": "object"
     },
     "TokenScope": {
-      "enum": [
-        "read",
-        "publish",
-        "yank",
-        "admin"
-      ],
+      "enum": ["read", "publish", "yank", "admin"],
       "type": "string"
     },
     "UpstreamConfig": {
@@ -473,10 +388,7 @@
         },
         "artifact_url": {
           "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "enabled": {
           "default": true,
@@ -492,18 +404,11 @@
           "type": "string"
         }
       },
-      "required": [
-        "url"
-      ],
+      "required": ["url"],
       "type": "object"
     },
     "VulnSeverity": {
-      "enum": [
-        "low",
-        "medium",
-        "high",
-        "critical"
-      ],
+      "enum": ["low", "medium", "high", "critical"],
       "type": "string"
     }
   },
@@ -661,12 +566,8 @@
     "generated_by": "starmetal-schema-manager",
     "schema_kind": "starmetal-owned-json-schema",
     "source_file": "crates/starmetal-core/src/config.rs",
-    "source_ids": [
-      "starmetal-config"
-    ],
-    "source_kinds": [
-      "starmetal-rust-type"
-    ],
+    "source_ids": ["starmetal-config"],
+    "source_kinds": ["starmetal-rust-type"],
     "source_type": "starmetal_core::config::Config",
     "validated_by": "crates/starmetal-core/tests/schema_validation.rs"
   }

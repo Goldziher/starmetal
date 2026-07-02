@@ -118,8 +118,7 @@ async fn package_metadata<S: HasHexState>(
         .await
         .map_err(|err| map_error(&err))?
     {
-        serde_json::from_slice(&raw)
-            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?
+        serde_json::from_slice(&raw).map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?
     } else {
         // Cache miss — fetch from upstream
         let _versions = service
@@ -148,8 +147,7 @@ async fn package_metadata<S: HasHexState>(
         .map_err(|err| map_error(&err))?;
     let response = models::build_package_response_from_cached(&name, &package);
 
-    let body = serde_json::to_string(&response)
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+    let body = serde_json::to_string(&response).map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
 
     Ok(([(header::CONTENT_TYPE, "application/json")], body))
 }
@@ -175,12 +173,8 @@ async fn download_tarball<S: HasHexState>(
     State(state): State<S>,
     Path(tarball): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let (name, version) = parse_tarball_name(&tarball).ok_or_else(|| {
-        (
-            StatusCode::BAD_REQUEST,
-            format!("invalid tarball name: {tarball}"),
-        )
-    })?;
+    let (name, version) = parse_tarball_name(&tarball)
+        .ok_or_else(|| (StatusCode::BAD_REQUEST, format!("invalid tarball name: {tarball}")))?;
 
     let artifact_id = ArtifactId {
         ecosystem: Ecosystem::Hex,
@@ -216,10 +210,7 @@ async fn registry_entry<S: HasHexState>(
     let package_name = PackageName::new(name.clone());
     let service = state.package_service();
     let bytes = if let Some(cached) = service
-        .get_raw_upstream(
-            Ecosystem::Hex,
-            &PackageName::new(format!("registry/{name}")),
-        )
+        .get_raw_upstream(Ecosystem::Hex, &PackageName::new(format!("registry/{name}")))
         .await
         .map_err(|err| map_error(&err))?
     {
@@ -308,15 +299,13 @@ async fn store_hex_metadata(
             Ecosystem::Hex,
             name,
             Bytes::from(
-                serde_json::to_vec(&package)
-                    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?,
+                serde_json::to_vec(&package).map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?,
             ),
         )
         .await
         .map_err(|err| map_error(&err))?;
 
-    let checksum =
-        hex::decode(sha256).map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+    let checksum = hex::decode(sha256).map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
     let package_proto = proto::Package {
         name: name.as_str().to_string(),
         repository: "hexpm".to_string(),
@@ -354,26 +343,14 @@ fn authorize_publish<S: HasHexState>(
     name: &PackageName,
 ) -> Result<(), (StatusCode, String)> {
     if !state.config().publishing.enabled {
-        return Err((
-            StatusCode::NOT_FOUND,
-            "publishing is not enabled".to_string(),
-        ));
+        return Err((StatusCode::NOT_FOUND, "publishing is not enabled".to_string()));
     }
     let token = headers
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.strip_prefix("Bearer "))
-        .or_else(|| {
-            headers
-                .get("x-hex-api-key")
-                .and_then(|value| value.to_str().ok())
-        })
-        .ok_or_else(|| {
-            (
-                StatusCode::UNAUTHORIZED,
-                "missing publishing token".to_string(),
-            )
-        })?;
+        .or_else(|| headers.get("x-hex-api-key").and_then(|value| value.to_str().ok()))
+        .ok_or_else(|| (StatusCode::UNAUTHORIZED, "missing publishing token".to_string()))?;
     if state
         .config()
         .authorize_publish_token(token, TokenScope::Publish, Ecosystem::Hex, name)
@@ -417,18 +394,12 @@ mod tests {
 
     #[test]
     fn test_parse_tarball_name_simple() {
-        assert_eq!(
-            parse_tarball_name("jason-1.4.1.tar"),
-            Some(("jason", "1.4.1"))
-        );
+        assert_eq!(parse_tarball_name("jason-1.4.1.tar"), Some(("jason", "1.4.1")));
     }
 
     #[test]
     fn test_parse_tarball_name_hyphenated_package() {
-        assert_eq!(
-            parse_tarball_name("plug-1.0.0.tar"),
-            Some(("plug", "1.0.0"))
-        );
+        assert_eq!(parse_tarball_name("plug-1.0.0.tar"), Some(("plug", "1.0.0")));
     }
 
     #[test]
@@ -475,9 +446,6 @@ mod tests {
 
     #[test]
     fn test_parse_tarball_name_digit_in_package_name() {
-        assert_eq!(
-            parse_tarball_name("db-2-pool-1.0.0.tar"),
-            Some(("db-2-pool", "1.0.0"))
-        );
+        assert_eq!(parse_tarball_name("db-2-pool-1.0.0.tar"), Some(("db-2-pool", "1.0.0")));
     }
 }

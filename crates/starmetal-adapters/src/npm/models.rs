@@ -64,9 +64,7 @@ pub fn extract_version_metadata(
         license,
         yanked: false,
         listed: None,
-        protocol_metadata: Some(starmetal_core::publishing::ProtocolMetadata::Npm {
-            packument: ver.clone(),
-        }),
+        protocol_metadata: Some(starmetal_core::publishing::ProtocolMetadata::Npm { packument: ver.clone() }),
     })
 }
 
@@ -87,9 +85,7 @@ pub fn rewrite_packument_tarball_urls(packument: &mut serde_json::Value, base_ur
 }
 
 fn tarball_name(package_name: &str) -> &str {
-    package_name
-        .rsplit_once('/')
-        .map_or(package_name, |(_, name)| name)
+    package_name.rsplit_once('/').map_or(package_name, |(_, name)| name)
 }
 
 #[cfg(test)]
@@ -148,10 +144,7 @@ mod tests {
         assert_eq!(meta.version, "1.0.0");
         assert_eq!(meta.license.as_deref(), Some("MIT"));
         assert_eq!(meta.artifacts[0].filename, "is-odd-1.0.0.tgz");
-        assert_eq!(
-            meta.artifacts[0].upstream_hashes.get("sha1").unwrap(),
-            "abc123"
-        );
+        assert_eq!(meta.artifacts[0].upstream_hashes.get("sha1").unwrap(), "abc123");
         assert_eq!(
             meta.artifacts[0].upstream_hashes.get("integrity").unwrap(),
             "sha512-xyz789"
@@ -173,10 +166,7 @@ mod tests {
         );
         // Other fields preserved
         assert_eq!(packument["dist-tags"]["latest"], "2.0.0");
-        assert_eq!(
-            packument["versions"]["1.0.0"]["dependencies"]["is-number"],
-            "^4.0.0"
-        );
+        assert_eq!(packument["versions"]["1.0.0"]["dependencies"]["is-number"], "^4.0.0");
     }
 
     #[test]

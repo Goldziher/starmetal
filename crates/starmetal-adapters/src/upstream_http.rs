@@ -3,11 +3,7 @@ use serde::de::DeserializeOwned;
 use starmetal_core::error::{Result, StarmetalError};
 
 #[allow(dead_code)]
-pub(crate) async fn bytes_limited(
-    mut response: reqwest::Response,
-    max_bytes: u64,
-    context: &str,
-) -> Result<Bytes> {
+pub(crate) async fn bytes_limited(mut response: reqwest::Response, max_bytes: u64, context: &str) -> Result<Bytes> {
     if let Some(content_length) = response.content_length()
         && content_length > max_bytes
     {
@@ -36,21 +32,13 @@ pub(crate) async fn bytes_limited(
 }
 
 #[allow(dead_code)]
-pub(crate) async fn text_limited(
-    response: reqwest::Response,
-    max_bytes: u64,
-    context: &str,
-) -> Result<String> {
+pub(crate) async fn text_limited(response: reqwest::Response, max_bytes: u64, context: &str) -> Result<String> {
     let bytes = bytes_limited(response, max_bytes, context).await?;
     String::from_utf8(bytes.to_vec()).map_err(|err| StarmetalError::Upstream(err.to_string()))
 }
 
 #[allow(dead_code)]
-pub(crate) async fn json_limited<T>(
-    response: reqwest::Response,
-    max_bytes: u64,
-    context: &str,
-) -> Result<T>
+pub(crate) async fn json_limited<T>(response: reqwest::Response, max_bytes: u64, context: &str) -> Result<T>
 where
     T: DeserializeOwned,
 {

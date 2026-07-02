@@ -45,10 +45,7 @@ pub fn router<S: HasPypiState>() -> Router<S> {
         .route("/simple/{project}/", get(simple_project::<S>))
         .route("/simple/{project}", get(redirect_with_slash))
         .route("/legacy/", post(legacy_upload::<S>))
-        .route(
-            "/packages/{name}/{version}/{filename}",
-            get(download_artifact::<S>),
-        )
+        .route("/packages/{name}/{version}/{filename}", get(download_artifact::<S>))
 }
 
 async fn legacy_upload<S: HasPypiState>(
@@ -56,12 +53,8 @@ async fn legacy_upload<S: HasPypiState>(
     headers: HeaderMap,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let token = extract_write_token(&headers).ok_or_else(|| {
-        (
-            StatusCode::UNAUTHORIZED,
-            "missing publishing token".to_string(),
-        )
-    })?;
+    let token = extract_write_token(&headers)
+        .ok_or_else(|| (StatusCode::UNAUTHORIZED, "missing publishing token".to_string()))?;
     let mut name = None;
     let mut version = None;
     let mut license = None;
@@ -77,12 +70,7 @@ async fn legacy_upload<S: HasPypiState>(
         if field_name == "content" {
             let filename = field
                 .file_name()
-                .ok_or_else(|| {
-                    (
-                        StatusCode::BAD_REQUEST,
-                        "missing upload filename".to_string(),
-                    )
-                })?
+                .ok_or_else(|| (StatusCode::BAD_REQUEST, "missing upload filename".to_string()))?
                 .to_string();
             let data = field
                 .bytes()
@@ -105,23 +93,11 @@ async fn legacy_upload<S: HasPypiState>(
         }
     }
 
-    let name = PackageName::new(
-        name.ok_or_else(|| (StatusCode::BAD_REQUEST, "missing package name".to_string()))?,
-    );
+    let name = PackageName::new(name.ok_or_else(|| (StatusCode::BAD_REQUEST, "missing package name".to_string()))?);
     let name = PackageName::new(name.normalized(Ecosystem::PyPI).into_owned());
     authorize_publish(&state, &token, &name)?;
-    let version = version.ok_or_else(|| {
-        (
-            StatusCode::BAD_REQUEST,
-            "missing package version".to_string(),
-        )
-    })?;
-    let (filename, data) = file.ok_or_else(|| {
-        (
-            StatusCode::BAD_REQUEST,
-            "missing upload content".to_string(),
-        )
-    })?;
+    let version = version.ok_or_else(|| (StatusCode::BAD_REQUEST, "missing package version".to_string()))?;
+    let (filename, data) = file.ok_or_else(|| (StatusCode::BAD_REQUEST, "missing upload content".to_string()))?;
     let sha256 = hex::encode(sha2::Sha256::digest(&data));
     let mut upstream_hashes = ahash::AHashMap::new();
     upstream_hashes.insert("sha256".to_string(), sha256.clone());
@@ -169,25 +145,17 @@ async fn legacy_upload<S: HasPypiState>(
         .await
         .map_err(|err| map_error(&err))?;
 
-    Ok((
-        StatusCode::OK,
-        format!("uploaded {} {version}", name.as_str()),
-    ))
+    Ok((StatusCode::OK, format!("uploaded {} {version}", name.as_str())))
 }
 
-fn insert_form_field(
-    form: &mut serde_json::Map<String, serde_json::Value>,
-    key: &str,
-    value: String,
-) {
+fn insert_form_field(form: &mut serde_json::Map<String, serde_json::Value>, key: &str, value: String) {
     match form.get_mut(key) {
         Some(existing) => {
             if let Some(values) = existing.as_array_mut() {
                 values.push(serde_json::Value::String(value));
             } else {
                 let previous = std::mem::replace(existing, serde_json::Value::Null);
-                *existing =
-                    serde_json::Value::Array(vec![previous, serde_json::Value::String(value)]);
+                *existing = serde_json::Value::Array(vec![previous, serde_json::Value::String(value)]);
             }
         }
         None => {
@@ -215,8 +183,7 @@ async fn simple_index<S: HasPypiState>(
         .await
         .map_err(|err| map_error(&err))?;
 
-    let format =
-        models::negotiate_format(headers.get(header::ACCEPT).and_then(|v| v.to_str().ok()));
+    let format = models::negotiate_format(headers.get(header::ACCEPT).and_then(|v| v.to_str().ok()));
 
     match format {
         models::PypiFormat::Html => {
@@ -225,13 +192,9 @@ async fn simple_index<S: HasPypiState>(
         }
         models::PypiFormat::Json => {
             let index = models::build_json_index(&packages);
-            let body = serde_json::to_string(&index)
-                .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
-            Ok((
-                [(header::CONTENT_TYPE, "application/vnd.pypi.simple.v1+json")],
-                body,
-            )
-                .into_response())
+            let body =
+                serde_json::to_string(&index).map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+            Ok(([(header::CONTENT_TYPE, "application/vnd.pypi.simple.v1+json")], body).into_response())
         }
     }
 }
@@ -256,8 +219,7 @@ async fn simple_project<S: HasPypiState>(
         .await
         .map_err(|err| map_error(&err))?
     {
-        serde_json::from_slice(&raw)
-            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?
+        serde_json::from_slice(&raw).map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?
     } else {
         // Cache miss — fetch from upstream
         let _versions = service
@@ -287,8 +249,7 @@ async fn simple_project<S: HasPypiState>(
         .map_err(|err| map_error(&err))?;
     models::rewrite_project_file_urls(&mut project);
 
-    let format =
-        models::negotiate_format(headers.get(header::ACCEPT).and_then(|v| v.to_str().ok()));
+    let format = models::negotiate_format(headers.get(header::ACCEPT).and_then(|v| v.to_str().ok()));
 
     match format {
         models::PypiFormat::Html => {
@@ -296,13 +257,9 @@ async fn simple_project<S: HasPypiState>(
             Ok(([(header::CONTENT_TYPE, "text/html; charset=utf-8")], html).into_response())
         }
         models::PypiFormat::Json => {
-            let body = serde_json::to_string(&project)
-                .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
-            Ok((
-                [(header::CONTENT_TYPE, "application/vnd.pypi.simple.v1+json")],
-                body,
-            )
-                .into_response())
+            let body =
+                serde_json::to_string(&project).map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+            Ok(([(header::CONTENT_TYPE, "application/vnd.pypi.simple.v1+json")], body).into_response())
         }
     }
 }
@@ -328,29 +285,20 @@ async fn build_local_project(
             api_version: "1.0".to_string(),
         },
         name: name.as_str().to_string(),
-        versions: versions
-            .into_iter()
-            .map(|version| version.version)
-            .collect(),
+        versions: versions.into_iter().map(|version| version.version).collect(),
         files,
     })
 }
 
-fn pypi_files_from_metadata(
-    metadata: &VersionMetadata,
-) -> Vec<starmetal_core::registry::pypi::PypiFile> {
+fn pypi_files_from_metadata(metadata: &VersionMetadata) -> Vec<starmetal_core::registry::pypi::PypiFile> {
     metadata
         .artifacts
         .iter()
         .map(|artifact| {
-            let protocol_file =
-                metadata
-                    .protocol_metadata
-                    .as_ref()
-                    .and_then(|metadata| match metadata {
-                        ProtocolMetadata::PyPI { fields } => fields.get("file"),
-                        _ => None,
-                    });
+            let protocol_file = metadata.protocol_metadata.as_ref().and_then(|metadata| match metadata {
+                ProtocolMetadata::PyPI { fields } => fields.get("file"),
+                _ => None,
+            });
             starmetal_core::registry::pypi::PypiFile {
                 filename: artifact.filename.clone(),
                 url: format!(
@@ -370,9 +318,7 @@ fn pypi_files_from_metadata(
                     .and_then(|file| file.get("upload-time"))
                     .and_then(serde_json::Value::as_str)
                     .map(str::to_string),
-                dist_info_metadata: protocol_file
-                    .and_then(|file| file.get("dist-info-metadata"))
-                    .cloned(),
+                dist_info_metadata: protocol_file.and_then(|file| file.get("dist-info-metadata")).cloned(),
                 gpg_sig: protocol_file
                     .and_then(|file| file.get("gpg-sig"))
                     .and_then(serde_json::Value::as_bool),
@@ -387,9 +333,7 @@ async fn validate_project_metadata(
     project: &starmetal_core::registry::pypi::PypiProject,
 ) -> Result<(), StarmetalError> {
     for version in models::pypi_project_to_version_infos(project) {
-        if let Some(metadata) =
-            models::pypi_files_to_metadata(name, &version.version, &project.files)
-        {
+        if let Some(metadata) = models::pypi_files_to_metadata(name, &version.version, &project.files) {
             service.validate_metadata(&metadata).await?;
         }
     }
@@ -433,16 +377,9 @@ fn map_error(err: &StarmetalError) -> (StatusCode, String) {
     crate::map_public_error(err)
 }
 
-fn authorize_publish<S: HasPypiState>(
-    state: &S,
-    token: &str,
-    name: &PackageName,
-) -> Result<(), (StatusCode, String)> {
+fn authorize_publish<S: HasPypiState>(state: &S, token: &str, name: &PackageName) -> Result<(), (StatusCode, String)> {
     if !state.config().publishing.enabled {
-        return Err((
-            StatusCode::NOT_FOUND,
-            "publishing is not enabled".to_string(),
-        ));
+        return Err((StatusCode::NOT_FOUND, "publishing is not enabled".to_string()));
     }
     if state
         .config()

@@ -69,16 +69,10 @@ def pypi_wheel() -> bytes:
     files = {
         "sample_project/__init__.py": b'__version__ = "1.0.0"\n',
         f"{dist_info}/METADATA": (
-            b"Metadata-Version: 2.1\n"
-            b"Name: sample-project\n"
-            b"Version: 1.0.0\n"
-            b"Summary: StarMetal proxy E2E fixture\n"
+            b"Metadata-Version: 2.1\nName: sample-project\nVersion: 1.0.0\nSummary: StarMetal proxy E2E fixture\n"
         ),
         f"{dist_info}/WHEEL": (
-            b"Wheel-Version: 1.0\n"
-            b"Generator: starmetal-proxy-e2e\n"
-            b"Root-Is-Purelib: true\n"
-            b"Tag: py3-none-any\n"
+            b"Wheel-Version: 1.0\nGenerator: starmetal-proxy-e2e\nRoot-Is-Purelib: true\nTag: py3-none-any\n"
         ),
         f"{dist_info}/RECORD": b"",
     }
@@ -152,9 +146,7 @@ ARTIFACTS: dict[str, bytes] = {
     "pypi_wheel": pypi_wheel(),
     "npm_tgz": fixed_tar_gz(
         {
-            "package/package.json": (
-                b'{"name":"sample-npm","version":"1.0.0","main":"index.js","license":"MIT"}\n'
-            ),
+            "package/package.json": (b'{"name":"sample-npm","version":"1.0.0","main":"index.js","license":"MIT"}\n'),
             "package/index.js": b"module.exports = 'starmetal-proxy-e2e';\n",
         }
     ),
@@ -163,7 +155,7 @@ ARTIFACTS: dict[str, bytes] = {
             "sample-crate-1.0.0/Cargo.toml": (
                 b'[package]\nname = "sample-crate"\nversion = "1.0.0"\nedition = "2021"\n'
             ),
-            "sample-crate-1.0.0/src/lib.rs": b"pub fn marker() -> &'static str { \"starmetal\" }\n",
+            "sample-crate-1.0.0/src/lib.rs": b'pub fn marker() -> &\'static str { "starmetal" }\n',
         }
     ),
     "hex_tar": fixed_tar_gz(
@@ -233,16 +225,8 @@ def protobuf_field(field: int, data: bytes) -> bytes:
 
 def hex_registry_entry() -> bytes:
     checksum = hashlib.sha256(ARTIFACTS["hex_tar"]).digest()
-    release = (
-        protobuf_field(1, b"1.0.0")
-        + protobuf_field(2, checksum)
-        + protobuf_field(5, checksum)
-    )
-    package = (
-        protobuf_field(1, release)
-        + protobuf_field(2, b"sample_hex")
-        + protobuf_field(3, b"hexpm")
-    )
+    release = protobuf_field(1, b"1.0.0") + protobuf_field(2, checksum) + protobuf_field(5, checksum)
+    package = protobuf_field(1, release) + protobuf_field(2, b"sample_hex") + protobuf_field(3, b"hexpm")
     signed = protobuf_field(1, package)
     return signed
 

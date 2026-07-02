@@ -2,8 +2,8 @@
 set -euo pipefail
 
 if [[ $# -ne 2 ]]; then
-  echo "Usage: $0 <version> <source-sha256>" >&2
-  exit 1
+	echo "Usage: $0 <version> <source-sha256>" >&2
+	exit 1
 fi
 
 VERSION="$1"

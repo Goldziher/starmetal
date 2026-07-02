@@ -53,9 +53,7 @@ def request(
 
     expected_values = (expected,) if isinstance(expected, int) else expected
     if result.status not in expected_values:
-        raise AssertionError(
-            f"{method} {path} expected {expected_values}, got {result.status}: {result.text()[:500]}"
-        )
+        raise AssertionError(f"{method} {path} expected {expected_values}, got {result.status}: {result.text()[:500]}")
     return result
 
 

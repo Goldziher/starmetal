@@ -3,10 +3,7 @@
     "api-version": "1.0"
   },
   "name": "Sample_Project",
-  "versions": [
-    "1.0.0",
-    "1.1.0"
-  ],
+  "versions": ["1.0.0", "1.1.0"],
   "files": [
     {
       "filename": "sample_project-1.0.0-py3-none-any.whl",

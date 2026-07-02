@@ -67,32 +67,30 @@ function downloadWithRedirects(url, dest, maxRedirects = 5) {
       return;
     }
 
-    const request = https.get(
-      urlObject,
-      { headers: { "User-Agent": "starmetal-npm-wrapper" } },
-      (response) => {
-        if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-          const nextUrl = new URL(response.headers.location, urlObject).toString();
-          downloadWithRedirects(nextUrl, dest, maxRedirects - 1).then(resolve).catch(reject);
-          return;
-        }
+    const request = https.get(urlObject, { headers: { "User-Agent": "starmetal-npm-wrapper" } }, (response) => {
+      if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+        const nextUrl = new URL(response.headers.location, urlObject).toString();
+        downloadWithRedirects(nextUrl, dest, maxRedirects - 1)
+          .then(resolve)
+          .catch(reject);
+        return;
+      }
 
-        if (response.statusCode !== 200) {
-          reject(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`));
-          return;
-        }
+      if (response.statusCode !== 200) {
+        reject(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`));
+        return;
+      }
 
-        const file = fs.createWriteStream(dest);
-        response.pipe(file);
-        file.on("finish", () => {
-          file.close(resolve);
-        });
-        file.on("error", (error) => {
-          fs.unlink(dest, () => {});
-          reject(error);
-        });
-      },
-    );
+      const file = fs.createWriteStream(dest);
+      response.pipe(file);
+      file.on("finish", () => {
+        file.close(resolve);
+      });
+      file.on("error", (error) => {
+        fs.unlink(dest, () => {});
+        reject(error);
+      });
+    });
 
     request.on("error", reject);
     request.setTimeout(30000, () => {
@@ -115,27 +113,25 @@ function fetchTextWithRedirects(url, maxRedirects = 5) {
       return;
     }
 
-    const request = https.get(
-      urlObject,
-      { headers: { "User-Agent": "starmetal-npm-wrapper" } },
-      (response) => {
-        if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-          const nextUrl = new URL(response.headers.location, urlObject).toString();
-          fetchTextWithRedirects(nextUrl, maxRedirects - 1).then(resolve).catch(reject);
-          return;
-        }
+    const request = https.get(urlObject, { headers: { "User-Agent": "starmetal-npm-wrapper" } }, (response) => {
+      if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+        const nextUrl = new URL(response.headers.location, urlObject).toString();
+        fetchTextWithRedirects(nextUrl, maxRedirects - 1)
+          .then(resolve)
+          .catch(reject);
+        return;
+      }
 
-        if (response.statusCode !== 200) {
-          reject(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`));
-          return;
-        }
+      if (response.statusCode !== 200) {
+        reject(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`));
+        return;
+      }
 
-        const chunks = [];
-        response.on("data", (chunk) => chunks.push(chunk));
-        response.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
-        response.on("error", reject);
-      },
-    );
+      const chunks = [];
+      response.on("data", (chunk) => chunks.push(chunk));
+      response.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+      response.on("error", reject);
+    });
 
     request.on("error", reject);
     request.setTimeout(30000, () => {

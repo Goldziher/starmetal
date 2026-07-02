@@ -82,9 +82,7 @@ struct RouteState {
 }
 
 impl RouteState {
-    fn with_raw(
-        fixtures: impl IntoIterator<Item = (Ecosystem, &'static str, &'static str)>,
-    ) -> Self {
+    fn with_raw(fixtures: impl IntoIterator<Item = (Ecosystem, &'static str, &'static str)>) -> Self {
         let service = Arc::new(FixtureService::new(fixtures));
         Self {
             config: Arc::new(Config::default()),
@@ -102,9 +100,7 @@ impl RouteState {
             )),
             maven_upstream: Arc::new(MavenUpstreamClient::new("http://127.0.0.1/maven2".into())),
             rubygems_upstream: Arc::new(RubyGemsUpstreamClient::new("http://127.0.0.1".into())),
-            nuget_upstream: Arc::new(NuGetUpstreamClient::new(
-                "http://127.0.0.1/v3/index.json".into(),
-            )),
+            nuget_upstream: Arc::new(NuGetUpstreamClient::new("http://127.0.0.1/v3/index.json".into())),
             pub_upstream: Arc::new(PubUpstreamClient::new("http://127.0.0.1".into())),
         }
     }
@@ -262,12 +258,7 @@ impl FixtureService {
     fn new(fixtures: impl IntoIterator<Item = (Ecosystem, &'static str, &'static str)>) -> Self {
         let raw = fixtures
             .into_iter()
-            .map(|(ecosystem, name, data)| {
-                (
-                    (ecosystem, name.to_string()),
-                    Bytes::copy_from_slice(data.as_bytes()),
-                )
-            })
+            .map(|(ecosystem, name, data)| ((ecosystem, name.to_string()), Bytes::copy_from_slice(data.as_bytes())))
             .collect();
         Self { raw }
     }
@@ -275,11 +266,7 @@ impl FixtureService {
 
 #[async_trait]
 impl PackageService for FixtureService {
-    async fn list_versions(
-        &self,
-        ecosystem: Ecosystem,
-        name: &PackageName,
-    ) -> Result<Vec<VersionInfo>> {
+    async fn list_versions(&self, ecosystem: Ecosystem, name: &PackageName) -> Result<Vec<VersionInfo>> {
         if ecosystem == Ecosystem::NuGet {
             return Ok(vec![VersionInfo {
                 version: "1.0.0".to_string(),
@@ -325,23 +312,11 @@ impl PackageService for FixtureService {
             .collect())
     }
 
-    async fn get_raw_upstream(
-        &self,
-        ecosystem: Ecosystem,
-        name: &PackageName,
-    ) -> Result<Option<Bytes>> {
-        Ok(self
-            .raw
-            .get(&(ecosystem, name.as_str().to_string()))
-            .cloned())
+    async fn get_raw_upstream(&self, ecosystem: Ecosystem, name: &PackageName) -> Result<Option<Bytes>> {
+        Ok(self.raw.get(&(ecosystem, name.as_str().to_string())).cloned())
     }
 
-    async fn put_raw_upstream(
-        &self,
-        _ecosystem: Ecosystem,
-        _name: &PackageName,
-        _data: Bytes,
-    ) -> Result<()> {
+    async fn put_raw_upstream(&self, _ecosystem: Ecosystem, _name: &PackageName, _data: Bytes) -> Result<()> {
         Ok(())
     }
 }
@@ -369,19 +344,12 @@ async fn response_body(router: Router, request: Request<Body>) -> (StatusCode, S
     let bytes = to_bytes(response.into_body(), usize::MAX)
         .await
         .expect("body should buffer");
-    (
-        status,
-        String::from_utf8(bytes.to_vec()).expect("body should be utf-8"),
-    )
+    (status, String::from_utf8(bytes.to_vec()).expect("body should be utf-8"))
 }
 
 #[tokio::test]
 async fn pypi_route_serves_fixture_metadata_with_rewritten_urls() {
-    let state = RouteState::with_raw([(
-        Ecosystem::PyPI,
-        "sample-project",
-        fixture("pypi/sample-project.json"),
-    )]);
+    let state = RouteState::with_raw([(Ecosystem::PyPI, "sample-project", fixture("pypi/sample-project.json"))]);
     let router = pypi::router::<RouteState>().with_state(state);
     let request = Request::builder()
         .uri("/simple/sample-project/")
@@ -402,11 +370,7 @@ async fn pypi_route_serves_fixture_metadata_with_rewritten_urls() {
 
 #[tokio::test]
 async fn npm_route_serves_fixture_packument_with_rewritten_tarballs() {
-    let state = RouteState::with_raw([(
-        Ecosystem::Npm,
-        "@scope/sample",
-        fixture("npm/sample-packument.json"),
-    )]);
+    let state = RouteState::with_raw([(Ecosystem::Npm, "@scope/sample", fixture("npm/sample-packument.json"))]);
     let router = npm::router::<RouteState>().with_state(state);
     let request = Request::builder()
         .uri("/@scope/sample")
@@ -417,8 +381,7 @@ async fn npm_route_serves_fixture_packument_with_rewritten_tarballs() {
     let (status, body) = response_body(router, request).await;
     assert_eq!(status, StatusCode::OK);
 
-    let packument: serde_json::Value =
-        serde_json::from_str(&body).expect("response should be JSON");
+    let packument: serde_json::Value = serde_json::from_str(&body).expect("response should be JSON");
     assert_eq!(packument["name"], "@scope/sample");
     assert_eq!(
         packument["versions"]["2.0.0"]["dist"]["tarball"],
@@ -432,11 +395,7 @@ async fn npm_route_serves_fixture_packument_with_rewritten_tarballs() {
 
 #[tokio::test]
 async fn cargo_routes_serve_sparse_config_and_index_fixture() {
-    let state = RouteState::with_raw([(
-        Ecosystem::Cargo,
-        "sample-crate",
-        fixture("cargo/sample_index.ndjson"),
-    )]);
+    let state = RouteState::with_raw([(Ecosystem::Cargo, "sample-crate", fixture("cargo/sample_index.ndjson"))]);
     let router = cargo::router::<RouteState>().with_state(state);
 
     let config_request = Request::builder()
@@ -459,11 +418,7 @@ async fn cargo_routes_serve_sparse_config_and_index_fixture() {
 
 #[tokio::test]
 async fn hex_route_serves_fixture_package_metadata() {
-    let state = RouteState::with_raw([(
-        Ecosystem::Hex,
-        "sample_hex",
-        fixture("hex/sample-package.json"),
-    )]);
+    let state = RouteState::with_raw([(Ecosystem::Hex, "sample_hex", fixture("hex/sample-package.json"))]);
     let router = hex::router::<RouteState>().with_state(state);
     let request = Request::builder()
         .uri("/api/packages/sample_hex")
@@ -475,10 +430,7 @@ async fn hex_route_serves_fixture_package_metadata() {
 
     let package: serde_json::Value = serde_json::from_str(&body).expect("response should be JSON");
     assert_eq!(package["name"], "sample_hex");
-    assert_eq!(
-        package["releases"][0]["url"],
-        "/hex/tarballs/sample_hex-1.0.0.tar"
-    );
+    assert_eq!(package["releases"][0]["url"], "/hex/tarballs/sample_hex-1.0.0.tar");
 }
 
 #[tokio::test]
@@ -513,16 +465,8 @@ async fn maven_route_serves_metadata_and_checksum_sidecar() {
 #[tokio::test]
 async fn rubygems_route_serves_compact_index_and_gem() {
     let state = RouteState::with_raw([
-        (
-            Ecosystem::RubyGems,
-            "_versions",
-            fixture("rubygems/versions"),
-        ),
-        (
-            Ecosystem::RubyGems,
-            "info/rack",
-            fixture("rubygems/info-rack"),
-        ),
+        (Ecosystem::RubyGems, "_versions", fixture("rubygems/versions")),
+        (Ecosystem::RubyGems, "info/rack", fixture("rubygems/info-rack")),
     ]);
     let router = rubygems::router::<RouteState>().with_state(state);
     let request = Request::builder()
@@ -574,8 +518,7 @@ async fn nuget_route_serves_service_index_versions_and_checksum() {
 
 #[tokio::test]
 async fn pub_route_serves_fixture_package_with_rewritten_archive() {
-    let state =
-        RouteState::with_raw([(Ecosystem::Pub, "sample", fixture("pub/sample-package.json"))]);
+    let state = RouteState::with_raw([(Ecosystem::Pub, "sample", fixture("pub/sample-package.json"))]);
     let router = pubdev::router::<RouteState>().with_state(state);
     let request = Request::builder()
         .uri("/api/packages/sample")
@@ -601,29 +544,22 @@ fn pypi_fixture_conforms_to_pep_691_project_expectations() {
     assert!(!version_infos[0].yanked);
     assert!(version_infos[1].yanked);
 
-    let metadata =
-        pypi_files_to_metadata(&PackageName::new("sample-project"), "1.0.0", &project.files)
-            .expect("fixture contains PyPI 1.0.0 files");
-    assert_eq!(
-        metadata.artifacts[0].filename,
-        "sample_project-1.0.0-py3-none-any.whl"
-    );
+    let metadata = pypi_files_to_metadata(&PackageName::new("sample-project"), "1.0.0", &project.files)
+        .expect("fixture contains PyPI 1.0.0 files");
+    assert_eq!(metadata.artifacts[0].filename, "sample_project-1.0.0-py3-none-any.whl");
     assert_eq!(metadata.artifacts[0].size, 12345);
     assert_eq!(
-        metadata.artifacts[0]
-            .upstream_hashes
-            .get("sha256")
-            .map(String::as_str),
+        metadata.artifacts[0].upstream_hashes.get("sha256").map(String::as_str),
         Some("1111111111111111111111111111111111111111111111111111111111111111")
     );
 }
 
 #[test]
 fn npm_fixture_conforms_to_packument_expectations() {
-    let packument: serde_json::Value = serde_json::from_str(fixture("npm/sample-packument.json"))
-        .expect("npm fixture should parse as JSON");
-    let typed_packument: NpmPackument = serde_json::from_value(packument.clone())
-        .expect("npm fixture should deserialize as packument");
+    let packument: serde_json::Value =
+        serde_json::from_str(fixture("npm/sample-packument.json")).expect("npm fixture should parse as JSON");
+    let typed_packument: NpmPackument =
+        serde_json::from_value(packument.clone()).expect("npm fixture should deserialize as packument");
 
     assert_eq!(typed_packument.name, "@scope/sample");
     assert_eq!(
@@ -647,24 +583,20 @@ fn npm_fixture_conforms_to_packument_expectations() {
         ["1.0.0", "2.0.0"]
     );
 
-    let metadata =
-        extract_version_metadata(&PackageName::new("@scope/sample"), "2.0.0", &packument)
-            .expect("fixture contains npm 2.0.0 metadata");
+    let metadata = extract_version_metadata(&PackageName::new("@scope/sample"), "2.0.0", &packument)
+        .expect("fixture contains npm 2.0.0 metadata");
     assert_eq!(metadata.license.as_deref(), Some("Apache-2.0"));
     assert_eq!(metadata.artifacts[0].filename, "sample-2.0.0.tgz");
     assert_eq!(
-        metadata.artifacts[0]
-            .upstream_hashes
-            .get("sha1")
-            .map(String::as_str),
+        metadata.artifacts[0].upstream_hashes.get("sha1").map(String::as_str),
         Some("fedcba9876543210fedcba9876543210fedcba98")
     );
 }
 
 #[test]
 fn cargo_fixture_conforms_to_sparse_index_expectations() {
-    let config: CargoConfig = serde_json::from_str(fixture("cargo/config.json"))
-        .expect("Cargo config fixture should deserialize");
+    let config: CargoConfig =
+        serde_json::from_str(fixture("cargo/config.json")).expect("Cargo config fixture should deserialize");
     assert_eq!(config.dl, "https://static.crates.io/crates");
     assert_eq!(config.api.as_deref(), Some("https://crates.io"));
     assert!(config.auth_required);
@@ -672,10 +604,7 @@ fn cargo_fixture_conforms_to_sparse_index_expectations() {
 
     let entries = fixture("cargo/sample_index.ndjson")
         .lines()
-        .map(|line| {
-            serde_json::from_str::<CargoIndexEntry>(line)
-                .expect("Cargo index line should deserialize")
-        })
+        .map(|line| serde_json::from_str::<CargoIndexEntry>(line).expect("Cargo index line should deserialize"))
         .collect::<Vec<_>>();
 
     assert_eq!(entries.len(), 2);
@@ -690,10 +619,7 @@ fn cargo_fixture_conforms_to_sparse_index_expectations() {
     let metadata = cargo_entry_to_metadata(&PackageName::new("sample-crate"), &entries[0]);
     assert_eq!(metadata.artifacts[0].filename, "sample-crate-0.1.0.crate");
     assert_eq!(
-        metadata.artifacts[0]
-            .upstream_hashes
-            .get("sha256")
-            .map(String::as_str),
+        metadata.artifacts[0].upstream_hashes.get("sha256").map(String::as_str),
         Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
     );
 }
@@ -732,25 +658,24 @@ fn hex_fixture_conforms_to_package_api_expectations() {
 
 #[test]
 fn nuget_and_pub_fixtures_conform_to_generated_shapes() {
-    let service_index: NugetServiceIndex =
-        serde_json::from_str(fixture("nuget/service-index.json"))
-            .expect("NuGet service index fixture should deserialize");
+    let service_index: NugetServiceIndex = serde_json::from_str(fixture("nuget/service-index.json"))
+        .expect("NuGet service index fixture should deserialize");
     assert_eq!(service_index.version, "3.0.0");
 
-    let versions: NugetPackageVersions = serde_json::from_str(fixture("nuget/versions.json"))
-        .expect("NuGet versions fixture should deserialize");
+    let versions: NugetPackageVersions =
+        serde_json::from_str(fixture("nuget/versions.json")).expect("NuGet versions fixture should deserialize");
     assert_eq!(versions.versions, ["1.0.0", "1.1.0"]);
 
-    let package: PubPackage = serde_json::from_str(fixture("pub/sample-package.json"))
-        .expect("pub.dev package fixture should deserialize");
+    let package: PubPackage =
+        serde_json::from_str(fixture("pub/sample-package.json")).expect("pub.dev package fixture should deserialize");
     assert_eq!(package.name, "sample");
     assert_eq!(package.versions[0].version, "1.0.0");
 }
 
 #[test]
 fn maven_fixtures_conform_to_metadata_and_pom_expectations() {
-    let metadata = Document::parse(fixture("maven/maven-metadata.xml"))
-        .expect("Maven metadata fixture should parse as XML");
+    let metadata =
+        Document::parse(fixture("maven/maven-metadata.xml")).expect("Maven metadata fixture should parse as XML");
     let root = metadata.root_element();
 
     assert_eq!(child_text(root, "groupId"), Some("com.example"));
@@ -762,10 +687,7 @@ fn maven_fixtures_conform_to_metadata_and_pom_expectations() {
         .expect("metadata should contain versioning");
     assert_eq!(child_text(versioning, "latest"), Some("1.2.0"));
     assert_eq!(child_text(versioning, "release"), Some("1.2.0"));
-    assert_eq!(
-        child_text(versioning, "lastUpdated"),
-        Some("20240501010203")
-    );
+    assert_eq!(child_text(versioning, "lastUpdated"), Some("20240501010203"));
 
     let versions = versioning
         .descendants()
@@ -774,8 +696,7 @@ fn maven_fixtures_conform_to_metadata_and_pom_expectations() {
         .collect::<Vec<_>>();
     assert_eq!(versions, ["1.0.0", "1.1.0", "1.2.0"]);
 
-    let pom = Document::parse(fixture("maven/sample-lib-1.2.0.pom"))
-        .expect("Maven POM fixture should parse as XML");
+    let pom = Document::parse(fixture("maven/sample-lib-1.2.0.pom")).expect("Maven POM fixture should parse as XML");
     let project = pom.root_element();
     assert_eq!(child_text(project, "modelVersion"), Some("4.0.0"));
     assert_eq!(child_text(project, "groupId"), Some("com.example"));
@@ -804,13 +725,8 @@ fn rubygems_compact_index_fixtures_conform_to_text_grammar() {
         let versions = parts
             .next()
             .expect("versions line should contain comma-separated versions");
-        let checksum = parts
-            .next()
-            .expect("versions line should contain info checksum");
-        assert!(
-            name.chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-        );
+        let checksum = parts.next().expect("versions line should contain info checksum");
+        assert!(name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'));
         assert!(
             versions
                 .split(',')

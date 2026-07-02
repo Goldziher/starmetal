@@ -2,9 +2,7 @@
 
 use ahash::AHashMap;
 use starmetal_core::package::{ArtifactDigest, PackageName, VersionInfo, VersionMetadata};
-use starmetal_core::registry::pypi::{
-    PypiFile, PypiIndex, PypiIndexProject, PypiMeta, PypiProject, PypiYanked,
-};
+use starmetal_core::registry::pypi::{PypiFile, PypiIndex, PypiIndexProject, PypiMeta, PypiProject, PypiYanked};
 
 /// Determines whether the client wants JSON or HTML responses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -112,11 +110,7 @@ pub fn pypi_project_to_version_infos(project: &PypiProject) -> Vec<VersionInfo> 
 /// Filter PyPI files for a specific version and build `VersionMetadata`.
 ///
 /// Returns `None` when no files match the requested version.
-pub fn pypi_files_to_metadata(
-    name: &PackageName,
-    version: &str,
-    files: &[PypiFile],
-) -> Option<VersionMetadata> {
+pub fn pypi_files_to_metadata(name: &PackageName, version: &str, files: &[PypiFile]) -> Option<VersionMetadata> {
     let matching: Vec<&PypiFile> = files
         .iter()
         .filter(|f| version_from_filename(&f.filename).as_deref() == Some(version))
@@ -131,11 +125,8 @@ pub fn pypi_files_to_metadata(
     let artifacts = matching
         .iter()
         .map(|f| {
-            let upstream_hashes: AHashMap<String, String> = f
-                .hashes
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect();
+            let upstream_hashes: AHashMap<String, String> =
+                f.hashes.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
             ArtifactDigest {
                 filename: f.filename.clone(),
                 blake3: String::new(),
@@ -275,10 +266,7 @@ pub fn render_project_html_from_upstream(project: &PypiProject) -> String {
             attrs = format!("href=\"{}#sha256={sha256}\"", file.url);
         }
         if let Some(requires_python) = &file.requires_python {
-            attrs.push_str(&format!(
-                " data-requires-python=\"{}\"",
-                html_escape(requires_python)
-            ));
+            attrs.push_str(&format!(" data-requires-python=\"{}\"", html_escape(requires_python)));
         }
         if file.yanked.is_yanked() {
             match &file.yanked {
@@ -325,10 +313,7 @@ mod tests {
 
     #[test]
     fn test_version_from_filename_zip() {
-        assert_eq!(
-            version_from_filename("flask-3.0.0.zip"),
-            Some("3.0.0".to_string())
-        );
+        assert_eq!(version_from_filename("flask-3.0.0.zip"), Some("3.0.0".to_string()));
     }
 
     #[test]

@@ -2,9 +2,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use starmetal_core::config::DEFAULT_MAX_UPSTREAM_BYTES;
 use starmetal_core::error::{Result, StarmetalError};
-use starmetal_core::package::{
-    ArtifactDigest, ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata,
-};
+use starmetal_core::package::{ArtifactDigest, ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata};
 use starmetal_core::ports::UpstreamClient;
 
 pub struct PubUpstreamClient {
@@ -99,20 +97,11 @@ impl UpstreamClient for PubUpstreamClient {
                 response.status()
             )));
         }
-        crate::upstream_http::bytes_limited(
-            response,
-            self.max_response_bytes,
-            "Pub archive download",
-        )
-        .await
+        crate::upstream_http::bytes_limited(response, self.max_response_bytes, "Pub archive download").await
     }
 }
 
-pub fn metadata_from_version(
-    name: &PackageName,
-    version: &str,
-    version_json: &serde_json::Value,
-) -> VersionMetadata {
+pub fn metadata_from_version(name: &PackageName, version: &str, version_json: &serde_json::Value) -> VersionMetadata {
     let mut upstream_hashes = ahash::AHashMap::new();
     if let Some(hash) = version_json["archive_sha256"].as_str() {
         upstream_hashes.insert("sha256".to_string(), hash.to_string());

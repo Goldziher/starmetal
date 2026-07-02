@@ -72,9 +72,7 @@ impl PublishRouteState {
                 "http://127.0.0.1/repo".into(),
             )),
             rubygems_upstream: Arc::new(RubyGemsUpstreamClient::new("http://127.0.0.1".into())),
-            nuget_upstream: Arc::new(NuGetUpstreamClient::new(
-                "http://127.0.0.1/v3/index.json".into(),
-            )),
+            nuget_upstream: Arc::new(NuGetUpstreamClient::new("http://127.0.0.1/v3/index.json".into())),
             pub_upstream: Arc::new(PubUpstreamClient::new("http://127.0.0.1".into())),
         }
     }
@@ -336,12 +334,7 @@ async fn npm_publish_route_serves_published_packument_and_tarball() {
             .unwrap(),
     )
     .await;
-    assert_eq!(
-        status,
-        StatusCode::CREATED,
-        "{}",
-        String::from_utf8_lossy(&body)
-    );
+    assert_eq!(status, StatusCode::CREATED, "{}", String::from_utf8_lossy(&body));
 
     let (status, body) = response(
         router.clone(),
@@ -464,10 +457,7 @@ async fn cargo_publish_route_serves_sparse_index_and_crate_download() {
 
     let (status, body) = response(
         router.clone(),
-        Request::builder()
-            .uri("/3/s/sample")
-            .body(Body::empty())
-            .unwrap(),
+        Request::builder().uri("/3/s/sample").body(Body::empty()).unwrap(),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -507,12 +497,7 @@ async fn maven_put_route_serves_published_artifact_and_checksum() {
             .unwrap(),
     )
     .await;
-    assert_eq!(
-        status,
-        StatusCode::CREATED,
-        "{}",
-        String::from_utf8_lossy(&body)
-    );
+    assert_eq!(status, StatusCode::CREATED, "{}", String::from_utf8_lossy(&body));
 
     let (status, body) = response(
         router.clone(),
@@ -553,19 +538,11 @@ async fn rubygems_publish_route_serves_compact_index_and_gem() {
             .unwrap(),
     )
     .await;
-    assert_eq!(
-        status,
-        StatusCode::CREATED,
-        "{}",
-        String::from_utf8_lossy(&body)
-    );
+    assert_eq!(status, StatusCode::CREATED, "{}", String::from_utf8_lossy(&body));
 
     let (status, body) = response(
         router.clone(),
-        Request::builder()
-            .uri("/versions")
-            .body(Body::empty())
-            .unwrap(),
+        Request::builder().uri("/versions").body(Body::empty()).unwrap(),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -581,18 +558,11 @@ async fn rubygems_publish_route_serves_compact_index_and_gem() {
         .next()
         .expect("versions index should include info checksum");
     assert_eq!(checksum.len(), 64);
-    assert!(
-        checksum
-            .chars()
-            .all(|character| character.is_ascii_hexdigit())
-    );
+    assert!(checksum.chars().all(|character| character.is_ascii_hexdigit()));
 
     let (status, body) = response(
         router.clone(),
-        Request::builder()
-            .uri("/info/sample")
-            .body(Body::empty())
-            .unwrap(),
+        Request::builder().uri("/info/sample").body(Body::empty()).unwrap(),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -628,12 +598,7 @@ async fn nuget_publish_route_serves_flat_container_registration_and_checksum() {
             .unwrap(),
     )
     .await;
-    assert_eq!(
-        status,
-        StatusCode::CREATED,
-        "{}",
-        String::from_utf8_lossy(&body)
-    );
+    assert_eq!(status, StatusCode::CREATED, "{}", String::from_utf8_lossy(&body));
 
     let (status, body) = response(
         router.clone(),
@@ -686,11 +651,7 @@ async fn nuget_publish_route_serves_flat_container_registration_and_checksum() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert!(
-        std::str::from_utf8(&body)
-            .unwrap()
-            .contains("<id>Sample</id>")
-    );
+    assert!(std::str::from_utf8(&body).unwrap().contains("<id>Sample</id>"));
 
     let (status, body) = response(
         router.clone(),
@@ -713,10 +674,7 @@ async fn nuget_publish_route_serves_flat_container_registration_and_checksum() {
     .await;
     assert_eq!(status, StatusCode::OK);
     let registration: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(
-        registration["items"][0]["items"][0]["catalogEntry"]["version"],
-        "1.0.0"
-    );
+    assert_eq!(registration["items"][0]["items"][0]["catalogEntry"]["version"], "1.0.0");
 }
 
 #[tokio::test]

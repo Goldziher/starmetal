@@ -10,12 +10,7 @@ pub mod pypi;
 #[cfg(feature = "npm")]
 pub mod npm;
 
-#[cfg(any(
-    feature = "hex",
-    feature = "rubygems",
-    feature = "nuget",
-    feature = "pub"
-))]
+#[cfg(any(feature = "hex", feature = "rubygems", feature = "nuget", feature = "pub"))]
 mod archive;
 
 #[cfg(feature = "cargo-registry")]
@@ -56,10 +51,7 @@ pub(crate) fn map_public_error(err: &StarmetalError) -> (StatusCode, String) {
         StarmetalError::PolicyViolation(_) => (StatusCode::FORBIDDEN, err.to_string()),
         StarmetalError::Adapter(_) => (StatusCode::BAD_REQUEST, err.to_string()),
         StarmetalError::Publish(_) => (StatusCode::CONFLICT, err.to_string()),
-        StarmetalError::Upstream(_) => (
-            StatusCode::BAD_GATEWAY,
-            "upstream registry request failed".to_string(),
-        ),
+        StarmetalError::Upstream(_) => (StatusCode::BAD_GATEWAY, "upstream registry request failed".to_string()),
         StarmetalError::Config(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "server configuration error".to_string(),
@@ -76,12 +68,10 @@ pub(crate) fn map_public_error(err: &StarmetalError) -> (StatusCode, String) {
             StatusCode::BAD_GATEWAY,
             "upstream registry response failed validation".to_string(),
         ),
-        StarmetalError::Lockfile(_) | StarmetalError::ConfigNotFound(_) | StarmetalError::Io(_) => {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal starmetal error".to_string(),
-            )
-        }
+        StarmetalError::Lockfile(_) | StarmetalError::ConfigNotFound(_) | StarmetalError::Io(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "internal starmetal error".to_string(),
+        ),
         StarmetalError::Toml(_) | StarmetalError::Json(_) => (
             StatusCode::BAD_REQUEST,
             "invalid request or registry payload".to_string(),

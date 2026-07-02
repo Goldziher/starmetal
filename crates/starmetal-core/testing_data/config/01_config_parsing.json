@@ -1,42 +1,42 @@
 [
-	{
-		"name": "minimal config",
-		"input": {
-			"toml": "[server]\nbind = \"127.0.0.1:3000\"\n"
-		},
-		"expected": {
-			"bind": "127.0.0.1:3000",
-			"storage_backend": "fs"
-		},
-		"error": null
-	},
-	{
-		"name": "full config",
-		"input": {
-			"toml": "[server]\nbind = \"0.0.0.0:9090\"\n\n[storage]\nbackend = \"s3\"\n\n[storage.s3]\nbucket = \"my-bucket\"\nregion = \"us-west-2\"\n\n[upstream.pypi]\nenabled = true\nurl = \"https://pypi.org\"\n\n[policies]\nblock_unlicensed = true\nmax_vuln_severity = \"high\"\nallowed_licenses = [\"MIT\", \"Apache-2.0\"]\n\n[auth]\nenabled = true\ntokens = [\"secret-token\"]\n"
-		},
-		"expected": {
-			"bind": "0.0.0.0:9090",
-			"storage_backend": "s3",
-			"s3_bucket": "my-bucket",
-			"block_unlicensed": true,
-			"auth_enabled": true
-		},
-		"error": null
-	},
-	{
-		"name": "empty config uses defaults",
-		"input": { "toml": "" },
-		"expected": {
-			"bind": "127.0.0.1:8080",
-			"storage_backend": "fs"
-		},
-		"error": null
-	},
-	{
-		"name": "invalid toml",
-		"input": { "toml": "[server\nbind = oops" },
-		"expected": {},
-		"error": "toml parse error"
-	}
+  {
+    "name": "minimal config",
+    "input": {
+      "toml": "[server]\nbind = \"127.0.0.1:3000\"\n"
+    },
+    "expected": {
+      "bind": "127.0.0.1:3000",
+      "storage_backend": "fs"
+    },
+    "error": null
+  },
+  {
+    "name": "full config",
+    "input": {
+      "toml": "[server]\nbind = \"0.0.0.0:9090\"\n\n[storage]\nbackend = \"s3\"\n\n[storage.s3]\nbucket = \"my-bucket\"\nregion = \"us-west-2\"\n\n[upstream.pypi]\nenabled = true\nurl = \"https://pypi.org\"\n\n[policies]\nblock_unlicensed = true\nmax_vuln_severity = \"high\"\nallowed_licenses = [\"MIT\", \"Apache-2.0\"]\n\n[auth]\nenabled = true\ntokens = [\"secret-token\"]\n"
+    },
+    "expected": {
+      "bind": "0.0.0.0:9090",
+      "storage_backend": "s3",
+      "s3_bucket": "my-bucket",
+      "block_unlicensed": true,
+      "auth_enabled": true
+    },
+    "error": null
+  },
+  {
+    "name": "empty config uses defaults",
+    "input": { "toml": "" },
+    "expected": {
+      "bind": "127.0.0.1:8080",
+      "storage_backend": "fs"
+    },
+    "error": null
+  },
+  {
+    "name": "invalid toml",
+    "input": { "toml": "[server\nbind = oops" },
+    "expected": {},
+    "error": "toml parse error"
+  }
 ]

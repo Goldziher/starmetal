@@ -161,9 +161,7 @@ impl starmetal_adapters::rubygems::HasRubyGemsState for AppState {
         &self.publishing_service
     }
 
-    fn rubygems_upstream(
-        &self,
-    ) -> &Arc<starmetal_adapters::rubygems::upstream::RubyGemsUpstreamClient> {
+    fn rubygems_upstream(&self) -> &Arc<starmetal_adapters::rubygems::upstream::RubyGemsUpstreamClient> {
         &self.upstreams.rubygems_upstream
     }
 }

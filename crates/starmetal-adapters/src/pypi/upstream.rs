@@ -104,9 +104,7 @@ impl PypiUpstreamClient {
             });
         }
         if !status.is_success() {
-            return Err(StarmetalError::Upstream(format!(
-                "upstream returned HTTP {status}"
-            )));
+            return Err(StarmetalError::Upstream(format!("upstream returned HTTP {status}")));
         }
 
         let content_type = response
@@ -118,19 +116,10 @@ impl PypiUpstreamClient {
         let project: PypiProject = if content_type.contains("application/vnd.pypi.simple.v1+json")
             || content_type.contains("application/json")
         {
-            crate::upstream_http::json_limited(
-                response,
-                self.max_response_bytes,
-                "PyPI project metadata",
-            )
-            .await?
+            crate::upstream_http::json_limited(response, self.max_response_bytes, "PyPI project metadata").await?
         } else {
-            let html = crate::upstream_http::text_limited(
-                response,
-                self.max_response_bytes,
-                "PyPI project metadata",
-            )
-            .await?;
+            let html =
+                crate::upstream_http::text_limited(response, self.max_response_bytes, "PyPI project metadata").await?;
             parse_pep503_html(&normalized, &url, &html)
         };
 
@@ -259,12 +248,10 @@ impl UpstreamClient for PypiUpstreamClient {
     #[instrument(skip(self), fields(ecosystem = "pypi"))]
     async fn fetch_metadata(&self, name: &PackageName, version: &str) -> Result<VersionMetadata> {
         let project = self.fetch_project(name).await?;
-        models::pypi_files_to_metadata(name, version, &project.files).ok_or_else(|| {
-            StarmetalError::VersionNotFound {
-                ecosystem: "pypi".to_string(),
-                name: name.as_str().to_string(),
-                version: version.to_string(),
-            }
+        models::pypi_files_to_metadata(name, version, &project.files).ok_or_else(|| StarmetalError::VersionNotFound {
+            ecosystem: "pypi".to_string(),
+            name: name.as_str().to_string(),
+            version: version.to_string(),
         })
     }
 
@@ -273,15 +260,13 @@ impl UpstreamClient for PypiUpstreamClient {
         // Look up the upstream URL from cache
         let url = {
             let cache = self.url_cache.read().await;
-            cache
-                .get(&artifact_id.filename)
-                .and_then(|(inserted, url)| {
-                    if inserted.elapsed() < CACHE_TTL {
-                        Some(url.clone())
-                    } else {
-                        None
-                    }
-                })
+            cache.get(&artifact_id.filename).and_then(|(inserted, url)| {
+                if inserted.elapsed() < CACHE_TTL {
+                    Some(url.clone())
+                } else {
+                    None
+                }
+            })
         };
 
         let url = match url {
@@ -317,11 +302,6 @@ impl UpstreamClient for PypiUpstreamClient {
             )));
         }
 
-        crate::upstream_http::bytes_limited(
-            response,
-            self.max_response_bytes,
-            "PyPI artifact download",
-        )
-        .await
+        crate::upstream_http::bytes_limited(response, self.max_response_bytes, "PyPI artifact download").await
     }
 }

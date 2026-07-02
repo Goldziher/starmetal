@@ -84,8 +84,7 @@ pub struct SigningKeyConfig {
 impl SigningKeyConfig {
     pub fn allows(&self, ecosystem: Ecosystem, package: &PackageName) -> bool {
         let ecosystem_allowed = self.ecosystems.is_empty() || self.ecosystems.contains(&ecosystem);
-        let package_allowed =
-            self.packages.is_empty() || self.packages.iter().any(|name| name == package.as_str());
+        let package_allowed = self.packages.is_empty() || self.packages.iter().any(|name| name == package.as_str());
         ecosystem_allowed && package_allowed
     }
 }

@@ -47,13 +47,7 @@ async fn dart_pub_get_installs_package_through_starmetal() {
     let project = tempfile::tempdir().expect("project tempdir");
     let pub_cache = tempfile::tempdir().expect("pub cache tempdir");
 
-    let output = dart_pub_get(
-        &dart,
-        &server.pub_hosted_url(),
-        project.path(),
-        pub_cache.path(),
-    )
-    .await;
+    let output = dart_pub_get(&dart, &server.pub_hosted_url(), project.path(), pub_cache.path()).await;
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     let command = format!(
@@ -91,9 +85,7 @@ async fn pub_serves_metadata_and_archive() {
         .as_array()
         .and_then(|versions| versions.iter().find(|item| item["version"] == "1.18.0"))
         .expect("expected collection 1.18.0 in package metadata");
-    let archive_url = version["archive_url"]
-        .as_str()
-        .expect("expected rewritten archive URL");
+    let archive_url = version["archive_url"].as_str().expect("expected rewritten archive URL");
     assert!(
         archive_url.starts_with(&format!("{}/pub/api/archives/", server.base_url())),
         "archive URL should point back to Starmetal: {archive_url}"
@@ -109,18 +101,10 @@ async fn pub_serves_metadata_and_archive() {
         .expect("version request failed");
     assert_eq!(version_response.status(), 200);
 
-    let archive_response = client
-        .get(archive_url)
-        .send()
-        .await
-        .expect("archive request failed");
+    let archive_response = client.get(archive_url).send().await.expect("archive request failed");
     assert_eq!(archive_response.status(), 200);
     assert!(
-        !archive_response
-            .bytes()
-            .await
-            .expect("archive bytes")
-            .is_empty(),
+        !archive_response.bytes().await.expect("archive bytes").is_empty(),
         "expected non-empty pub archive"
     );
 
@@ -136,13 +120,7 @@ async fn dart_pub_get_works_from_starmetal_cache() {
     for attempt in ["first", "second"] {
         let project = tempfile::tempdir().expect("project tempdir");
         let pub_cache = tempfile::tempdir().expect("pub cache tempdir");
-        let output = dart_pub_get(
-            &dart,
-            &server.pub_hosted_url(),
-            project.path(),
-            pub_cache.path(),
-        )
-        .await;
+        let output = dart_pub_get(&dart, &server.pub_hosted_url(), project.path(), pub_cache.path()).await;
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

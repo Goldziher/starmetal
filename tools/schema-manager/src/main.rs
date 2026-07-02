@@ -10,9 +10,7 @@ use starmetal_core::lockfile::LockFile;
 use starmetal_core::registry::cargo::{CargoConfig, CargoIndexEntry};
 use starmetal_core::registry::hex::HexPackage;
 use starmetal_core::registry::npm::NpmPackument;
-use starmetal_core::registry::nuget::{
-    NugetPackageVersions, NugetRegistrationIndex, NugetServiceIndex,
-};
+use starmetal_core::registry::nuget::{NugetPackageVersions, NugetRegistrationIndex, NugetServiceIndex};
 use starmetal_core::registry::pubdev::PubPackage;
 use starmetal_core::registry::pypi::{PypiIndex, PypiProject};
 
@@ -135,9 +133,7 @@ async fn main() -> Result<()> {
     let sources = load_sources(&cli.sources)?;
 
     match cli.command {
-        Command::Fetch { check, live } => {
-            fetch_sources(&sources, &cli.schema_root, check, live).await?
-        }
+        Command::Fetch { check, live } => fetch_sources(&sources, &cli.schema_root, check, live).await?,
         Command::Generate { check } => generate_schemas(&sources, &cli.schema_root, check)?,
         Command::Refresh => {
             fetch_sources(&sources, &cli.schema_root, false, true).await?;
@@ -149,19 +145,13 @@ async fn main() -> Result<()> {
 }
 
 fn load_sources(path: &Path) -> Result<Vec<Source>> {
-    let content = std::fs::read_to_string(path)
-        .map_err(|err| format!("failed to read {}: {err}", path.display()))?;
-    let parsed: SourcesFile = toml::from_str(&content)
-        .map_err(|err| format!("failed to parse {}: {err}", path.display()))?;
+    let content = std::fs::read_to_string(path).map_err(|err| format!("failed to read {}: {err}", path.display()))?;
+    let parsed: SourcesFile =
+        toml::from_str(&content).map_err(|err| format!("failed to parse {}: {err}", path.display()))?;
     Ok(parsed.source)
 }
 
-async fn fetch_sources(
-    sources: &[Source],
-    schema_root: &Path,
-    check: bool,
-    live: bool,
-) -> Result<()> {
+async fn fetch_sources(sources: &[Source], schema_root: &Path, check: bool, live: bool) -> Result<()> {
     let client = reqwest::Client::builder()
         .user_agent("starmetal-schema-manager/0.1")
         .build()
@@ -195,18 +185,13 @@ async fn fetch_sources(
             let existing = std::fs::read(&output_path)
                 .map_err(|err| format!("failed to read {}: {err}", output_path.display()))?;
             if existing != bytes {
-                failures.push(format!(
-                    "{} differs from {}",
-                    output_path.display(),
-                    source.url
-                ));
+                failures.push(format!("{} differs from {}", output_path.display(), source.url));
             }
             continue;
         }
 
         if let Some(parent) = output_path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|err| format!("failed to create {}: {err}", parent.display()))?;
+            std::fs::create_dir_all(parent).map_err(|err| format!("failed to create {}: {err}", parent.display()))?;
         }
         std::fs::write(&output_path, &bytes)
             .map_err(|err| format!("failed to write {}: {err}", output_path.display()))?;
@@ -250,8 +235,7 @@ fn generate_schemas(sources: &[Source], schema_root: &Path, check: bool) -> Resu
 }
 
 fn compare_file(path: &Path, expected: &str, failures: &mut Vec<String>) -> Result<()> {
-    let existing = std::fs::read_to_string(path)
-        .map_err(|err| format!("failed to read {}: {err}", path.display()))?;
+    let existing = std::fs::read_to_string(path).map_err(|err| format!("failed to read {}: {err}", path.display()))?;
     if existing != expected {
         failures.push(format!("{} is not up to date", path.display()));
     }
@@ -260,11 +244,9 @@ fn compare_file(path: &Path, expected: &str, failures: &mut Vec<String>) -> Resu
 
 fn write_file(path: &Path, content: &str) -> Result<()> {
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|err| format!("failed to create {}: {err}", parent.display()))?;
+        std::fs::create_dir_all(parent).map_err(|err| format!("failed to create {}: {err}", parent.display()))?;
     }
-    std::fs::write(path, content)
-        .map_err(|err| format!("failed to write {}: {err}", path.display()))?;
+    std::fs::write(path, content).map_err(|err| format!("failed to write {}: {err}", path.display()))?;
     Ok(())
 }
 
@@ -276,11 +258,7 @@ fn render_all_schemas() -> Result<Vec<RenderedSchema>> {
             enrich_schema(&mut schema, &spec)?;
             let content = json_pretty(&schema)?;
             let blake3 = blake3_hex(content.as_bytes());
-            Ok(RenderedSchema {
-                spec,
-                content,
-                blake3,
-            })
+            Ok(RenderedSchema { spec, content, blake3 })
         })
         .collect()
 }
@@ -378,11 +356,7 @@ fn schema_specs() -> Vec<SchemaSpec> {
             schema_kind: "starmetal-derived-json-schema",
             source_type: "starmetal_core::registry::hex::HexPackage",
             source_file: "crates/starmetal-core/src/registry/hex.rs",
-            source_ids: &[
-                "hex-registry-v2",
-                "hex-package-proto",
-                "hex-package-metadata",
-            ],
+            source_ids: &["hex-registry-v2", "hex-package-proto", "hex-package-metadata"],
             source_kinds: &["official-prose", "official-protobuf"],
             validated_by: "crates/starmetal-core/tests/schema_validation.rs; tests/conformance",
             schema: serde_json::to_value(schema_for!(HexPackage)).expect("schema serializes"),
@@ -413,8 +387,7 @@ fn schema_specs() -> Vec<SchemaSpec> {
             source_ids: &["nuget-v3-overview", "nuget-v3-service-index"],
             source_kinds: &["official-prose"],
             validated_by: "crates/starmetal-core/tests/schema_validation.rs",
-            schema: serde_json::to_value(schema_for!(NugetServiceIndex))
-                .expect("schema serializes"),
+            schema: serde_json::to_value(schema_for!(NugetServiceIndex)).expect("schema serializes"),
         },
         SchemaSpec {
             id: "nuget-v3-package-base-address",
@@ -428,8 +401,7 @@ fn schema_specs() -> Vec<SchemaSpec> {
             source_ids: &["nuget-v3-overview", "nuget-v3-package-base-address"],
             source_kinds: &["official-prose"],
             validated_by: "crates/starmetal-core/tests/schema_validation.rs",
-            schema: serde_json::to_value(schema_for!(NugetPackageVersions))
-                .expect("schema serializes"),
+            schema: serde_json::to_value(schema_for!(NugetPackageVersions)).expect("schema serializes"),
         },
         SchemaSpec {
             id: "nuget-v3-registration",
@@ -440,15 +412,10 @@ fn schema_specs() -> Vec<SchemaSpec> {
             schema_kind: "starmetal-derived-json-schema",
             source_type: "starmetal_core::registry::nuget::NugetRegistrationIndex",
             source_file: "crates/starmetal-core/src/registry/nuget.rs",
-            source_ids: &[
-                "nuget-v3-overview",
-                "nuget-v3-registration",
-                "nuget-nuspec-xsd",
-            ],
+            source_ids: &["nuget-v3-overview", "nuget-v3-registration", "nuget-nuspec-xsd"],
             source_kinds: &["official-prose", "official-xml-schema"],
             validated_by: "crates/starmetal-core/tests/schema_validation.rs",
-            schema: serde_json::to_value(schema_for!(NugetRegistrationIndex))
-                .expect("schema serializes"),
+            schema: serde_json::to_value(schema_for!(NugetRegistrationIndex)).expect("schema serializes"),
         },
         SchemaSpec {
             id: "pub-package",
@@ -494,10 +461,7 @@ fn enrich_schema(schema: &mut Value, spec: &SchemaSpec) -> Result<()> {
         Value::String(format!("https://schemas.starmetal.local/{}", spec.path)),
     );
     object.insert("title".to_string(), Value::String(spec.title.to_string()));
-    object.insert(
-        "description".to_string(),
-        Value::String(spec.description.to_string()),
-    );
+    object.insert("description".to_string(), Value::String(spec.description.to_string()));
     object.insert(
         "x-starmetal-source".to_string(),
         json!({
@@ -513,11 +477,7 @@ fn enrich_schema(schema: &mut Value, spec: &SchemaSpec) -> Result<()> {
     Ok(())
 }
 
-fn render_manifest(
-    sources: &[Source],
-    schema_root: &Path,
-    schemas: &[RenderedSchema],
-) -> Result<Manifest> {
+fn render_manifest(sources: &[Source], schema_root: &Path, schemas: &[RenderedSchema]) -> Result<Manifest> {
     let manifest_sources = sources
         .iter()
         .map(|source| {
@@ -534,10 +494,7 @@ fn render_manifest(
                 url: source.url.clone(),
                 official: source.official,
                 fetched: source.fetched,
-                path: source
-                    .path
-                    .as_ref()
-                    .map(|path| path.to_string_lossy().to_string()),
+                path: source.path.as_ref().map(|path| path.to_string_lossy().to_string()),
                 blake3,
                 description: source.description.clone(),
             })
@@ -580,8 +537,7 @@ fn render_manifest(
 }
 
 fn file_blake3(path: &Path) -> Result<String> {
-    let bytes =
-        std::fs::read(path).map_err(|err| format!("failed to read {}: {err}", path.display()))?;
+    let bytes = std::fs::read(path).map_err(|err| format!("failed to read {}: {err}", path.display()))?;
     Ok(blake3_hex(&bytes))
 }
 
@@ -608,18 +564,10 @@ mod tests {
     fn rendered_schemas_include_ids_and_provenance() {
         let schemas = render_all_schemas().expect("schemas should render");
 
-        assert!(
-            schemas
-                .iter()
-                .any(|schema| schema.spec.id == "pypi-simple-project")
-        );
+        assert!(schemas.iter().any(|schema| schema.spec.id == "pypi-simple-project"));
         for schema in schemas {
             let value: Value = serde_json::from_str(&schema.content).expect("schema should parse");
-            assert!(
-                value.get("$id").is_some(),
-                "{} should have $id",
-                schema.spec.id
-            );
+            assert!(value.get("$id").is_some(), "{} should have $id", schema.spec.id);
             assert!(
                 value.get("x-starmetal-source").is_some(),
                 "{} should have source metadata",

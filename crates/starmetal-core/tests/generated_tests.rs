@@ -6,30 +6,17 @@
 fn config_01_config_parsing_minimal_config() {
     // Fixture: config/01_config_parsing.json | Case: "minimal config"
     let config: starmetal_core::config::Config =
-        toml::from_str("[server]\nbind = \"127.0.0.1:3000\"\n")
-            .expect("fixture 'minimal config' should parse");
-    assert_eq!(
-        config.server.bind, "127.0.0.1:3000",
-        "fixture 'minimal config' bind"
-    );
-    assert_eq!(
-        config.storage.backend, "fs",
-        "fixture 'minimal config' backend"
-    );
+        toml::from_str("[server]\nbind = \"127.0.0.1:3000\"\n").expect("fixture 'minimal config' should parse");
+    assert_eq!(config.server.bind, "127.0.0.1:3000", "fixture 'minimal config' bind");
+    assert_eq!(config.storage.backend, "fs", "fixture 'minimal config' backend");
 }
 
 #[test]
 fn config_01_config_parsing_full_config() {
     // Fixture: config/01_config_parsing.json | Case: "full config"
     let config: starmetal_core::config::Config = toml::from_str("[server]\nbind = \"0.0.0.0:9090\"\n\n[storage]\nbackend = \"s3\"\n\n[storage.s3]\nbucket = \"my-bucket\"\nregion = \"us-west-2\"\n\n[upstream.pypi]\nenabled = true\nurl = \"https://pypi.org\"\n\n[policies]\nblock_unlicensed = true\nmax_vuln_severity = \"high\"\nallowed_licenses = [\"MIT\", \"Apache-2.0\"]\n\n[auth]\nenabled = true\ntokens = [\"secret-token\"]\n").expect("fixture 'full config' should parse");
-    assert_eq!(
-        config.server.bind, "0.0.0.0:9090",
-        "fixture 'full config' bind"
-    );
-    assert_eq!(
-        config.storage.backend, "s3",
-        "fixture 'full config' backend"
-    );
+    assert_eq!(config.server.bind, "0.0.0.0:9090", "fixture 'full config' bind");
+    assert_eq!(config.storage.backend, "s3", "fixture 'full config' backend");
     assert_eq!(
         config.storage.s3.as_ref().expect("s3 config").bucket,
         "my-bucket",
@@ -61,10 +48,7 @@ fn config_01_config_parsing_empty_config_uses_defaults() {
 fn config_01_config_parsing_invalid_toml() {
     // Fixture: config/01_config_parsing.json | Case: "invalid toml"
     let result = toml::from_str::<starmetal_core::config::Config>("[server\nbind = oops");
-    assert!(
-        result.is_err(),
-        "fixture 'invalid toml' should fail to parse"
-    );
+    assert!(result.is_err(), "fixture 'invalid toml' should fail to parse");
 }
 
 // Fixture: integrity/01_blake3_vectors.json
@@ -87,10 +71,7 @@ fn integrity_01_blake3_vectors_hello_starmetal() {
     // Fixture: integrity/01_blake3_vectors.json | Case: "hello starmetal"
     let hash = starmetal_core::integrity::blake3_hex("hello starmetal".as_bytes());
     assert!(
-        starmetal_core::integrity::verify_blake3(
-            &bytes::Bytes::from("hello starmetal".to_string()),
-            &hash
-        ),
+        starmetal_core::integrity::verify_blake3(&bytes::Bytes::from("hello starmetal".to_string()), &hash),
         "fixture 'hello starmetal': roundtrip verification failed"
     );
 }
@@ -100,10 +81,7 @@ fn integrity_01_blake3_vectors_binary_like_data() {
     // Fixture: integrity/01_blake3_vectors.json | Case: "binary-like data"
     let hash = starmetal_core::integrity::blake3_hex("\0\u{1}\u{2}\u{3}".as_bytes());
     assert!(
-        starmetal_core::integrity::verify_blake3(
-            &bytes::Bytes::from("\0\u{1}\u{2}\u{3}".to_string()),
-            &hash
-        ),
+        starmetal_core::integrity::verify_blake3(&bytes::Bytes::from("\0\u{1}\u{2}\u{3}".to_string()), &hash),
         "fixture 'binary-like data': roundtrip verification failed"
     );
 }
@@ -112,7 +90,10 @@ fn integrity_01_blake3_vectors_binary_like_data() {
 #[test]
 fn lockfile_01_roundtrip_minimal_lock_file() {
     // Fixture: lockfile/01_roundtrip.json | Case: "minimal lock file"
-    let lock = starmetal_core::lockfile::LockFile::from_toml("[metadata]\nschema_version = 1\ngenerated_at = \"2026-04-19T10:30:00Z\"\nstarmetal_version = \"0.1.0\"\n").expect("fixture 'minimal lock file' should parse");
+    let lock = starmetal_core::lockfile::LockFile::from_toml(
+        "[metadata]\nschema_version = 1\ngenerated_at = \"2026-04-19T10:30:00Z\"\nstarmetal_version = \"0.1.0\"\n",
+    )
+    .expect("fixture 'minimal lock file' should parse");
     assert_eq!(
         lock.metadata.schema_version, 1,
         "fixture 'minimal lock file' schema_version"
@@ -121,14 +102,10 @@ fn lockfile_01_roundtrip_minimal_lock_file() {
         lock.metadata.starmetal_version, "0.1.0",
         "fixture 'minimal lock file' starmetal_version"
     );
-    assert_eq!(
-        lock.packages.len(),
-        0,
-        "fixture 'minimal lock file' package_count"
-    );
+    assert_eq!(lock.packages.len(), 0, "fixture 'minimal lock file' package_count");
     let serialized = lock.to_toml().expect("serialize lockfile");
-    let reparsed = starmetal_core::lockfile::LockFile::from_toml(&serialized)
-        .expect("fixture 'minimal lock file' roundtrip");
+    let reparsed =
+        starmetal_core::lockfile::LockFile::from_toml(&serialized).expect("fixture 'minimal lock file' roundtrip");
     assert_eq!(
         lock.packages.len(),
         reparsed.packages.len(),
@@ -202,11 +179,7 @@ fn package_01_pypi_normalization_pypi_underscore_to_hyphen() {
     let pkg = starmetal_core::package::PackageName::new("my_package");
     let eco: starmetal_core::package::Ecosystem = "pypi".parse().expect("parse ecosystem");
     let result = pkg.normalized(eco);
-    assert_eq!(
-        result.as_ref(),
-        "my-package",
-        "fixture: pypi underscore to hyphen"
-    );
+    assert_eq!(result.as_ref(), "my-package", "fixture: pypi underscore to hyphen");
 }
 
 #[test]
@@ -215,11 +188,7 @@ fn package_01_pypi_normalization_pypi_uppercase_to_lowercase() {
     let pkg = starmetal_core::package::PackageName::new("MyPackage");
     let eco: starmetal_core::package::Ecosystem = "pypi".parse().expect("parse ecosystem");
     let result = pkg.normalized(eco);
-    assert_eq!(
-        result.as_ref(),
-        "mypackage",
-        "fixture: pypi uppercase to lowercase"
-    );
+    assert_eq!(result.as_ref(), "mypackage", "fixture: pypi uppercase to lowercase");
 }
 
 #[test]
@@ -241,11 +210,7 @@ fn package_01_pypi_normalization_pypi_already_normalized() {
     let pkg = starmetal_core::package::PackageName::new("requests");
     let eco: starmetal_core::package::Ecosystem = "pypi".parse().expect("parse ecosystem");
     let result = pkg.normalized(eco);
-    assert_eq!(
-        result.as_ref(),
-        "requests",
-        "fixture: pypi already normalized"
-    );
+    assert_eq!(result.as_ref(), "requests", "fixture: pypi already normalized");
 }
 
 #[test]
@@ -263,11 +228,7 @@ fn package_01_pypi_normalization_npm_scoped_package() {
     let pkg = starmetal_core::package::PackageName::new("@types/node");
     let eco: starmetal_core::package::Ecosystem = "npm".parse().expect("parse ecosystem");
     let result = pkg.normalized(eco);
-    assert_eq!(
-        result.as_ref(),
-        "@types/node",
-        "fixture: npm scoped package"
-    );
+    assert_eq!(result.as_ref(), "@types/node", "fixture: npm scoped package");
 }
 
 #[test]
@@ -285,11 +246,7 @@ fn package_01_pypi_normalization_cargo_underscore_preserved() {
     let pkg = starmetal_core::package::PackageName::new("serde_json");
     let eco: starmetal_core::package::Ecosystem = "cargo".parse().expect("parse ecosystem");
     let result = pkg.normalized(eco);
-    assert_eq!(
-        result.as_ref(),
-        "serde_json",
-        "fixture: cargo underscore preserved"
-    );
+    assert_eq!(result.as_ref(), "serde_json", "fixture: cargo underscore preserved");
 }
 
 #[test]
@@ -307,11 +264,7 @@ fn package_01_pypi_normalization_pypi_trailing_separator() {
     let pkg = starmetal_core::package::PackageName::new("my_package_");
     let eco: starmetal_core::package::Ecosystem = "pypi".parse().expect("parse ecosystem");
     let result = pkg.normalized(eco);
-    assert_eq!(
-        result.as_ref(),
-        "my-package",
-        "fixture: pypi trailing separator"
-    );
+    assert_eq!(result.as_ref(), "my-package", "fixture: pypi trailing separator");
 }
 
 // Fixture: package/02_storage_keys.json

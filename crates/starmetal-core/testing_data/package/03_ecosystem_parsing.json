@@ -1,98 +1,98 @@
 [
-	{
-		"name": "pypi lowercase",
-		"input": { "value": "pypi" },
-		"expected": { "ecosystem": "pypi" },
-		"error": null
-	},
-	{
-		"name": "pypi uppercase",
-		"input": { "value": "PYPI" },
-		"expected": { "ecosystem": "pypi" },
-		"error": null
-	},
-	{
-		"name": "pypi mixed case",
-		"input": { "value": "PyPI" },
-		"expected": { "ecosystem": "pypi" },
-		"error": null
-	},
-	{
-		"name": "npm lowercase",
-		"input": { "value": "npm" },
-		"expected": { "ecosystem": "npm" },
-		"error": null
-	},
-	{
-		"name": "npm uppercase",
-		"input": { "value": "NPM" },
-		"expected": { "ecosystem": "npm" },
-		"error": null
-	},
-	{
-		"name": "cargo lowercase",
-		"input": { "value": "cargo" },
-		"expected": { "ecosystem": "cargo" },
-		"error": null
-	},
-	{
-		"name": "crates alias",
-		"input": { "value": "crates" },
-		"expected": { "ecosystem": "cargo" },
-		"error": null
-	},
-	{
-		"name": "crates uppercase alias",
-		"input": { "value": "CRATES" },
-		"expected": { "ecosystem": "cargo" },
-		"error": null
-	},
-	{
-		"name": "hex lowercase",
-		"input": { "value": "hex" },
-		"expected": { "ecosystem": "hex" },
-		"error": null
-	},
-	{
-		"name": "hex uppercase",
-		"input": { "value": "HEX" },
-		"expected": { "ecosystem": "hex" },
-		"error": null
-	},
-	{
-		"name": "maven lowercase",
-		"input": { "value": "maven" },
-		"expected": { "ecosystem": "maven" },
-		"error": null
-	},
-	{
-		"name": "rubygems lowercase",
-		"input": { "value": "rubygems" },
-		"expected": { "ecosystem": "rubygems" },
-		"error": null
-	},
-	{
-		"name": "nuget lowercase",
-		"input": { "value": "nuget" },
-		"expected": { "ecosystem": "nuget" },
-		"error": null
-	},
-	{
-		"name": "pub lowercase",
-		"input": { "value": "pub" },
-		"expected": { "ecosystem": "pub" },
-		"error": null
-	},
-	{
-		"name": "empty string",
-		"input": { "value": "" },
-		"expected": {},
-		"error": "unknown ecosystem"
-	},
-	{
-		"name": "numeric input",
-		"input": { "value": "123" },
-		"expected": {},
-		"error": "unknown ecosystem"
-	}
+  {
+    "name": "pypi lowercase",
+    "input": { "value": "pypi" },
+    "expected": { "ecosystem": "pypi" },
+    "error": null
+  },
+  {
+    "name": "pypi uppercase",
+    "input": { "value": "PYPI" },
+    "expected": { "ecosystem": "pypi" },
+    "error": null
+  },
+  {
+    "name": "pypi mixed case",
+    "input": { "value": "PyPI" },
+    "expected": { "ecosystem": "pypi" },
+    "error": null
+  },
+  {
+    "name": "npm lowercase",
+    "input": { "value": "npm" },
+    "expected": { "ecosystem": "npm" },
+    "error": null
+  },
+  {
+    "name": "npm uppercase",
+    "input": { "value": "NPM" },
+    "expected": { "ecosystem": "npm" },
+    "error": null
+  },
+  {
+    "name": "cargo lowercase",
+    "input": { "value": "cargo" },
+    "expected": { "ecosystem": "cargo" },
+    "error": null
+  },
+  {
+    "name": "crates alias",
+    "input": { "value": "crates" },
+    "expected": { "ecosystem": "cargo" },
+    "error": null
+  },
+  {
+    "name": "crates uppercase alias",
+    "input": { "value": "CRATES" },
+    "expected": { "ecosystem": "cargo" },
+    "error": null
+  },
+  {
+    "name": "hex lowercase",
+    "input": { "value": "hex" },
+    "expected": { "ecosystem": "hex" },
+    "error": null
+  },
+  {
+    "name": "hex uppercase",
+    "input": { "value": "HEX" },
+    "expected": { "ecosystem": "hex" },
+    "error": null
+  },
+  {
+    "name": "maven lowercase",
+    "input": { "value": "maven" },
+    "expected": { "ecosystem": "maven" },
+    "error": null
+  },
+  {
+    "name": "rubygems lowercase",
+    "input": { "value": "rubygems" },
+    "expected": { "ecosystem": "rubygems" },
+    "error": null
+  },
+  {
+    "name": "nuget lowercase",
+    "input": { "value": "nuget" },
+    "expected": { "ecosystem": "nuget" },
+    "error": null
+  },
+  {
+    "name": "pub lowercase",
+    "input": { "value": "pub" },
+    "expected": { "ecosystem": "pub" },
+    "error": null
+  },
+  {
+    "name": "empty string",
+    "input": { "value": "" },
+    "expected": {},
+    "error": "unknown ecosystem"
+  },
+  {
+    "name": "numeric input",
+    "input": { "value": "123" },
+    "expected": {},
+    "error": "unknown ecosystem"
+  }
 ]

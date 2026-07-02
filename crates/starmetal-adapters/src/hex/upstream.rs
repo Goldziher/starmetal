@@ -49,11 +49,7 @@ impl HexUpstreamClient {
         Self::with_max_response_bytes(base_url, repo_url, DEFAULT_MAX_UPSTREAM_BYTES)
     }
 
-    pub fn with_max_response_bytes(
-        base_url: String,
-        repo_url: String,
-        max_response_bytes: u64,
-    ) -> Self {
+    pub fn with_max_response_bytes(base_url: String, repo_url: String, max_response_bytes: u64) -> Self {
         let client = reqwest::Client::builder()
             .connect_timeout(std::time::Duration::from_secs(30))
             .timeout(std::time::Duration::from_secs(60))
@@ -104,14 +100,11 @@ impl HexUpstreamClient {
             });
         }
         if !status.is_success() {
-            return Err(StarmetalError::Upstream(format!(
-                "upstream returned HTTP {status}"
-            )));
+            return Err(StarmetalError::Upstream(format!("upstream returned HTTP {status}")));
         }
 
         let pkg: HexPackage =
-            crate::upstream_http::json_limited(response, self.max_response_bytes, "Hex package")
-                .await?;
+            crate::upstream_http::json_limited(response, self.max_response_bytes, "Hex package").await?;
 
         // Populate cache
         self.package_cache
@@ -171,17 +164,11 @@ impl HexUpstreamClient {
             });
         }
         if !status.is_success() {
-            return Err(StarmetalError::Upstream(format!(
-                "upstream returned HTTP {status}"
-            )));
+            return Err(StarmetalError::Upstream(format!("upstream returned HTTP {status}")));
         }
 
-        let bytes = crate::upstream_http::bytes_limited(
-            response,
-            self.max_response_bytes,
-            "Hex registry protobuf",
-        )
-        .await?;
+        let bytes =
+            crate::upstream_http::bytes_limited(response, self.max_response_bytes, "Hex registry protobuf").await?;
 
         self.registry_cache
             .write()
@@ -208,20 +195,16 @@ impl UpstreamClient for HexUpstreamClient {
     async fn fetch_metadata(&self, name: &PackageName, version: &str) -> Result<VersionMetadata> {
         let pkg = self.fetch_package(name).await?;
         let mut metadata =
-            models::hex_release_to_metadata(name, &pkg, version).ok_or_else(|| {
-                StarmetalError::VersionNotFound {
-                    ecosystem: "hex".to_string(),
-                    name: name.as_str().to_string(),
-                    version: version.to_string(),
-                }
+            models::hex_release_to_metadata(name, &pkg, version).ok_or_else(|| StarmetalError::VersionNotFound {
+                ecosystem: "hex".to_string(),
+                name: name.as_str().to_string(),
+                version: version.to_string(),
             })?;
 
         if let Some(checksum) = self.outer_checksum(name.as_str(), version).await?
             && let Some(artifact) = metadata.artifacts.first_mut()
         {
-            artifact
-                .upstream_hashes
-                .insert("sha256".to_string(), checksum);
+            artifact.upstream_hashes.insert("sha256".to_string(), checksum);
         }
         Ok(metadata)
     }
@@ -248,12 +231,7 @@ impl UpstreamClient for HexUpstreamClient {
             )));
         }
 
-        crate::upstream_http::bytes_limited(
-            response,
-            self.max_response_bytes,
-            "Hex tarball download",
-        )
-        .await
+        crate::upstream_http::bytes_limited(response, self.max_response_bytes, "Hex tarball download").await
     }
 }
 
@@ -261,12 +239,10 @@ impl HexUpstreamClient {
     async fn outer_checksum(&self, name: &str, version: &str) -> Result<Option<String>> {
         let bytes = self.fetch_registry_entry(name).await?;
         let registry_bytes = decode_registry_entry(bytes.as_ref())?;
-        let signed = proto::Signed::decode(registry_bytes.as_slice()).map_err(|err| {
-            StarmetalError::Upstream(format!("invalid signed Hex package protobuf: {err}"))
-        })?;
-        let package = proto::Package::decode(signed.payload.as_slice()).map_err(|err| {
-            StarmetalError::Upstream(format!("invalid Hex package protobuf: {err}"))
-        })?;
+        let signed = proto::Signed::decode(registry_bytes.as_slice())
+            .map_err(|err| StarmetalError::Upstream(format!("invalid signed Hex package protobuf: {err}")))?;
+        let package = proto::Package::decode(signed.payload.as_slice())
+            .map_err(|err| StarmetalError::Upstream(format!("invalid Hex package protobuf: {err}")))?;
         Ok(package
             .releases
             .into_iter()
@@ -280,9 +256,9 @@ fn decode_registry_entry(bytes: &[u8]) -> Result<Vec<u8>> {
     if bytes.starts_with(&[0x1f, 0x8b]) {
         let mut decoder = GzDecoder::new(bytes);
         let mut decoded = Vec::new();
-        decoder.read_to_end(&mut decoded).map_err(|err| {
-            StarmetalError::Upstream(format!("invalid gzipped Hex package protobuf: {err}"))
-        })?;
+        decoder
+            .read_to_end(&mut decoded)
+            .map_err(|err| StarmetalError::Upstream(format!("invalid gzipped Hex package protobuf: {err}")))?;
         Ok(decoded)
     } else {
         Ok(bytes.to_vec())

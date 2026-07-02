@@ -1,6 +1,4 @@
-use starmetal_core::registry::{
-    cargo::CargoIndexEntry, hex::HexPackage, npm::NpmPackument, pypi::PypiProject,
-};
+use starmetal_core::registry::{cargo::CargoIndexEntry, hex::HexPackage, npm::NpmPackument, pypi::PypiProject};
 
 const PYPI_FIXTURE: &str = r#"{
     "meta": { "api-version": "1.0" },
@@ -149,8 +147,7 @@ const HEX_FIXTURE: &str = r#"{
 
 #[test]
 fn should_deserialize_pypi_pep691_response() {
-    let project: PypiProject =
-        serde_json::from_str(PYPI_FIXTURE).expect("failed to deserialize PyPI fixture");
+    let project: PypiProject = serde_json::from_str(PYPI_FIXTURE).expect("failed to deserialize PyPI fixture");
 
     assert_eq!(project.name, "requests");
     assert_eq!(project.meta.api_version, "1.0");
@@ -171,26 +168,19 @@ fn should_deserialize_pypi_pep691_response() {
 
 #[test]
 fn should_deserialize_npm_packument() {
-    let packument: NpmPackument =
-        serde_json::from_str(NPM_FIXTURE).expect("failed to deserialize npm fixture");
+    let packument: NpmPackument = serde_json::from_str(NPM_FIXTURE).expect("failed to deserialize npm fixture");
 
     assert_eq!(packument.name, "express");
     assert_eq!(
         packument.description.as_deref(),
         Some("Fast, unopinionated, minimalist web framework")
     );
-    assert_eq!(
-        packument.dist_tags.get("latest").map(String::as_str),
-        Some("4.21.0")
-    );
+    assert_eq!(packument.dist_tags.get("latest").map(String::as_str), Some("4.21.0"));
     assert!(packument.versions.contains_key("4.21.0"));
 
     let v = &packument.versions["4.21.0"];
     assert_eq!(v.license.as_deref(), Some("MIT"));
-    assert_eq!(
-        v.dependencies.get("debug").map(String::as_str),
-        Some("2.6.9")
-    );
+    assert_eq!(v.dependencies.get("debug").map(String::as_str), Some("2.6.9"));
     assert_eq!(v.dist.shasum, "d57cb706d49623d4ac27833f1cbc466b668eb915");
     assert!(v.dist.integrity.is_some());
     assert_eq!(v.dist.file_count, Some(214));
@@ -204,8 +194,7 @@ fn should_deserialize_npm_packument() {
 
 #[test]
 fn should_deserialize_cargo_sparse_index_entry() {
-    let entry: CargoIndexEntry =
-        serde_json::from_str(CARGO_FIXTURE).expect("failed to deserialize Cargo fixture");
+    let entry: CargoIndexEntry = serde_json::from_str(CARGO_FIXTURE).expect("failed to deserialize Cargo fixture");
 
     assert_eq!(entry.name, "serde");
     assert_eq!(entry.vers, "1.0.210");
@@ -227,14 +216,10 @@ fn should_deserialize_cargo_sparse_index_entry() {
 
 #[test]
 fn should_deserialize_hex_package_response() {
-    let package: HexPackage =
-        serde_json::from_str(HEX_FIXTURE).expect("failed to deserialize Hex fixture");
+    let package: HexPackage = serde_json::from_str(HEX_FIXTURE).expect("failed to deserialize Hex fixture");
 
     assert_eq!(package.name, "phoenix");
-    assert_eq!(
-        package.url.as_deref(),
-        Some("https://hex.pm/api/packages/phoenix")
-    );
+    assert_eq!(package.url.as_deref(), Some("https://hex.pm/api/packages/phoenix"));
     assert_eq!(package.releases.len(), 2);
 
     let meta = package.meta.as_ref().expect("meta should be present");
@@ -253,17 +238,9 @@ fn should_deserialize_hex_package_response() {
     let retired = &package.releases[1];
     assert_eq!(retired.version, "1.7.12");
     assert!(retired.is_retired());
-    let retirement = retired
-        .retirement
-        .as_ref()
-        .expect("should have retirement info");
+    let retirement = retired.retirement.as_ref().expect("should have retirement info");
     assert_eq!(retirement.reason, "security");
-    assert!(
-        retirement
-            .message
-            .as_ref()
-            .is_some_and(|m| m.contains("CVE"))
-    );
+    assert!(retirement.message.as_ref().is_some_and(|m| m.contains("CVE")));
 }
 
 #[test]

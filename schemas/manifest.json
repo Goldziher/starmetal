@@ -471,10 +471,7 @@
         "pypi-source-distribution-format",
         "pypi-json-api"
       ],
-      "source_kinds": [
-        "official-prose-index",
-        "official-prose"
-      ],
+      "source_kinds": ["official-prose-index", "official-prose"],
       "generated_by": "starmetal-schema-manager",
       "validated_by": "crates/starmetal-core/tests/schema_validation.rs; tests/conformance",
       "blake3": "2b26c7feff86351dbeefeb1338515dc338832ec0d17ffba0a32017f5f9650162"
@@ -486,15 +483,8 @@
       "schema_kind": "starmetal-derived-json-schema",
       "source_type": "starmetal_core::registry::pypi::PypiIndex",
       "source_file": "crates/starmetal-core/src/registry/pypi.rs",
-      "source_ids": [
-        "pypa-specifications-index",
-        "pypi-simple-api",
-        "pypi-name-normalization"
-      ],
-      "source_kinds": [
-        "official-prose-index",
-        "official-prose"
-      ],
+      "source_ids": ["pypa-specifications-index", "pypi-simple-api", "pypi-name-normalization"],
+      "source_kinds": ["official-prose-index", "official-prose"],
       "generated_by": "starmetal-schema-manager",
       "validated_by": "crates/starmetal-core/tests/schema_validation.rs; tests/conformance",
       "blake3": "3e19917d2fbcc750f7af51075076b300f62bcb0b780a91cb11f5749ad189fa79"
@@ -506,14 +496,8 @@
       "schema_kind": "starmetal-derived-json-schema",
       "source_type": "starmetal_core::registry::npm::NpmPackument",
       "source_file": "crates/starmetal-core/src/registry/npm.rs",
-      "source_ids": [
-        "npm-package-metadata",
-        "npm-types"
-      ],
-      "source_kinds": [
-        "official-prose",
-        "official-typescript"
-      ],
+      "source_ids": ["npm-package-metadata", "npm-types"],
+      "source_kinds": ["official-prose", "official-typescript"],
       "generated_by": "starmetal-schema-manager",
       "validated_by": "crates/starmetal-core/tests/schema_validation.rs; tests/conformance",
       "blake3": "3f793f81cafb9fc0d870593f51cd4d312f50f117253d90c95ecc661bb2c24ace"
@@ -525,12 +509,8 @@
       "schema_kind": "starmetal-derived-json-schema",
       "source_type": "starmetal_core::registry::cargo::CargoIndexEntry",
       "source_file": "crates/starmetal-core/src/registry/cargo.rs",
-      "source_ids": [
-        "cargo-registry-index"
-      ],
-      "source_kinds": [
-        "official-prose"
-      ],
+      "source_ids": ["cargo-registry-index"],
+      "source_kinds": ["official-prose"],
       "generated_by": "starmetal-schema-manager",
       "validated_by": "crates/starmetal-core/tests/schema_validation.rs; tests/conformance",
       "blake3": "248d56ecb17ceff0de355764a239f5b0e018641b570d89ebcf597184ebc5c55a"
@@ -542,12 +522,8 @@
       "schema_kind": "starmetal-derived-json-schema",
       "source_type": "starmetal_core::registry::cargo::CargoConfig",
       "source_file": "crates/starmetal-core/src/registry/cargo.rs",
-      "source_ids": [
-        "cargo-registry-index"
-      ],
-      "source_kinds": [
-        "official-prose"
-      ],
+      "source_ids": ["cargo-registry-index"],
+      "source_kinds": ["official-prose"],
       "generated_by": "starmetal-schema-manager",
       "validated_by": "crates/starmetal-core/tests/schema_validation.rs; tests/conformance",
       "blake3": "235451c35448770aba5b422bece6d7ea94eaf85fc0e14dfea7311ec1af6971e6"
@@ -559,15 +535,8 @@
       "schema_kind": "starmetal-derived-json-schema",
       "source_type": "starmetal_core::registry::hex::HexPackage",
       "source_file": "crates/starmetal-core/src/registry/hex.rs",
-      "source_ids": [
-        "hex-registry-v2",
-        "hex-package-proto",
-        "hex-package-metadata"
-      ],
-      "source_kinds": [
-        "official-prose",
-        "official-protobuf"
-      ],
+      "source_ids": ["hex-registry-v2", "hex-package-proto", "hex-package-metadata"],
+      "source_kinds": ["official-prose", "official-protobuf"],
       "generated_by": "starmetal-schema-manager",
       "validated_by": "crates/starmetal-core/tests/schema_validation.rs; tests/conformance",
       "blake3": "0548b52d721cc36ed6055b32f6a4944bd14105fc4aa81ffdff6130be3ebcc9d7"
@@ -579,12 +548,8 @@
       "schema_kind": "starmetal-owned-json-schema",
       "source_type": "starmetal_core::config::Config",
       "source_file": "crates/starmetal-core/src/config.rs",
-      "source_ids": [
-        "starmetal-config"
-      ],
-      "source_kinds": [
-        "starmetal-rust-type"
-      ],
+      "source_ids": ["starmetal-config"],
+      "source_kinds": ["starmetal-rust-type"],
       "generated_by": "starmetal-schema-manager",
       "validated_by": "crates/starmetal-core/tests/schema_validation.rs",
       "blake3": "28f45e4912cdee79cff792fa7bef652db71affb6c8de1a390f8c4365921bb884"
@@ -596,13 +561,8 @@
       "schema_kind": "starmetal-derived-json-schema",
       "source_type": "starmetal_core::registry::nuget::NugetServiceIndex",
       "source_file": "crates/starmetal-core/src/registry/nuget.rs",
-      "source_ids": [
-        "nuget-v3-overview",
-        "nuget-v3-service-index"
-      ],
-      "source_kinds": [
-        "official-prose"
-      ],
+      "source_ids": ["nuget-v3-overview", "nuget-v3-service-index"],
+      "source_kinds": ["official-prose"],
       "generated_by": "starmetal-schema-manager",
       "validated_by": "crates/starmetal-core/tests/schema_validation.rs",
       "blake3": "e897ac1d43408c0c6536921fc1cc81c9978d37fef7d5d333203785801c631a50"
@@ -614,13 +574,8 @@
       "schema_kind": "starmetal-derived-json-schema",
       "source_type": "starmetal_core::registry::nuget::NugetPackageVersions",
       "source_file": "crates/starmetal-core/src/registry/nuget.rs",
-      "source_ids": [
-        "nuget-v3-overview",
-        "nuget-v3-package-base-address"
-      ],
-      "source_kinds": [
-        "official-prose"
-      ],
+      "source_ids": ["nuget-v3-overview", "nuget-v3-package-base-address"],
+      "source_kinds": ["official-prose"],
       "generated_by": "starmetal-schema-manager",
       "validated_by": "crates/starmetal-core/tests/schema_validation.rs",
       "blake3": "07dcbc58858dd1cc26cb795aa8943d87877c22ceed9ab2e4fcbdfb35fb9d76df"
@@ -632,15 +587,8 @@
       "schema_kind": "starmetal-derived-json-schema",
       "source_type": "starmetal_core::registry::nuget::NugetRegistrationIndex",
       "source_file": "crates/starmetal-core/src/registry/nuget.rs",
-      "source_ids": [
-        "nuget-v3-overview",
-        "nuget-v3-registration",
-        "nuget-nuspec-xsd"
-      ],
-      "source_kinds": [
-        "official-prose",
-        "official-xml-schema"
-      ],
+      "source_ids": ["nuget-v3-overview", "nuget-v3-registration", "nuget-nuspec-xsd"],
+      "source_kinds": ["official-prose", "official-xml-schema"],
       "generated_by": "starmetal-schema-manager",
       "validated_by": "crates/starmetal-core/tests/schema_validation.rs",
       "blake3": "316f54649aad6280488e1d608ec5236857e260d8066757a03143bb7d5b9434d0"
@@ -652,15 +600,8 @@
       "schema_kind": "starmetal-derived-json-schema",
       "source_type": "starmetal_core::registry::pubdev::PubPackage",
       "source_file": "crates/starmetal-core/src/registry/pubdev.rs",
-      "source_ids": [
-        "pub-hosted-repository-v2",
-        "pub-dev-supported-api",
-        "pub-dev-package-api-dtos"
-      ],
-      "source_kinds": [
-        "official-prose",
-        "official-dart-source"
-      ],
+      "source_ids": ["pub-hosted-repository-v2", "pub-dev-supported-api", "pub-dev-package-api-dtos"],
+      "source_kinds": ["official-prose", "official-dart-source"],
       "generated_by": "starmetal-schema-manager",
       "validated_by": "crates/starmetal-core/tests/schema_validation.rs",
       "blake3": "09c21f235dbfd5fc8ec090a10dd8e67c35153e9809a4b194c0612186023c257a"
@@ -672,12 +613,8 @@
       "schema_kind": "starmetal-owned-json-schema",
       "source_type": "starmetal_core::lockfile::LockFile",
       "source_file": "crates/starmetal-core/src/lockfile.rs",
-      "source_ids": [
-        "starmetal-lockfile"
-      ],
-      "source_kinds": [
-        "starmetal-rust-type"
-      ],
+      "source_ids": ["starmetal-lockfile"],
+      "source_kinds": ["starmetal-rust-type"],
       "generated_by": "starmetal-schema-manager",
       "validated_by": "crates/starmetal-core/tests/schema_validation.rs",
       "blake3": "0da8663cc10eb70870c3baf3c8f4d80d745e5fb170321d0ee443d5739fac75cb"

@@ -98,15 +98,12 @@ impl NpmUpstreamClient {
             });
         }
         if !status.is_success() {
-            return Err(StarmetalError::Upstream(format!(
-                "upstream returned HTTP {status}"
-            )));
+            return Err(StarmetalError::Upstream(format!("upstream returned HTTP {status}")));
         }
 
         // Fetch as raw JSON Value — handles any field shape without strict typing
         let packument: serde_json::Value =
-            crate::upstream_http::json_limited(response, self.max_response_bytes, "npm packument")
-                .await?;
+            crate::upstream_http::json_limited(response, self.max_response_bytes, "npm packument").await?;
 
         self.packument_cache
             .write()
@@ -132,12 +129,10 @@ impl UpstreamClient for NpmUpstreamClient {
     #[instrument(skip(self), fields(ecosystem = "npm"))]
     async fn fetch_metadata(&self, name: &PackageName, version: &str) -> Result<VersionMetadata> {
         let packument = self.fetch_packument_raw(name).await?;
-        models::extract_version_metadata(name, version, &packument).ok_or_else(|| {
-            StarmetalError::VersionNotFound {
-                ecosystem: "npm".to_string(),
-                name: name.as_str().to_string(),
-                version: version.to_string(),
-            }
+        models::extract_version_metadata(name, version, &packument).ok_or_else(|| StarmetalError::VersionNotFound {
+            ecosystem: "npm".to_string(),
+            name: name.as_str().to_string(),
+            version: version.to_string(),
         })
     }
 
@@ -165,11 +160,6 @@ impl UpstreamClient for NpmUpstreamClient {
             )));
         }
 
-        crate::upstream_http::bytes_limited(
-            response,
-            self.max_response_bytes,
-            "npm tarball download",
-        )
-        .await
+        crate::upstream_http::bytes_limited(response, self.max_response_bytes, "npm tarball download").await
     }
 }

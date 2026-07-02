@@ -16,10 +16,7 @@ async fn cargo_config_json() {
 
     assert_eq!(response.status(), 200);
     let body: serde_json::Value = response.json().await.expect("invalid JSON");
-    assert!(
-        body["dl"].as_str().is_some(),
-        "expected dl field in config.json"
-    );
+    assert!(body["dl"].as_str().is_some(), "expected dl field in config.json");
     assert!(
         body["dl"].as_str().unwrap().contains("/cargo/crates/"),
         "dl should contain /cargo/crates/, got: {}",
@@ -41,11 +38,7 @@ async fn cargo_sparse_index_lookup() {
         .await
         .expect("request failed");
 
-    assert_eq!(
-        response.status(),
-        200,
-        "expected 200 for once_cell index lookup"
-    );
+    assert_eq!(response.status(), 200, "expected 200 for once_cell index lookup");
 
     let body = response.text().await.expect("failed to read body");
     assert!(!body.is_empty(), "expected non-empty ndjson body");
@@ -55,12 +48,9 @@ async fn cargo_sparse_index_lookup() {
         if line.is_empty() {
             continue;
         }
-        let entry: serde_json::Value = serde_json::from_str(line)
-            .unwrap_or_else(|err| panic!("invalid JSON in ndjson line: {err}\nline: {line}"));
-        assert_eq!(
-            entry["name"], "once_cell",
-            "expected name=once_cell in index entry"
-        );
+        let entry: serde_json::Value =
+            serde_json::from_str(line).unwrap_or_else(|err| panic!("invalid JSON in ndjson line: {err}\nline: {line}"));
+        assert_eq!(entry["name"], "once_cell", "expected name=once_cell in index entry");
     }
 
     server.shutdown();
@@ -73,10 +63,7 @@ async fn cargo_crate_download() {
 
     let client = reqwest::Client::new();
     let response = client
-        .get(format!(
-            "{}/cargo/crates/once_cell/1.19.0/download",
-            server.base_url()
-        ))
+        .get(format!("{}/cargo/crates/once_cell/1.19.0/download", server.base_url()))
         .send()
         .await
         .expect("request failed");
@@ -132,8 +119,7 @@ async fn cargo_short_crate_name_index() {
 
     // Verify at least one line has name=cc
     let first_line = body.lines().next().expect("expected at least one line");
-    let entry: serde_json::Value =
-        serde_json::from_str(first_line).expect("invalid JSON in first line");
+    let entry: serde_json::Value = serde_json::from_str(first_line).expect("invalid JSON in first line");
     assert_eq!(entry["name"], "cc", "expected name=cc in index entry");
 
     server.shutdown();
@@ -191,8 +177,7 @@ index = "sparse+{base_url}/cargo/"
 async fn cargo_fetch_crate_via_sparse_index() {
     let server = TestServer::start().await;
 
-    let (output, _tmp) =
-        cargo_fetch_from_starmetal(&server.base_url(), "once_cell", "1.19.0").await;
+    let (output, _tmp) = cargo_fetch_from_starmetal(&server.base_url(), "once_cell", "1.19.0").await;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);

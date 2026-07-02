@@ -2,9 +2,7 @@ use rmcp::handler::server::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, ServerCapabilities, ServerInfo};
 use rmcp::transport::stdio;
-use rmcp::{
-    ErrorData as McpError, ServerHandler, ServiceExt, schemars, tool, tool_handler, tool_router,
-};
+use rmcp::{ErrorData as McpError, ServerHandler, ServiceExt, schemars, tool, tool_handler, tool_router};
 use serde::{Deserialize, Serialize};
 use starmetal_core::error::StarmetalError;
 use starmetal_core::package::{ArtifactId, Ecosystem, PackageName};
@@ -88,10 +86,7 @@ impl StarmetalMcp {
     }
 
     #[tool(description = "List cached packages for an ecosystem")]
-    async fn package_list(
-        &self,
-        params: Parameters<EcosystemParams>,
-    ) -> Result<CallToolResult, McpError> {
+    async fn package_list(&self, params: Parameters<EcosystemParams>) -> Result<CallToolResult, McpError> {
         let packages = self
             .runtime
             .list_packages(params.0.ecosystem)
@@ -101,10 +96,7 @@ impl StarmetalMcp {
     }
 
     #[tool(description = "List versions for a package")]
-    async fn package_versions(
-        &self,
-        params: Parameters<PackageParams>,
-    ) -> Result<CallToolResult, McpError> {
+    async fn package_versions(&self, params: Parameters<PackageParams>) -> Result<CallToolResult, McpError> {
         let versions = self
             .runtime
             .versions(params.0.ecosystem, &params.0.name)
@@ -114,10 +106,7 @@ impl StarmetalMcp {
     }
 
     #[tool(description = "Return metadata for one package version")]
-    async fn package_metadata(
-        &self,
-        params: Parameters<VersionParams>,
-    ) -> Result<CallToolResult, McpError> {
+    async fn package_metadata(&self, params: Parameters<VersionParams>) -> Result<CallToolResult, McpError> {
         let metadata = self
             .runtime
             .metadata(params.0.ecosystem, &params.0.name, &params.0.version)
@@ -127,16 +116,9 @@ impl StarmetalMcp {
     }
 
     #[tool(description = "Fetch an artifact through Starmetal cache integrity checks")]
-    async fn package_fetch(
-        &self,
-        params: Parameters<ArtifactParams>,
-    ) -> Result<CallToolResult, McpError> {
+    async fn package_fetch(&self, params: Parameters<ArtifactParams>) -> Result<CallToolResult, McpError> {
         let artifact = artifact_id(params.0);
-        let (artifact, data) = self
-            .runtime
-            .fetch_artifact(artifact)
-            .await
-            .map_err(mcp_error)?;
+        let (artifact, data) = self.runtime.fetch_artifact(artifact).await.map_err(mcp_error)?;
         json_result(starmetal_ops::ArtifactFetchResult {
             artifact,
             bytes: data.len(),
@@ -144,15 +126,11 @@ impl StarmetalMcp {
     }
 
     #[tool(description = "Publish one local artifact with explicit package metadata")]
-    async fn package_publish(
-        &self,
-        params: Parameters<PublishParams>,
-    ) -> Result<CallToolResult, McpError> {
+    async fn package_publish(&self, params: Parameters<PublishParams>) -> Result<CallToolResult, McpError> {
         self.write_allowed()?;
         let params = params.0;
-        let data = std::fs::read(&params.file).map_err(|err| {
-            McpError::invalid_request(format!("failed to read artifact file: {err}"), None)
-        })?;
+        let data = std::fs::read(&params.file)
+            .map_err(|err| McpError::invalid_request(format!("failed to read artifact file: {err}"), None))?;
         let filename = params.filename.unwrap_or_else(|| {
             std::path::Path::new(&params.file)
                 .file_name()
@@ -176,10 +154,7 @@ impl StarmetalMcp {
     }
 
     #[tool(description = "Mark a package version as yanked")]
-    async fn package_yank(
-        &self,
-        params: Parameters<VersionParams>,
-    ) -> Result<CallToolResult, McpError> {
+    async fn package_yank(&self, params: Parameters<VersionParams>) -> Result<CallToolResult, McpError> {
         self.write_allowed()?;
         let metadata = self
             .runtime
@@ -190,10 +165,7 @@ impl StarmetalMcp {
     }
 
     #[tool(description = "Mark a package version as not yanked")]
-    async fn package_unyank(
-        &self,
-        params: Parameters<VersionParams>,
-    ) -> Result<CallToolResult, McpError> {
+    async fn package_unyank(&self, params: Parameters<VersionParams>) -> Result<CallToolResult, McpError> {
         self.write_allowed()?;
         let metadata = self
             .runtime
@@ -204,10 +176,7 @@ impl StarmetalMcp {
     }
 
     #[tool(description = "Delete a cached artifact and its BLAKE3 sidecar")]
-    async fn cache_delete_artifact(
-        &self,
-        params: Parameters<ArtifactParams>,
-    ) -> Result<CallToolResult, McpError> {
+    async fn cache_delete_artifact(&self, params: Parameters<ArtifactParams>) -> Result<CallToolResult, McpError> {
         self.write_allowed()?;
         let result = self
             .runtime
@@ -227,16 +196,11 @@ impl ServerHandler for StarmetalMcp {
     }
 }
 
-pub async fn serve(
-    runtime: StarmetalRuntime,
-    allow_writes: bool,
-) -> starmetal_core::error::Result<()> {
+pub async fn serve(runtime: StarmetalRuntime, allow_writes: bool) -> starmetal_core::error::Result<()> {
     let service = StarmetalMcp::new(runtime, allow_writes)
         .serve(stdio())
         .await
-        .map_err(|err| {
-            StarmetalError::Config(format!("failed to start MCP stdio server: {err}"))
-        })?;
+        .map_err(|err| StarmetalError::Config(format!("failed to start MCP stdio server: {err}")))?;
     service
         .waiting()
         .await
@@ -245,9 +209,8 @@ pub async fn serve(
 }
 
 fn json_result(value: impl Serialize) -> Result<CallToolResult, McpError> {
-    let value = serde_json::to_value(value).map_err(|err| {
-        McpError::internal_error(format!("failed to serialize MCP result: {err}"), None)
-    })?;
+    let value = serde_json::to_value(value)
+        .map_err(|err| McpError::internal_error(format!("failed to serialize MCP result: {err}"), None))?;
     Ok(CallToolResult::structured(value))
 }
 

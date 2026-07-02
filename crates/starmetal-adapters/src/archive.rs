@@ -25,9 +25,8 @@ pub(crate) fn parse_rubygem(data: &[u8]) -> Result<ArchiveMetadata> {
     Ok(ArchiveMetadata {
         name: yaml_scalar(&text, "name")
             .ok_or_else(|| StarmetalError::Adapter("RubyGems metadata missing name".to_string()))?,
-        version: yaml_version(&text).ok_or_else(|| {
-            StarmetalError::Adapter("RubyGems metadata missing version".to_string())
-        })?,
+        version: yaml_version(&text)
+            .ok_or_else(|| StarmetalError::Adapter("RubyGems metadata missing version".to_string()))?,
         license: yaml_sequence_first(&text, "licenses").or_else(|| yaml_scalar(&text, "license")),
         nuspec: None,
     })
@@ -38,9 +37,9 @@ pub(crate) fn parse_nuget(data: &[u8]) -> Result<ArchiveMetadata> {
     let mut archive = zip::ZipArchive::new(Cursor::new(data))
         .map_err(|err| StarmetalError::Adapter(format!("invalid NuGet package: {err}")))?;
     for index in 0..archive.len() {
-        let file = archive.by_index(index).map_err(|err| {
-            StarmetalError::Adapter(format!("invalid NuGet package entry: {err}"))
-        })?;
+        let file = archive
+            .by_index(index)
+            .map_err(|err| StarmetalError::Adapter(format!("invalid NuGet package entry: {err}")))?;
         let name = file.name().to_string();
         reject_unsafe_path(&name)?;
         if !name.ends_with(".nuspec") {
@@ -56,16 +55,13 @@ pub(crate) fn parse_nuget(data: &[u8]) -> Result<ArchiveMetadata> {
             name: xml_text(&text, "id")
                 .ok_or_else(|| StarmetalError::Adapter("NuGet nuspec missing id".to_string()))?
                 .to_ascii_lowercase(),
-            version: xml_text(&text, "version").ok_or_else(|| {
-                StarmetalError::Adapter("NuGet nuspec missing version".to_string())
-            })?,
+            version: xml_text(&text, "version")
+                .ok_or_else(|| StarmetalError::Adapter("NuGet nuspec missing version".to_string()))?,
             license: xml_text(&text, "license"),
             nuspec: Some(Bytes::from(buffer)),
         });
     }
-    Err(StarmetalError::Adapter(
-        "NuGet package missing .nuspec".to_string(),
-    ))
+    Err(StarmetalError::Adapter("NuGet package missing .nuspec".to_string()))
 }
 
 #[cfg(feature = "pub")]
@@ -73,10 +69,10 @@ pub(crate) fn parse_pub_archive(data: &[u8]) -> Result<ArchiveMetadata> {
     let decoded = gunzip(data)?;
     let mut archive = tar::Archive::new(Cursor::new(decoded));
     let pubspec = read_tar_entry(&mut archive, "pubspec.yaml")?;
-    let text = String::from_utf8(pubspec)
-        .map_err(|err| StarmetalError::Adapter(format!("invalid pubspec.yaml: {err}")))?;
-    let value: serde_yaml::Value = serde_yaml::from_str(&text)
-        .map_err(|err| StarmetalError::Adapter(format!("invalid pubspec.yaml: {err}")))?;
+    let text =
+        String::from_utf8(pubspec).map_err(|err| StarmetalError::Adapter(format!("invalid pubspec.yaml: {err}")))?;
+    let value: serde_yaml::Value =
+        serde_yaml::from_str(&text).map_err(|err| StarmetalError::Adapter(format!("invalid pubspec.yaml: {err}")))?;
     Ok(ArchiveMetadata {
         name: yaml_value(&value, "name")
             .or_else(|| yaml_scalar(&text, "name"))
@@ -98,14 +94,10 @@ pub(crate) fn parse_hex_tarball(data: &[u8]) -> Result<ArchiveMetadata> {
     Ok(ArchiveMetadata {
         name: yaml_scalar(&text, "name")
             .or_else(|| erlang_binary(&text, "name"))
-            .ok_or_else(|| {
-                StarmetalError::Adapter("Hex metadata.config missing name".to_string())
-            })?,
+            .ok_or_else(|| StarmetalError::Adapter("Hex metadata.config missing name".to_string()))?,
         version: yaml_scalar(&text, "version")
             .or_else(|| erlang_binary(&text, "version"))
-            .ok_or_else(|| {
-                StarmetalError::Adapter("Hex metadata.config missing version".to_string())
-            })?,
+            .ok_or_else(|| StarmetalError::Adapter("Hex metadata.config missing version".to_string()))?,
         license: yaml_sequence_first(&text, "licenses"),
         nuspec: None,
     })
@@ -117,8 +109,7 @@ fn read_tar_entry<R: Read>(archive: &mut tar::Archive<R>, expected_name: &str) -
         .entries()
         .map_err(|err| StarmetalError::Adapter(format!("invalid tar archive: {err}")))?;
     for entry in entries {
-        let entry =
-            entry.map_err(|err| StarmetalError::Adapter(format!("invalid tar entry: {err}")))?;
+        let entry = entry.map_err(|err| StarmetalError::Adapter(format!("invalid tar entry: {err}")))?;
         let path = entry
             .path()
             .map_err(|err| StarmetalError::Adapter(format!("invalid tar path: {err}")))?;
@@ -134,9 +125,7 @@ fn read_tar_entry<R: Read>(archive: &mut tar::Archive<R>, expected_name: &str) -
             .map_err(|err| StarmetalError::Adapter(format!("failed to read tar entry: {err}")))?;
         return Ok(buffer);
     }
-    Err(StarmetalError::Adapter(format!(
-        "archive missing {expected_name}"
-    )))
+    Err(StarmetalError::Adapter(format!("archive missing {expected_name}")))
 }
 
 #[cfg(any(feature = "rubygems", feature = "pub"))]
@@ -152,9 +141,7 @@ fn gunzip(data: &[u8]) -> Result<Vec<u8>> {
 
 fn reject_unsafe_path(path: &str) -> Result<()> {
     if path.starts_with('/') || path.split('/').any(|part| part == "..") {
-        return Err(StarmetalError::Adapter(format!(
-            "unsafe archive path: {path}"
-        )));
+        return Err(StarmetalError::Adapter(format!("unsafe archive path: {path}")));
     }
     Ok(())
 }
@@ -180,10 +167,7 @@ fn yaml_scalar(text: &str, key: &str) -> Option<String> {
 
 #[cfg(feature = "pub")]
 fn yaml_value(value: &serde_yaml::Value, key: &str) -> Option<String> {
-    value
-        .get(key)
-        .and_then(serde_yaml::Value::as_str)
-        .map(str::to_string)
+    value.get(key).and_then(serde_yaml::Value::as_str).map(str::to_string)
 }
 
 #[cfg(feature = "rubygems")]

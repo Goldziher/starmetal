@@ -55,19 +55,13 @@ impl LockFile {
     }
 
     /// Verify an artifact's data against the lock file's stored blake3 hash.
-    pub fn verify_artifact(
-        &self,
-        ecosystem: Ecosystem,
-        name: &str,
-        filename: &str,
-        data: &[u8],
-    ) -> Result<()> {
-        let pkg =
-            self.find_package(ecosystem, name)
-                .ok_or_else(|| StarmetalError::PackageNotFound {
-                    ecosystem: ecosystem.to_string(),
-                    name: name.to_string(),
-                })?;
+    pub fn verify_artifact(&self, ecosystem: Ecosystem, name: &str, filename: &str, data: &[u8]) -> Result<()> {
+        let pkg = self
+            .find_package(ecosystem, name)
+            .ok_or_else(|| StarmetalError::PackageNotFound {
+                ecosystem: ecosystem.to_string(),
+                name: name.to_string(),
+            })?;
 
         let artifact = pkg
             .artifacts
@@ -108,15 +102,11 @@ mod tests {
 
             if fix["error"].is_string() {
                 // Should fail to parse
-                assert!(
-                    LockFile::from_toml(toml_input).is_err(),
-                    "fixture '{name}' should fail"
-                );
+                assert!(LockFile::from_toml(toml_input).is_err(), "fixture '{name}' should fail");
                 continue;
             }
 
-            let lock = LockFile::from_toml(toml_input)
-                .unwrap_or_else(|e| panic!("fixture '{name}' parse failed: {e}"));
+            let lock = LockFile::from_toml(toml_input).unwrap_or_else(|e| panic!("fixture '{name}' parse failed: {e}"));
 
             assert_eq!(
                 lock.metadata.schema_version,
@@ -125,11 +115,7 @@ mod tests {
             );
 
             if let Some(count) = fix["expected"]["package_count"].as_u64() {
-                assert_eq!(
-                    lock.packages.len(),
-                    count as usize,
-                    "fixture '{name}' package_count"
-                );
+                assert_eq!(lock.packages.len(), count as usize, "fixture '{name}' package_count");
             }
 
             if let Some(expected_name) = fix["expected"]["first_package_name"].as_str() {
@@ -141,8 +127,8 @@ mod tests {
 
             // Roundtrip: serialize and re-parse
             let serialized = lock.to_toml().unwrap();
-            let reparsed = LockFile::from_toml(&serialized)
-                .unwrap_or_else(|e| panic!("fixture '{name}' roundtrip failed: {e}"));
+            let reparsed =
+                LockFile::from_toml(&serialized).unwrap_or_else(|e| panic!("fixture '{name}' roundtrip failed: {e}"));
             assert_eq!(lock.packages.len(), reparsed.packages.len());
         }
     }
@@ -214,13 +200,8 @@ mod tests {
 
         // Tampered data fails
         assert!(
-            lock.verify_artifact(
-                Ecosystem::PyPI,
-                "requests",
-                "requests-2.31.0.tar.gz",
-                b"tampered"
-            )
-            .is_err()
+            lock.verify_artifact(Ecosystem::PyPI, "requests", "requests-2.31.0.tar.gz", b"tampered")
+                .is_err()
         );
 
         // Missing package fails

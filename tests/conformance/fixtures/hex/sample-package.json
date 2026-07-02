@@ -5,15 +5,11 @@
   "docs_html_url": "https://hexdocs.pm/sample_hex",
   "meta": {
     "description": "Representative Hex package fixture",
-    "licenses": [
-      "Apache-2.0"
-    ],
+    "licenses": ["Apache-2.0"],
     "links": {
       "GitHub": "https://github.com/example/sample_hex"
     },
-    "maintainers": [
-      "Starmetal Fixtures"
-    ]
+    "maintainers": ["Starmetal Fixtures"]
   },
   "releases": [
     {

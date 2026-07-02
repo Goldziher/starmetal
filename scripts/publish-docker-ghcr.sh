@@ -8,7 +8,7 @@ IMAGE_NAME="${IMAGE_NAME:-starmetal}"
 MODE="dry-run"
 
 usage() {
-  cat <<'USAGE'
+	cat <<'USAGE'
 Usage: scripts/publish-docker-ghcr.sh [--dry-run|--push]
 
 Builds the StarMetal Docker image and optionally pushes it to GitHub Container Registry.
@@ -25,32 +25,32 @@ USAGE
 }
 
 for arg in "$@"; do
-  case "$arg" in
-  --dry-run) MODE="dry-run" ;;
-  --push) MODE="push" ;;
-  -h | --help)
-    usage
-    exit 0
-    ;;
-  *)
-    echo "unknown argument: $arg" >&2
-    usage >&2
-    exit 2
-    ;;
-  esac
+	case "$arg" in
+	--dry-run) MODE="dry-run" ;;
+	--push) MODE="push" ;;
+	-h | --help)
+		usage
+		exit 0
+		;;
+	*)
+		echo "unknown argument: $arg" >&2
+		usage >&2
+		exit 2
+		;;
+	esac
 done
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [[ -z "$VERSION" ]]; then
-  VERSION="$(grep -E '^version = "' "${REPO_ROOT}/Cargo.toml" | head -1 | cut -d'"' -f2)"
+	VERSION="$(grep -E '^version = "' "${REPO_ROOT}/Cargo.toml" | head -1 | cut -d'"' -f2)"
 fi
 if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]]; then
-  echo "invalid version: $VERSION" >&2
-  exit 1
+	echo "invalid version: $VERSION" >&2
+	exit 1
 fi
 
 if [[ -z "${DOCKER_IMAGE:-}" ]]; then
-  DOCKER_IMAGE="${GHCR_REGISTRY}/${GHCR_OWNER,,}/${IMAGE_NAME}"
+	DOCKER_IMAGE="${GHCR_REGISTRY}/${GHCR_OWNER,,}/${IMAGE_NAME}"
 fi
 
 cd "$REPO_ROOT"
@@ -60,17 +60,17 @@ docker run --rm "${DOCKER_IMAGE}:${VERSION}" --version
 docker run --rm "${DOCKER_IMAGE}:${VERSION}" config validate
 
 if [[ "$MODE" == "dry-run" ]]; then
-  echo "dry-run complete; not pushing ${DOCKER_IMAGE}:${VERSION}"
-  exit 0
+	echo "dry-run complete; not pushing ${DOCKER_IMAGE}:${VERSION}"
+	exit 0
 fi
 
 registry_host="${DOCKER_IMAGE%%/*}"
 username="${GHCR_USERNAME:-${GITHUB_ACTOR:-}}"
 token="${GHCR_TOKEN:-${GITHUB_TOKEN:-}}"
 if [[ -n "$username" && -n "$token" ]]; then
-  printf %s "$token" | docker login "$registry_host" --username "$username" --password-stdin
+	printf %s "$token" | docker login "$registry_host" --username "$username" --password-stdin
 else
-  echo "GHCR_USERNAME/GHCR_TOKEN not set; assuming docker is already logged in to ${registry_host}"
+	echo "GHCR_USERNAME/GHCR_TOKEN not set; assuming docker is already logged in to ${registry_host}"
 fi
 
 docker push "${DOCKER_IMAGE}:${VERSION}"

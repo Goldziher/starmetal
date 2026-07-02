@@ -9,10 +9,7 @@
         },
         "authors": {
           "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "dependencyGroups": {
           "default": [],
@@ -23,51 +20,32 @@
         },
         "description": {
           "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "id": {
           "type": "string"
         },
         "licenseExpression": {
           "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "listed": {
           "default": null,
-          "type": [
-            "boolean",
-            "null"
-          ]
+          "type": ["boolean", "null"]
         },
         "projectUrl": {
           "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "type": {
           "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "version": {
           "type": "string"
         }
       },
-      "required": [
-        "@id",
-        "id",
-        "version"
-      ],
+      "required": ["@id", "id", "version"],
       "type": "object"
     },
     "NugetDependency": {
@@ -78,22 +56,14 @@
         },
         "range": {
           "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "registration": {
           "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         }
       },
-      "required": [
-        "id"
-      ],
+      "required": ["id"],
       "type": "object"
     },
     "NugetDependencyGroup": {
@@ -108,10 +78,7 @@
         },
         "targetFramework": {
           "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         }
       },
       "type": "object"
@@ -130,17 +97,10 @@
         },
         "registration": {
           "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         }
       },
-      "required": [
-        "@id",
-        "catalogEntry",
-        "packageContent"
-      ],
+      "required": ["@id", "catalogEntry", "packageContent"],
       "type": "object"
     },
     "NugetRegistrationPage": {
@@ -168,12 +128,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "@id",
-        "count",
-        "lower",
-        "upper"
-      ],
+      "required": ["@id", "count", "lower", "upper"],
       "type": "object"
     }
   },
@@ -199,26 +154,15 @@
       "type": "array"
     }
   },
-  "required": [
-    "@id",
-    "count",
-    "items"
-  ],
+  "required": ["@id", "count", "items"],
   "title": "NuGet V3 Registration Index",
   "type": "object",
   "x-starmetal-source": {
     "generated_by": "starmetal-schema-manager",
     "schema_kind": "starmetal-derived-json-schema",
     "source_file": "crates/starmetal-core/src/registry/nuget.rs",
-    "source_ids": [
-      "nuget-v3-overview",
-      "nuget-v3-registration",
-      "nuget-nuspec-xsd"
-    ],
-    "source_kinds": [
-      "official-prose",
-      "official-xml-schema"
-    ],
+    "source_ids": ["nuget-v3-overview", "nuget-v3-registration", "nuget-nuspec-xsd"],
+    "source_kinds": ["official-prose", "official-xml-schema"],
     "source_type": "starmetal_core::registry::nuget::NugetRegistrationIndex",
     "validated_by": "crates/starmetal-core/tests/schema_validation.rs"
   }

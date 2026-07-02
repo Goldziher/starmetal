@@ -67,22 +67,18 @@ impl TestServer {
         .await
     }
 
-    async fn start_with_all_enabled_and_config(
-        enable_all: bool,
-        configure: impl FnOnce(&mut Config),
-    ) -> Self {
+    async fn start_with_all_enabled_and_config(enable_all: bool, configure: impl FnOnce(&mut Config)) -> Self {
         let storage = OpenDalStorage::memory().expect("failed to create memory storage");
         let mut upstream_clients: AHashMap<Ecosystem, Arc<dyn UpstreamClient>> = AHashMap::new();
 
         // PyPI
-        let pypi_url = std::env::var("STARMETAL_TEST_UPSTREAM_PYPI_URL")
-            .unwrap_or_else(|_| "https://pypi.org".into());
+        let pypi_url = std::env::var("STARMETAL_TEST_UPSTREAM_PYPI_URL").unwrap_or_else(|_| "https://pypi.org".into());
         let pypi_client = Arc::new(PypiUpstreamClient::new(pypi_url));
         upstream_clients.insert(Ecosystem::PyPI, pypi_client.clone());
 
         // npm
-        let npm_url = std::env::var("STARMETAL_TEST_UPSTREAM_NPM_URL")
-            .unwrap_or_else(|_| "https://registry.npmjs.org".into());
+        let npm_url =
+            std::env::var("STARMETAL_TEST_UPSTREAM_NPM_URL").unwrap_or_else(|_| "https://registry.npmjs.org".into());
         let npm_client = Arc::new(NpmUpstreamClient::new(npm_url));
         upstream_clients.insert(Ecosystem::Npm, npm_client.clone());
 
@@ -95,10 +91,9 @@ impl TestServer {
         upstream_clients.insert(Ecosystem::Cargo, cargo_client.clone());
 
         // Hex
-        let hex_url = std::env::var("STARMETAL_TEST_UPSTREAM_HEX_URL")
-            .unwrap_or_else(|_| "https://hex.pm".into());
-        let hex_repo_url = std::env::var("STARMETAL_TEST_UPSTREAM_HEX_REPO_URL")
-            .unwrap_or_else(|_| "https://repo.hex.pm".into());
+        let hex_url = std::env::var("STARMETAL_TEST_UPSTREAM_HEX_URL").unwrap_or_else(|_| "https://hex.pm".into());
+        let hex_repo_url =
+            std::env::var("STARMETAL_TEST_UPSTREAM_HEX_REPO_URL").unwrap_or_else(|_| "https://repo.hex.pm".into());
         let hex_client = Arc::new(HexUpstreamClient::new(hex_url, hex_repo_url));
         upstream_clients.insert(Ecosystem::Hex, hex_client.clone());
 
@@ -107,8 +102,8 @@ impl TestServer {
         let maven_client = Arc::new(MavenUpstreamClient::new(maven_url));
         upstream_clients.insert(Ecosystem::Maven, maven_client.clone());
 
-        let rubygems_url = std::env::var("STARMETAL_TEST_UPSTREAM_RUBYGEMS_URL")
-            .unwrap_or_else(|_| "https://rubygems.org".into());
+        let rubygems_url =
+            std::env::var("STARMETAL_TEST_UPSTREAM_RUBYGEMS_URL").unwrap_or_else(|_| "https://rubygems.org".into());
         let rubygems_client = Arc::new(RubyGemsUpstreamClient::new(rubygems_url));
         upstream_clients.insert(Ecosystem::RubyGems, rubygems_client.clone());
 
@@ -117,8 +112,7 @@ impl TestServer {
         let nuget_client = Arc::new(NuGetUpstreamClient::new(nuget_url));
         upstream_clients.insert(Ecosystem::NuGet, nuget_client.clone());
 
-        let pub_url = std::env::var("STARMETAL_TEST_UPSTREAM_PUB_URL")
-            .unwrap_or_else(|_| "https://pub.dev".into());
+        let pub_url = std::env::var("STARMETAL_TEST_UPSTREAM_PUB_URL").unwrap_or_else(|_| "https://pub.dev".into());
         let pub_client = Arc::new(PubUpstreamClient::new(pub_url));
         upstream_clients.insert(Ecosystem::Pub, pub_client.clone());
 
@@ -130,9 +124,7 @@ impl TestServer {
 
         let mut config = Config::default();
         if enable_all {
-            for name in [
-                "pypi", "npm", "cargo", "hex", "maven", "rubygems", "nuget", "pub",
-            ] {
+            for name in ["pypi", "npm", "cargo", "hex", "maven", "rubygems", "nuget", "pub"] {
                 config
                     .upstream
                     .get_mut(name)

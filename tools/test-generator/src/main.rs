@@ -10,10 +10,7 @@ use serde::Deserialize;
 /// schema and produces a single Rust source file containing `#[test]`
 /// functions for each test case.
 #[derive(Parser)]
-#[command(
-    name = "starmetal-test-generator",
-    about = "Generate tests from JSON fixtures"
-)]
+#[command(name = "starmetal-test-generator", about = "Generate tests from JSON fixtures")]
 struct Cli {
     /// Path to the directory containing JSON fixture files
     #[arg(long)]
@@ -40,10 +37,7 @@ fn main() {
 
     let fixture_files = collect_fixture_files(&cli.fixtures);
     if fixture_files.is_empty() {
-        eprintln!(
-            "warning: no JSON fixture files found in {}",
-            cli.fixtures.display()
-        );
+        eprintln!("warning: no JSON fixture files found in {}", cli.fixtures.display());
     }
 
     let mut output = String::new();
@@ -58,9 +52,7 @@ fn main() {
     let mut total_tests = 0usize;
 
     for fixture_path in &fixture_files {
-        let relative = fixture_path
-            .strip_prefix(&cli.fixtures)
-            .unwrap_or(fixture_path);
+        let relative = fixture_path.strip_prefix(&cli.fixtures).unwrap_or(fixture_path);
 
         let content = match std::fs::read_to_string(fixture_path) {
             Ok(content) => content,
@@ -99,10 +91,7 @@ fn main() {
         && !parent.exists()
     {
         std::fs::create_dir_all(parent).unwrap_or_else(|err| {
-            eprintln!(
-                "error: failed to create directory {}: {err}",
-                parent.display()
-            );
+            eprintln!("error: failed to create directory {}: {err}", parent.display());
             std::process::exit(1);
         });
     }
@@ -130,10 +119,7 @@ fn collect_fixture_files(directory: &Path) -> Vec<PathBuf> {
         .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "json"))
         .filter(|entry| {
             // Skip the schema file itself.
-            !entry
-                .file_name()
-                .to_str()
-                .is_some_and(|name| name.starts_with("00-"))
+            !entry.file_name().to_str().is_some_and(|name| name.starts_with("00-"))
         })
         .map(|entry| entry.into_path())
         .collect();
@@ -147,10 +133,7 @@ fn collect_fixture_files(directory: &Path) -> Vec<PathBuf> {
 /// For example, `config/01_config_parsing.json` becomes `config_01_config_parsing`.
 fn derive_module_prefix(relative_path: &Path) -> String {
     let stem = relative_path.with_extension("");
-    let raw = stem
-        .to_string_lossy()
-        .replace(['/', '\\'], "_")
-        .replace('-', "_");
+    let raw = stem.to_string_lossy().replace(['/', '\\'], "_").replace('-', "_");
     sanitize_identifier(&raw)
 }
 
@@ -181,13 +164,7 @@ fn make_function_name(prefix: &str, case_name: &str) -> String {
 fn sanitize_identifier(input: &str) -> String {
     let mut result: String = input
         .chars()
-        .map(|c| {
-            if c.is_alphanumeric() || c == '_' {
-                c
-            } else {
-                '_'
-            }
-        })
+        .map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' })
         .collect();
 
     // Collapse consecutive underscores.
@@ -231,12 +208,7 @@ fn generate_test_function(
 }
 
 /// Generate test for package category fixtures.
-fn generate_package_test(
-    output: &mut String,
-    function_name: &str,
-    case: &TestCase,
-    fixture_path: &Path,
-) {
+fn generate_package_test(output: &mut String, function_name: &str, case: &TestCase, fixture_path: &Path) {
     let fixture_name = &case.name;
 
     // Detect sub-type based on expected keys and input keys.
@@ -295,11 +267,7 @@ fn generate_package_test(
             fixture_path.display()
         )
         .unwrap();
-        writeln!(
-            output,
-            "    let artifact = starmetal_core::package::ArtifactId {{"
-        )
-        .unwrap();
+        writeln!(output, "    let artifact = starmetal_core::package::ArtifactId {{").unwrap();
         writeln!(
             output,
             "        ecosystem: {:?}.parse().expect(\"parse ecosystem\"),",
@@ -382,12 +350,7 @@ fn generate_package_test(
 }
 
 /// Generate test for integrity category fixtures.
-fn generate_integrity_test(
-    output: &mut String,
-    function_name: &str,
-    case: &TestCase,
-    fixture_path: &Path,
-) {
+fn generate_integrity_test(output: &mut String, function_name: &str, case: &TestCase, fixture_path: &Path) {
     let fixture_name = &case.name;
     let input_data = case.input["data"].as_str().unwrap_or("");
     let expected_blake3 = case.expected.get("blake3");
@@ -430,12 +393,7 @@ fn generate_integrity_test(
 }
 
 /// Generate test for policy category fixtures.
-fn generate_policy_test(
-    output: &mut String,
-    function_name: &str,
-    case: &TestCase,
-    fixture_path: &Path,
-) {
+fn generate_policy_test(output: &mut String, function_name: &str, case: &TestCase, fixture_path: &Path) {
     let fixture_name = &case.name;
     let policy = &case.input["policy"];
     let package = &case.input["package"];
@@ -465,11 +423,7 @@ fn generate_policy_test(
         fixture_path.display()
     )
     .unwrap();
-    writeln!(
-        output,
-        "    let policy = starmetal_core::policy::PolicyConfig {{"
-    )
-    .unwrap();
+    writeln!(output, "    let policy = starmetal_core::policy::PolicyConfig {{").unwrap();
     writeln!(output, "        block_unlicensed: {block_unlicensed},").unwrap();
     writeln!(
         output,
@@ -500,11 +454,7 @@ fn generate_policy_test(
     writeln!(output, "    }};").unwrap();
 
     // Build metadata
-    writeln!(
-        output,
-        "    let metadata = starmetal_core::package::VersionMetadata {{"
-    )
-    .unwrap();
+    writeln!(output, "    let metadata = starmetal_core::package::VersionMetadata {{").unwrap();
     writeln!(
         output,
         "        name: starmetal_core::package::PackageName::new({:?}),",
@@ -532,11 +482,7 @@ fn generate_policy_test(
     writeln!(output, "            filename: \"dummy.tar.gz\".into(),").unwrap();
     writeln!(output, "            blake3: \"0\".repeat(64),").unwrap();
     writeln!(output, "            size: 0,").unwrap();
-    writeln!(
-        output,
-        "            upstream_hashes: ahash::AHashMap::new(),"
-    )
-    .unwrap();
+    writeln!(output, "            upstream_hashes: ahash::AHashMap::new(),").unwrap();
     writeln!(output, "        }}],").unwrap();
     writeln!(output, "        listed: None,").unwrap();
     writeln!(output, "        protocol_metadata: None,").unwrap();
@@ -572,12 +518,7 @@ fn generate_policy_test(
 }
 
 /// Generate test for config category fixtures.
-fn generate_config_test(
-    output: &mut String,
-    function_name: &str,
-    case: &TestCase,
-    fixture_path: &Path,
-) {
+fn generate_config_test(output: &mut String, function_name: &str, case: &TestCase, fixture_path: &Path) {
     let fixture_name = &case.name;
     let toml_input = case.input["toml"].as_str().unwrap_or("");
 
@@ -622,11 +563,7 @@ fn generate_config_test(
             )
             .unwrap();
         }
-        if let Some(backend) = case
-            .expected
-            .get("storage_backend")
-            .and_then(|v| v.as_str())
-        {
+        if let Some(backend) = case.expected.get("storage_backend").and_then(|v| v.as_str()) {
             writeln!(
                 output,
                 "    assert_eq!(config.storage.backend, {:?}, \"fixture '{}' backend\");",
@@ -642,11 +579,7 @@ fn generate_config_test(
             )
             .unwrap();
         }
-        if let Some(block) = case
-            .expected
-            .get("block_unlicensed")
-            .and_then(|v| v.as_bool())
-        {
+        if let Some(block) = case.expected.get("block_unlicensed").and_then(|v| v.as_bool()) {
             if block {
                 writeln!(
                     output,
@@ -687,12 +620,7 @@ fn generate_config_test(
 }
 
 /// Generate test for lockfile category fixtures.
-fn generate_lockfile_test(
-    output: &mut String,
-    function_name: &str,
-    case: &TestCase,
-    fixture_path: &Path,
-) {
+fn generate_lockfile_test(output: &mut String, function_name: &str, case: &TestCase, fixture_path: &Path) {
     let fixture_name = &case.name;
     let toml_input = case.input["toml"].as_str().unwrap_or("");
 
@@ -728,11 +656,7 @@ fn generate_lockfile_test(
             )
             .unwrap();
         }
-        if let Some(dv) = case
-            .expected
-            .get("starmetal_version")
-            .and_then(|v| v.as_str())
-        {
+        if let Some(dv) = case.expected.get("starmetal_version").and_then(|v| v.as_str()) {
             writeln!(
                 output,
                 "    assert_eq!(lock.metadata.starmetal_version, {:?}, \"fixture '{}' starmetal_version\");",
@@ -748,11 +672,7 @@ fn generate_lockfile_test(
             )
             .unwrap();
         }
-        if let Some(name) = case
-            .expected
-            .get("first_package_name")
-            .and_then(|v| v.as_str())
-        {
+        if let Some(name) = case.expected.get("first_package_name").and_then(|v| v.as_str()) {
             writeln!(
                 output,
                 "    assert_eq!(lock.packages[0].name, {:?}, \"fixture '{}' first package name\");",
@@ -760,11 +680,7 @@ fn generate_lockfile_test(
             )
             .unwrap();
         }
-        if let Some(eco) = case
-            .expected
-            .get("first_package_ecosystem")
-            .and_then(|v| v.as_str())
-        {
+        if let Some(eco) = case.expected.get("first_package_ecosystem").and_then(|v| v.as_str()) {
             writeln!(
                 output,
                 "    assert_eq!(lock.packages[0].ecosystem.to_string(), {:?}, \"fixture '{}' first package ecosystem\");",
@@ -798,12 +714,7 @@ fn generate_lockfile_test(
 }
 
 /// Fallback test generator for unknown categories.
-fn generate_fallback_test(
-    output: &mut String,
-    function_name: &str,
-    case: &TestCase,
-    fixture_path: &Path,
-) {
+fn generate_fallback_test(output: &mut String, function_name: &str, case: &TestCase, fixture_path: &Path) {
     let input_json = serde_json::to_string(&case.input).unwrap();
     let expected_json = serde_json::to_string(&case.expected).unwrap();
 

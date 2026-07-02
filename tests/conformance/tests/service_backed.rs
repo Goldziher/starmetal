@@ -4,9 +4,7 @@ use ahash::AHashMap;
 use async_trait::async_trait;
 use bytes::Bytes;
 use starmetal_core::error::{Result, StarmetalError};
-use starmetal_core::package::{
-    ArtifactDigest, ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata,
-};
+use starmetal_core::package::{ArtifactDigest, ArtifactId, Ecosystem, PackageName, VersionInfo, VersionMetadata};
 use starmetal_core::policy::PolicyConfig;
 use starmetal_core::ports::{PackageService, UpstreamClient};
 use starmetal_service::CachingPackageService;
@@ -15,8 +13,7 @@ use starmetal_storage::OpenDalStorage;
 const ARTIFACT_BYTES: &[u8] = b"artifact bytes";
 const SHA1: &str = "1f80eeacf4808e99293f1d55132f34cd5c5a46a5";
 const SHA256: &str = "4659fc0570122b0e0aa14f4ff7c261b1fe51795a01ba79963f462ebf40d7520d";
-const SHA512_BASE64: &str =
-    "2+ZxEOA7dhjT/g95Er8TdnGPbdnMm0EDQR0/IrDlIEoMHM9tOZFql9d40U7tTF5fSAx7PFIIUTHjWNoPb/bs1Q==";
+const SHA512_BASE64: &str = "2+ZxEOA7dhjT/g95Er8TdnGPbdnMm0EDQR0/IrDlIEoMHM9tOZFql9d40U7tTF5fSAx7PFIIUTHjWNoPb/bs1Q==";
 const SRI: &str = "sha512-2+ZxEOA7dhjT/g95Er8TdnGPbdnMm0EDQR0/IrDlIEoMHM9tOZFql9d40U7tTF5fSAx7PFIIUTHjWNoPb/bs1Q==";
 
 struct StaticUpstream {
@@ -194,12 +191,7 @@ async fn service_backed_conformance_rejects_policy_violations() {
         blocked_packages: vec!["blocked-package".to_string()],
         ..PolicyConfig::default()
     };
-    let service = service_for(
-        Ecosystem::PyPI,
-        metadata,
-        Bytes::from_static(ARTIFACT_BYTES),
-        policy,
-    );
+    let service = service_for(Ecosystem::PyPI, metadata, Bytes::from_static(ARTIFACT_BYTES), policy);
     let artifact = ArtifactId {
         ecosystem: Ecosystem::PyPI,
         name: PackageName::new("blocked-package"),

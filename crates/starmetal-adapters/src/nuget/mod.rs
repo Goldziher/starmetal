@@ -31,15 +31,9 @@ pub trait HasNuGetState: Clone + Send + Sync + 'static {
 pub fn router<S: HasNuGetState>() -> Router<S> {
     Router::new()
         .route("/v3/index.json", get(service_index::<S>))
-        .route(
-            "/api/v2/package",
-            put(publish_package::<S>).post(publish_package::<S>),
-        )
+        .route("/api/v2/package", put(publish_package::<S>).post(publish_package::<S>))
         .route("/v3-flatcontainer/{id}/index.json", get(versions::<S>))
-        .route(
-            "/v3-flatcontainer/{id}/{version}/{filename}",
-            get(package_file::<S>),
-        )
+        .route("/v3-flatcontainer/{id}/{version}/{filename}", get(package_file::<S>))
         .route("/v3/registration/{id}/index.json", get(registration::<S>))
 }
 
@@ -210,20 +204,12 @@ fn authorize_publish<S: HasNuGetState>(
     name: &PackageName,
 ) -> Result<(), (StatusCode, String)> {
     if !state.config().publishing.enabled {
-        return Err((
-            StatusCode::NOT_FOUND,
-            "publishing is not enabled".to_string(),
-        ));
+        return Err((StatusCode::NOT_FOUND, "publishing is not enabled".to_string()));
     }
     let token = headers
         .get("x-nuget-apikey")
         .and_then(|value| value.to_str().ok())
-        .ok_or_else(|| {
-            (
-                StatusCode::UNAUTHORIZED,
-                "missing publishing token".to_string(),
-            )
-        })?;
+        .ok_or_else(|| (StatusCode::UNAUTHORIZED, "missing publishing token".to_string()))?;
     if state
         .config()
         .authorize_publish_token(token, TokenScope::Publish, Ecosystem::NuGet, name)

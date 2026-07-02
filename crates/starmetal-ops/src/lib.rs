@@ -8,12 +8,8 @@ use serde::{Deserialize, Serialize};
 use starmetal_core::config::{Config, DEFAULT_MAX_UPSTREAM_BYTES, UpstreamConfig};
 use starmetal_core::error::{Result, StarmetalError};
 use starmetal_core::package::{ArtifactId, Ecosystem, PackageName, VersionMetadata};
-use starmetal_core::ports::{
-    PackageService, PublishingService, StatisticsService, StoragePort, UpstreamClient,
-};
-use starmetal_core::publishing::{
-    ProtocolMetadata, PublishRequest, PublishedArtifact, YankRequest,
-};
+use starmetal_core::ports::{PackageService, PublishingService, StatisticsService, StoragePort, UpstreamClient};
+use starmetal_core::publishing::{ProtocolMetadata, PublishRequest, PublishedArtifact, YankRequest};
 use starmetal_server::state::{AppState, UpstreamClients};
 use starmetal_service::{CachingPackageService, SigningService};
 use starmetal_storage::OpenDalStorage;
@@ -189,12 +185,7 @@ impl StarmetalRuntime {
         self.package_service.list_versions(ecosystem, &name).await
     }
 
-    pub async fn metadata(
-        &self,
-        ecosystem: Ecosystem,
-        name: &str,
-        version: &str,
-    ) -> Result<VersionMetadata> {
+    pub async fn metadata(&self, ecosystem: Ecosystem, name: &str, version: &str) -> Result<VersionMetadata> {
         let name = normalize_name(ecosystem, name);
         self.package_service
             .get_version_metadata(ecosystem, &name, version)
@@ -327,17 +318,14 @@ fn apply_overrides(config: &mut Config, overrides: ConfigOverrides) {
         config.storage.options.insert(key, value);
     }
     for upstream in overrides.upstreams {
-        let entry = config
-            .upstream
-            .entry(upstream.name)
-            .or_insert_with(|| UpstreamConfig {
-                enabled: true,
-                url: String::new(),
-                artifact_url: None,
-                allow_insecure: false,
-                allow_private_network: false,
-                max_response_bytes: DEFAULT_MAX_UPSTREAM_BYTES,
-            });
+        let entry = config.upstream.entry(upstream.name).or_insert_with(|| UpstreamConfig {
+            enabled: true,
+            url: String::new(),
+            artifact_url: None,
+            allow_insecure: false,
+            allow_private_network: false,
+            max_response_bytes: DEFAULT_MAX_UPSTREAM_BYTES,
+        });
         if let Some(enabled) = upstream.enabled {
             entry.enabled = enabled;
         }
@@ -386,10 +374,7 @@ fn register_maven_upstream(
     config: &Config,
     clients: &mut AHashMap<Ecosystem, Arc<dyn UpstreamClient>>,
 ) -> Arc<starmetal_adapters::maven::upstream::MavenUpstreamClient> {
-    let upstream_config = config
-        .upstream
-        .get("maven")
-        .expect("default maven upstream");
+    let upstream_config = config.upstream.get("maven").expect("default maven upstream");
     let client = Arc::new(
         starmetal_adapters::maven::upstream::MavenUpstreamClient::with_max_response_bytes(
             upstream_config.url.clone(),
@@ -407,10 +392,7 @@ fn register_rubygems_upstream(
     config: &Config,
     clients: &mut AHashMap<Ecosystem, Arc<dyn UpstreamClient>>,
 ) -> Arc<starmetal_adapters::rubygems::upstream::RubyGemsUpstreamClient> {
-    let upstream_config = config
-        .upstream
-        .get("rubygems")
-        .expect("default rubygems upstream");
+    let upstream_config = config.upstream.get("rubygems").expect("default rubygems upstream");
     let client = Arc::new(
         starmetal_adapters::rubygems::upstream::RubyGemsUpstreamClient::with_max_response_bytes(
             upstream_config
@@ -431,10 +413,7 @@ fn register_nuget_upstream(
     config: &Config,
     clients: &mut AHashMap<Ecosystem, Arc<dyn UpstreamClient>>,
 ) -> Arc<starmetal_adapters::nuget::upstream::NuGetUpstreamClient> {
-    let upstream_config = config
-        .upstream
-        .get("nuget")
-        .expect("default nuget upstream");
+    let upstream_config = config.upstream.get("nuget").expect("default nuget upstream");
     let client = Arc::new(
         starmetal_adapters::nuget::upstream::NuGetUpstreamClient::with_max_response_bytes(
             upstream_config.url.clone(),
@@ -506,10 +485,7 @@ fn register_cargo_upstream(
     config: &Config,
     clients: &mut AHashMap<Ecosystem, Arc<dyn UpstreamClient>>,
 ) -> Arc<starmetal_adapters::cargo::upstream::CargoUpstreamClient> {
-    let upstream_config = config
-        .upstream
-        .get("cargo")
-        .expect("default cargo upstream");
+    let upstream_config = config.upstream.get("cargo").expect("default cargo upstream");
     let artifact_url = upstream_config
         .artifact_url
         .clone()

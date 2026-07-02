@@ -67,15 +67,9 @@ async fn npm_package_metadata_returns_json() {
 
     let body: serde_json::Value = response.json().await.expect("invalid JSON response");
     assert_eq!(body["name"], "is-odd");
+    assert!(body["versions"].is_object(), "expected versions object in packument");
     assert!(
-        body["versions"].is_object(),
-        "expected versions object in packument"
-    );
-    assert!(
-        !body["versions"]
-            .as_object()
-            .expect("versions not an object")
-            .is_empty(),
+        !body["versions"].as_object().expect("versions not an object").is_empty(),
         "expected at least one version"
     );
 
@@ -97,9 +91,7 @@ async fn npm_package_tarball_download() {
     assert_eq!(meta_response.status(), 200);
 
     let body: serde_json::Value = meta_response.json().await.expect("invalid JSON");
-    let latest = body["dist-tags"]["latest"]
-        .as_str()
-        .expect("no latest dist-tag");
+    let latest = body["dist-tags"]["latest"].as_str().expect("no latest dist-tag");
 
     let filename = format!("is-odd-{latest}.tgz");
     let tarball_response = client
@@ -110,10 +102,7 @@ async fn npm_package_tarball_download() {
 
     assert_eq!(tarball_response.status(), 200);
     let bytes = tarball_response.bytes().await.expect("failed to read body");
-    assert!(
-        !bytes.is_empty(),
-        "expected non-empty tarball for is-odd@{latest}"
-    );
+    assert!(!bytes.is_empty(), "expected non-empty tarball for is-odd@{latest}");
 
     server.shutdown();
 }
@@ -132,10 +121,7 @@ async fn npm_scoped_package() {
 
     // Should be 200 (found) or 404 (not found), but never 500 (server error)
     let status = response.status().as_u16();
-    assert!(
-        status == 200 || status == 404,
-        "expected 200 or 404, got {status}"
-    );
+    assert!(status == 200 || status == 404, "expected 200 or 404, got {status}");
 
     server.shutdown();
 }
@@ -147,10 +133,7 @@ async fn npm_nonexistent_package_returns_404() {
     let client = reqwest::Client::new();
 
     let response = client
-        .get(format!(
-            "{}/npm/this-does-not-exist-starmetal-test",
-            server.base_url()
-        ))
+        .get(format!("{}/npm/this-does-not-exist-starmetal-test", server.base_url()))
         .send()
         .await
         .expect("request failed");
@@ -193,14 +176,7 @@ async fn npm_install_small_package() {
     let tmp = tempfile::tempdir().expect("failed to create tempdir");
     let cache = tempfile::tempdir().expect("failed to create cache tempdir");
 
-    let output = npm_install(
-        &npm,
-        &registry_url,
-        "is-odd@3.0.1",
-        tmp.path(),
-        cache.path(),
-    )
-    .await;
+    let output = npm_install(&npm, &registry_url, "is-odd@3.0.1", tmp.path(), cache.path()).await;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -218,9 +194,7 @@ async fn npm_install_small_package() {
     assert!(
         tmp.path().join("node_modules/is-odd").exists(),
         "is-odd not found in node_modules. Contents: {:?}",
-        std::fs::read_dir(tmp.path()).map(|d| d
-            .filter_map(|e| e.ok().map(|e| e.file_name()))
-            .collect::<Vec<_>>())
+        std::fs::read_dir(tmp.path()).map(|d| d.filter_map(|e| e.ok().map(|e| e.file_name())).collect::<Vec<_>>())
     );
 
     server.shutdown();
@@ -238,24 +212,10 @@ async fn npm_install_cached_on_second() {
     let cache1 = tempfile::tempdir().expect("cache tempdir");
     let cache2 = tempfile::tempdir().expect("cache tempdir");
 
-    let out1 = npm_install(
-        &npm,
-        &registry_url,
-        "is-odd@3.0.1",
-        tmp1.path(),
-        cache1.path(),
-    )
-    .await;
+    let out1 = npm_install(&npm, &registry_url, "is-odd@3.0.1", tmp1.path(), cache1.path()).await;
     assert!(out1.status.success(), "first npm install failed");
 
-    let out2 = npm_install(
-        &npm,
-        &registry_url,
-        "is-odd@3.0.1",
-        tmp2.path(),
-        cache2.path(),
-    )
-    .await;
+    let out2 = npm_install(&npm, &registry_url, "is-odd@3.0.1", tmp2.path(), cache2.path()).await;
     assert!(out2.status.success(), "second npm install (cached) failed");
 
     assert!(tmp2.path().join("node_modules/is-odd").exists());

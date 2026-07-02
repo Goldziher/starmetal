@@ -6,17 +6,11 @@
         "fileCount": {
           "format": "uint64",
           "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
+          "type": ["integer", "null"]
         },
         "integrity": {
           "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "shasum": {
           "type": "string"
@@ -27,16 +21,10 @@
         "unpackedSize": {
           "format": "uint64",
           "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
+          "type": ["integer", "null"]
         }
       },
-      "required": [
-        "tarball",
-        "shasum"
-      ],
+      "required": ["tarball", "shasum"],
       "type": "object"
     },
     "NpmVersion": {
@@ -51,10 +39,7 @@
         },
         "description": {
           "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "devDependencies": {
           "additionalProperties": {
@@ -68,10 +53,7 @@
         },
         "license": {
           "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "name": {
           "type": "string"
@@ -80,11 +62,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "name",
-        "version",
-        "dist"
-      ],
+      "required": ["name", "version", "dist"],
       "type": "object"
     }
   },
@@ -94,10 +72,7 @@
   "properties": {
     "description": {
       "default": null,
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": ["string", "null"]
     },
     "dist-tags": {
       "additionalProperties": {
@@ -111,10 +86,7 @@
     },
     "readme": {
       "default": null,
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": ["string", "null"]
     },
     "time": {
       "additionalProperties": {
@@ -130,24 +102,15 @@
       "type": "object"
     }
   },
-  "required": [
-    "name",
-    "versions"
-  ],
+  "required": ["name", "versions"],
   "title": "npm Registry Packument",
   "type": "object",
   "x-starmetal-source": {
     "generated_by": "starmetal-schema-manager",
     "schema_kind": "starmetal-derived-json-schema",
     "source_file": "crates/starmetal-core/src/registry/npm.rs",
-    "source_ids": [
-      "npm-package-metadata",
-      "npm-types"
-    ],
-    "source_kinds": [
-      "official-prose",
-      "official-typescript"
-    ],
+    "source_ids": ["npm-package-metadata", "npm-types"],
+    "source_kinds": ["official-prose", "official-typescript"],
     "source_type": "starmetal_core::registry::npm::NpmPackument",
     "validated_by": "crates/starmetal-core/tests/schema_validation.rs; tests/conformance"
   }

@@ -26,16 +26,13 @@ use starmetal_core::package::{
     decode_storage_segment, validate_storage_segment,
 };
 use starmetal_core::policy::PolicyConfig;
-use starmetal_core::ports::{
-    PackageService, PublishingService, StatisticsService, StoragePort, UpstreamClient,
-};
+use starmetal_core::ports::{PackageService, PublishingService, StatisticsService, StoragePort, UpstreamClient};
 use starmetal_core::publishing::{
-    ProtocolMetadata, PublishMode, PublishRecord, PublishRequest, PublishResult, PublishSource,
-    YankRequest,
+    ProtocolMetadata, PublishMode, PublishRecord, PublishRequest, PublishResult, PublishSource, YankRequest,
 };
 use starmetal_core::signing::{
-    DsseEnvelope, DsseSignature, STARMETAL_DSSE_PAYLOAD_TYPE, SignatureSource, SignatureStatement,
-    SigningAlgorithm, SigningConfig, SigningKeyStatus, SigningMode,
+    DsseEnvelope, DsseSignature, STARMETAL_DSSE_PAYLOAD_TYPE, SignatureSource, SignatureStatement, SigningAlgorithm,
+    SigningConfig, SigningKeyStatus, SigningMode,
 };
 use starmetal_core::statistics::{EcosystemStatistics, StatisticsSnapshot};
 use zeroize::Zeroizing;
@@ -125,8 +122,7 @@ impl SigningService {
                     key.id
                 )));
             };
-            let certificate_fingerprint_sha256 =
-                optional_file_sha256(key.certificate_file.as_deref())?;
+            let certificate_fingerprint_sha256 = optional_file_sha256(key.certificate_file.as_deref())?;
             let certificate_chain_pem = optional_pem_chain(key.certificate_chain_file.as_deref())?;
             keys.push(SigningKeyMaterial {
                 id: key.id.clone(),
@@ -141,23 +137,18 @@ impl SigningService {
             });
         }
 
-        if matches!(
-            config.mode,
-            SigningMode::SignOnly | SigningMode::SignAndVerify
-        ) && !keys.iter().any(|key| {
-            key.status == SigningKeyStatus::Active
-                && key.algorithm == SigningAlgorithm::Ed25519
-                && key.signing_key.is_some()
-        }) {
+        if matches!(config.mode, SigningMode::SignOnly | SigningMode::SignAndVerify)
+            && !keys.iter().any(|key| {
+                key.status == SigningKeyStatus::Active
+                    && key.algorithm == SigningAlgorithm::Ed25519
+                    && key.signing_key.is_some()
+            })
+        {
             return Err(StarmetalError::Config(
                 "signing requires a loadable active ed25519 key".to_string(),
             ));
         }
-        if matches!(
-            config.mode,
-            SigningMode::SignAndVerify | SigningMode::VerifyOnly
-        ) && keys.is_empty()
-        {
+        if matches!(config.mode, SigningMode::SignAndVerify | SigningMode::VerifyOnly) && keys.is_empty() {
             return Err(StarmetalError::Config(
                 "signature verification requires at least one verification key".to_string(),
             ));
@@ -166,53 +157,33 @@ impl SigningService {
         Ok(Some(Self {
             mode: config.mode,
             verify_on_read: config.verify_on_read
-                || matches!(
-                    config.mode,
-                    SigningMode::SignAndVerify | SigningMode::VerifyOnly
-                ),
+                || matches!(config.mode, SigningMode::SignAndVerify | SigningMode::VerifyOnly),
             sign_cached_upstream: config.sign_cached_upstream,
             keys,
         }))
     }
 
     fn verify_on_read(&self) -> bool {
-        self.verify_on_read
-            && matches!(
-                self.mode,
-                SigningMode::SignAndVerify | SigningMode::VerifyOnly
-            )
+        self.verify_on_read && matches!(self.mode, SigningMode::SignAndVerify | SigningMode::VerifyOnly)
     }
 
     fn sign_cached_upstream(&self) -> bool {
-        self.sign_cached_upstream
-            && matches!(
-                self.mode,
-                SigningMode::SignOnly | SigningMode::SignAndVerify
-            )
+        self.sign_cached_upstream && matches!(self.mode, SigningMode::SignOnly | SigningMode::SignAndVerify)
     }
 
-    fn select_signing_key(
-        &self,
-        ecosystem: Ecosystem,
-        package: &PackageName,
-    ) -> Result<&SigningKeyMaterial> {
+    fn select_signing_key(&self, ecosystem: Ecosystem, package: &PackageName) -> Result<&SigningKeyMaterial> {
         self.keys
             .iter()
             .find(|key| {
                 if key.status != SigningKeyStatus::Active || key.signing_key.is_none() {
                     return false;
                 }
-                let ecosystem_allowed =
-                    key.ecosystems.is_empty() || key.ecosystems.contains(&ecosystem);
-                let package_allowed = key.packages.is_empty()
-                    || key.packages.iter().any(|name| name == package.as_str());
+                let ecosystem_allowed = key.ecosystems.is_empty() || key.ecosystems.contains(&ecosystem);
+                let package_allowed =
+                    key.packages.is_empty() || key.packages.iter().any(|name| name == package.as_str());
                 ecosystem_allowed && package_allowed
             })
-            .ok_or_else(|| {
-                StarmetalError::Config(format!(
-                    "no signing key is scoped for {ecosystem}/{package}"
-                ))
-            })
+            .ok_or_else(|| StarmetalError::Config(format!("no signing key is scoped for {ecosystem}/{package}")))
     }
 
     fn statement(&self, input: StatementInput) -> Result<SignatureStatement> {
@@ -225,10 +196,7 @@ impl SigningService {
             storage_key: input.storage_key,
             size: input.size,
             blake3: input.blake3,
-            upstream_hashes: input
-                .upstream_hashes
-                .into_iter()
-                .collect::<BTreeMap<_, _>>(),
+            upstream_hashes: input.upstream_hashes.into_iter().collect::<BTreeMap<_, _>>(),
             source: input.source,
             issued_at_unix_seconds: unix_now(),
             key_id: key.id.clone(),
@@ -237,21 +205,16 @@ impl SigningService {
     }
 
     fn sign_statement(&self, statement: SignatureStatement) -> Result<DsseEnvelope> {
-        if !matches!(
-            self.mode,
-            SigningMode::SignOnly | SigningMode::SignAndVerify
-        ) {
+        if !matches!(self.mode, SigningMode::SignOnly | SigningMode::SignAndVerify) {
             return Err(StarmetalError::Config(
                 "signing service is not configured for signing".to_string(),
             ));
         }
         let key = self.select_signing_key(statement.ecosystem, &statement.package)?;
-        let signing_key = key.signing_key.as_ref().ok_or_else(|| {
-            StarmetalError::Config(format!(
-                "signing key {} has no private key material",
-                key.id
-            ))
-        })?;
+        let signing_key = key
+            .signing_key
+            .as_ref()
+            .ok_or_else(|| StarmetalError::Config(format!("signing key {} has no private key material", key.id)))?;
         let payload = serde_json::to_vec(&statement)?;
         let pae = dsse_pae(STARMETAL_DSSE_PAYLOAD_TYPE.as_bytes(), &payload);
         let signature = signing_key.sign(&pae);
@@ -276,12 +239,12 @@ impl SigningService {
                 actual: envelope.payload_type,
             });
         }
-        let payload = BASE64_STANDARD.decode(&envelope.payload).map_err(|err| {
-            StarmetalError::IntegrityError {
+        let payload = BASE64_STANDARD
+            .decode(&envelope.payload)
+            .map_err(|err| StarmetalError::IntegrityError {
                 expected: "base64 DSSE payload".to_string(),
                 actual: err.to_string(),
-            }
-        })?;
+            })?;
         let pae = dsse_pae(envelope.payload_type.as_bytes(), &payload);
         for signature in &envelope.signatures {
             let Some(key) = self.keys.iter().find(|key| key.id == signature.key_id) else {
@@ -293,24 +256,23 @@ impl SigningService {
             if signature.certificate_fingerprint_sha256 != key.certificate_fingerprint_sha256 {
                 continue;
             }
-            let signature_bytes = BASE64_STANDARD
-                .decode(&signature.signature)
-                .map_err(|err| StarmetalError::IntegrityError {
-                    expected: "base64 DSSE signature".to_string(),
-                    actual: err.to_string(),
-                })?;
-            let signature =
-                ed25519_dalek::Signature::from_slice(&signature_bytes).map_err(|err| {
-                    StarmetalError::IntegrityError {
-                        expected: "ed25519 signature".to_string(),
+            let signature_bytes =
+                BASE64_STANDARD
+                    .decode(&signature.signature)
+                    .map_err(|err| StarmetalError::IntegrityError {
+                        expected: "base64 DSSE signature".to_string(),
                         actual: err.to_string(),
-                    }
-                })?;
+                    })?;
+            let signature = ed25519_dalek::Signature::from_slice(&signature_bytes).map_err(|err| {
+                StarmetalError::IntegrityError {
+                    expected: "ed25519 signature".to_string(),
+                    actual: err.to_string(),
+                }
+            })?;
             if key.verifying_key.verify(&pae, &signature).is_ok() {
                 let statement: SignatureStatement = serde_json::from_slice(&payload)?;
                 if statement.key_id != key.id
-                    || statement.certificate_fingerprint_sha256
-                        != key.certificate_fingerprint_sha256
+                    || statement.certificate_fingerprint_sha256 != key.certificate_fingerprint_sha256
                 {
                     continue;
                 }
@@ -382,21 +344,14 @@ impl CachingPackageService {
     }
 
     fn upstream(&self, ecosystem: Ecosystem) -> Result<&Arc<dyn UpstreamClient>> {
-        self.upstream_clients.get(&ecosystem).ok_or_else(|| {
-            StarmetalError::Config(format!("no upstream configured for {ecosystem}"))
-        })
+        self.upstream_clients
+            .get(&ecosystem)
+            .ok_or_else(|| StarmetalError::Config(format!("no upstream configured for {ecosystem}")))
     }
 
     fn check_package_allowed(&self, name: &PackageName) -> Result<()> {
-        if self
-            .policy
-            .blocked_packages
-            .iter()
-            .any(|b| b == name.as_str())
-        {
-            return Err(StarmetalError::PolicyViolation(format!(
-                "package {name} is blocked"
-            )));
+        if self.policy.blocked_packages.iter().any(|b| b == name.as_str()) {
+            return Err(StarmetalError::PolicyViolation(format!("package {name} is blocked")));
         }
         Ok(())
     }
@@ -434,10 +389,7 @@ impl CachingPackageService {
         let name = name.storage_segment()?;
         validate_storage_segment("version", version)?;
         let ecosystem = ecosystem.to_string();
-        Ok(
-            StorageKey::from_segments(&[&ecosystem, &name, version, "_metadata.json"])?
-                .into_string(),
-        )
+        Ok(StorageKey::from_segments(&[&ecosystem, &name, version, "_metadata.json"])?.into_string())
     }
 
     fn raw_upstream_key(ecosystem: Ecosystem, name: &PackageName) -> Result<String> {
@@ -446,72 +398,41 @@ impl CachingPackageService {
         Ok(StorageKey::from_segments(&[&ecosystem, &name, "_raw_upstream"])?.into_string())
     }
 
-    fn published_record_key(
-        ecosystem: Ecosystem,
-        name: &PackageName,
-        version: &str,
-    ) -> Result<String> {
+    fn published_record_key(ecosystem: Ecosystem, name: &PackageName, version: &str) -> Result<String> {
         let name = name.storage_segment()?;
         validate_storage_segment("version", version)?;
         let ecosystem = ecosystem.to_string();
-        Ok(StorageKey::from_segments(&[
-            "_starmetal",
-            "published",
-            &ecosystem,
-            &name,
-            version,
-            "record.json",
-        ])?
-        .into_string())
+        Ok(
+            StorageKey::from_segments(&["_starmetal", "published", &ecosystem, &name, version, "record.json"])?
+                .into_string(),
+        )
     }
 
-    fn published_legacy_manifest_key(
-        ecosystem: Ecosystem,
-        name: &PackageName,
-        version: &str,
-    ) -> Result<String> {
+    fn published_legacy_manifest_key(ecosystem: Ecosystem, name: &PackageName, version: &str) -> Result<String> {
         let name = name.storage_segment()?;
         validate_storage_segment("version", version)?;
         let ecosystem = ecosystem.to_string();
         let manifest = format!("{version}.json");
         validate_storage_segment("published manifest filename", &manifest)?;
-        Ok(
-            StorageKey::from_segments(&["_starmetal", "published", &ecosystem, &name, &manifest])?
-                .into_string(),
-        )
+        Ok(StorageKey::from_segments(&["_starmetal", "published", &ecosystem, &name, &manifest])?.into_string())
     }
 
     fn signature_sidecar_key(storage_key: &str) -> String {
         format!("{storage_key}.starmetal.sig.json")
     }
 
-    fn signature_bundle_key(
-        ecosystem: Ecosystem,
-        name: &PackageName,
-        version: &str,
-        filename: &str,
-    ) -> Result<String> {
+    fn signature_bundle_key(ecosystem: Ecosystem, name: &PackageName, version: &str, filename: &str) -> Result<String> {
         let name = name.storage_segment()?;
         validate_storage_segment("version", version)?;
         let filename = crate_safe_signature_filename(filename)?;
         let ecosystem = ecosystem.to_string();
-        Ok(StorageKey::from_segments(&[
-            "_starmetal",
-            "signatures",
-            &ecosystem,
-            &name,
-            version,
-            &filename,
-        ])?
-        .into_string())
+        Ok(
+            StorageKey::from_segments(&["_starmetal", "signatures", &ecosystem, &name, version, &filename])?
+                .into_string(),
+        )
     }
 
-    async fn put_and_track(
-        &self,
-        key: &str,
-        data: Bytes,
-        staged_writes: &mut Vec<StagedWrite>,
-    ) -> Result<()> {
+    async fn put_and_track(&self, key: &str, data: Bytes, staged_writes: &mut Vec<StagedWrite>) -> Result<()> {
         if !staged_writes.iter().any(|write| write.key == key) {
             let previous = self.storage.get(key).await?;
             staged_writes.push(StagedWrite {
@@ -552,15 +473,12 @@ impl CachingPackageService {
         };
         let envelope = signing.sign_statement(statement)?;
         let bytes = Bytes::from(serde_json::to_vec(&envelope)?);
-        self.put_and_track(sidecar_key, bytes.clone(), staged_writes)
-            .await?;
+        self.put_and_track(sidecar_key, bytes.clone(), staged_writes).await?;
         self.put_and_track(bundle_key, bytes, staged_writes).await
     }
 
     fn verify_on_read(&self) -> bool {
-        self.signing
-            .as_ref()
-            .is_some_and(|signing| signing.verify_on_read())
+        self.signing.as_ref().is_some_and(|signing| signing.verify_on_read())
     }
 
     async fn verify_storage_signature(&self, check: StoredObjectSignatureCheck<'_>) -> Result<()> {
@@ -568,12 +486,14 @@ impl CachingPackageService {
             return Ok(());
         };
         let sidecar_key = Self::signature_sidecar_key(check.storage_key);
-        let envelope_bytes = self.storage.get(&sidecar_key).await?.ok_or_else(|| {
-            StarmetalError::IntegrityError {
+        let envelope_bytes = self
+            .storage
+            .get(&sidecar_key)
+            .await?
+            .ok_or_else(|| StarmetalError::IntegrityError {
                 expected: format!("signature sidecar {sidecar_key}"),
                 actual: "missing signature sidecar".to_string(),
-            }
-        })?;
+            })?;
         let statement = signing.verify_envelope(&envelope_bytes)?;
         let actual = integrity::blake3_hex(check.data);
         if statement.storage_key != check.storage_key
@@ -593,12 +513,7 @@ impl CachingPackageService {
         Ok(())
     }
 
-    async fn verify_artifact_signature(
-        &self,
-        artifact_id: &ArtifactId,
-        storage_key: &str,
-        data: &Bytes,
-    ) -> Result<()> {
+    async fn verify_artifact_signature(&self, artifact_id: &ArtifactId, storage_key: &str, data: &Bytes) -> Result<()> {
         let local_result = self
             .verify_storage_signature(StoredObjectSignatureCheck {
                 ecosystem: artifact_id.ecosystem,
@@ -647,11 +562,7 @@ impl CachingPackageService {
         .await
     }
 
-    async fn load_versions_for_publish(
-        &self,
-        ecosystem: Ecosystem,
-        name: &PackageName,
-    ) -> Result<Vec<VersionInfo>> {
+    async fn load_versions_for_publish(&self, ecosystem: Ecosystem, name: &PackageName) -> Result<Vec<VersionInfo>> {
         let key = Self::versions_key(ecosystem, name)?;
         if let Some(cached) = self.storage.get(&key).await? {
             return Ok(serde_json::from_slice(&cached)?);
@@ -668,11 +579,7 @@ impl CachingPackageService {
         Ok(Vec::new())
     }
 
-    fn record_statistics(
-        &self,
-        ecosystem: Ecosystem,
-        update: impl FnOnce(&mut EcosystemStatistics),
-    ) {
+    fn record_statistics(&self, ecosystem: Ecosystem, update: impl FnOnce(&mut EcosystemStatistics)) {
         let Ok(mut snapshot) = self.statistics.lock() else {
             tracing::warn!("statistics lock is poisoned; skipping statistics update");
             return;
@@ -703,11 +610,7 @@ impl CachingPackageService {
 
 #[async_trait]
 impl PackageService for CachingPackageService {
-    async fn list_versions(
-        &self,
-        ecosystem: Ecosystem,
-        name: &PackageName,
-    ) -> Result<Vec<VersionInfo>> {
+    async fn list_versions(&self, ecosystem: Ecosystem, name: &PackageName) -> Result<Vec<VersionInfo>> {
         self.check_package_allowed(name)?;
 
         let key = Self::versions_key(ecosystem, name)?;
@@ -765,12 +668,9 @@ impl PackageService for CachingPackageService {
         });
         tracing::info!(ecosystem = %ecosystem, name = %name, version, "fetching metadata from upstream");
         let upstream = self.upstream(ecosystem)?;
-        let metadata = upstream
-            .fetch_metadata(name, version)
-            .await
-            .inspect_err(|_err| {
-                self.record_upstream_error(ecosystem);
-            })?;
+        let metadata = upstream.fetch_metadata(name, version).await.inspect_err(|_err| {
+            self.record_upstream_error(ecosystem);
+        })?;
 
         self.policy.check(&metadata)?;
 
@@ -792,18 +692,11 @@ impl PackageService for CachingPackageService {
                     source: SignatureSource::Metadata,
                 })?;
                 let sidecar_key = Self::signature_sidecar_key(&key);
-                let bundle_key =
-                    Self::signature_bundle_key(ecosystem, name, version, "metadata.sig.json")?;
-                self.sign_and_store_statement(
-                    statement,
-                    &sidecar_key,
-                    &bundle_key,
-                    &mut staged_writes,
-                )
-                .await?;
+                let bundle_key = Self::signature_bundle_key(ecosystem, name, version, "metadata.sig.json")?;
+                self.sign_and_store_statement(statement, &sidecar_key, &bundle_key, &mut staged_writes)
+                    .await?;
             }
-            self.put_and_track(&key, serialized, &mut staged_writes)
-                .await
+            self.put_and_track(&key, serialized, &mut staged_writes).await
         }
         .await;
         if let Err(err) = result {
@@ -822,11 +715,7 @@ impl PackageService for CachingPackageService {
     async fn get_artifact(&self, artifact_id: &ArtifactId) -> Result<Bytes> {
         self.check_package_allowed(&artifact_id.name)?;
         let metadata = self
-            .get_version_metadata(
-                artifact_id.ecosystem,
-                &artifact_id.name,
-                &artifact_id.version,
-            )
+            .get_version_metadata(artifact_id.ecosystem, &artifact_id.name, &artifact_id.version)
             .await?;
         let artifact_digest = metadata
             .artifacts
@@ -845,8 +734,7 @@ impl PackageService for CachingPackageService {
                     actual: "unverified cached artifact".to_string(),
                 }
             })?;
-            let expected = std::str::from_utf8(&expected_hash)
-                .map_err(|e| StarmetalError::Storage(e.to_string()))?;
+            let expected = std::str::from_utf8(&expected_hash).map_err(|e| StarmetalError::Storage(e.to_string()))?;
             if let Err(err) = integrity::verify_or_err(&cached, expected) {
                 self.record_integrity_failure(artifact_id.ecosystem);
                 return Err(err);
@@ -856,8 +744,7 @@ impl PackageService for CachingPackageService {
                 stats.bytes_served = stats.bytes_served.saturating_add(cached.len() as u64);
             });
             if self.verify_on_read() {
-                self.verify_artifact_signature(artifact_id, &key, &cached)
-                    .await?;
+                self.verify_artifact_signature(artifact_id, &key, &cached).await?;
             }
             return Ok(cached);
         }
@@ -867,12 +754,9 @@ impl PackageService for CachingPackageService {
         });
         tracing::info!(key, "fetching artifact from upstream");
         let upstream = self.upstream(artifact_id.ecosystem)?;
-        let data = upstream
-            .fetch_artifact(artifact_id)
-            .await
-            .inspect_err(|_err| {
-                self.record_upstream_error(artifact_id.ecosystem);
-            })?;
+        let data = upstream.fetch_artifact(artifact_id).await.inspect_err(|_err| {
+            self.record_upstream_error(artifact_id.ecosystem);
+        })?;
         if let Err(err) = Self::verify_upstream_hash(&data, artifact_digest) {
             self.record_integrity_failure(artifact_id.ecosystem);
             return Err(err);
@@ -902,18 +786,12 @@ impl PackageService for CachingPackageService {
                     &artifact_id.version,
                     &format!("{}.sig.json", artifact_id.filename),
                 )?;
-                self.sign_and_store_statement(
-                    statement,
-                    &sidecar_key,
-                    &bundle_key,
-                    &mut staged_writes,
-                )
-                .await?;
+                self.sign_and_store_statement(statement, &sidecar_key, &bundle_key, &mut staged_writes)
+                    .await?;
             }
             self.put_and_track(&hash_key, Bytes::from(hash), &mut staged_writes)
                 .await?;
-            self.put_and_track(&key, data.clone(), &mut staged_writes)
-                .await
+            self.put_and_track(&key, data.clone(), &mut staged_writes).await
         }
         .await;
         if let Err(err) = result {
@@ -948,22 +826,13 @@ impl PackageService for CachingPackageService {
         Ok(packages)
     }
 
-    async fn get_raw_upstream(
-        &self,
-        ecosystem: Ecosystem,
-        name: &PackageName,
-    ) -> Result<Option<Bytes>> {
+    async fn get_raw_upstream(&self, ecosystem: Ecosystem, name: &PackageName) -> Result<Option<Bytes>> {
         self.check_package_allowed(name)?;
         let key = Self::raw_upstream_key(ecosystem, name)?;
         self.storage.get(&key).await
     }
 
-    async fn put_raw_upstream(
-        &self,
-        ecosystem: Ecosystem,
-        name: &PackageName,
-        data: Bytes,
-    ) -> Result<()> {
+    async fn put_raw_upstream(&self, ecosystem: Ecosystem, name: &PackageName, data: Bytes) -> Result<()> {
         self.check_package_allowed(name)?;
         let key = Self::raw_upstream_key(ecosystem, name)?;
         self.storage.put(&key, data).await
@@ -990,10 +859,7 @@ impl PublishingService for CachingPackageService {
 
         if !request.allow_shadowing
             && let Some(upstream) = self.upstream_clients.get(&request.ecosystem)
-            && upstream
-                .fetch_metadata(&request.name, &request.version)
-                .await
-                .is_ok()
+            && upstream.fetch_metadata(&request.name, &request.version).await.is_ok()
         {
             return Err(StarmetalError::Publish(format!(
                 "refusing to shadow upstream version: {}/{}@{}",
@@ -1051,12 +917,8 @@ impl PublishingService for CachingPackageService {
                 };
                 let key = artifact_id.validated_storage_key()?.into_string();
                 let blake3 = integrity::blake3_hex(&artifact.data);
-                self.put_and_track(
-                    &format!("{key}.blake3"),
-                    Bytes::from(blake3.clone()),
-                    &mut staged_keys,
-                )
-                .await?;
+                self.put_and_track(&format!("{key}.blake3"), Bytes::from(blake3.clone()), &mut staged_keys)
+                    .await?;
                 self.put_and_track(&key, artifact.data.clone(), &mut staged_keys)
                     .await?;
 
@@ -1085,13 +947,8 @@ impl PublishingService for CachingPackageService {
                         &request.version,
                         &format!("{}.sig.json", artifact.filename),
                     )?;
-                    self.sign_and_store_statement(
-                        statement,
-                        &sidecar_key,
-                        &bundle_key,
-                        &mut staged_keys,
-                    )
-                    .await?;
+                    self.sign_and_store_statement(statement, &sidecar_key, &bundle_key, &mut staged_keys)
+                        .await?;
                 }
             }
 
@@ -1123,20 +980,12 @@ impl PublishingService for CachingPackageService {
                     &request.version,
                     "metadata.sig.json",
                 )?;
-                self.sign_and_store_statement(
-                    statement,
-                    &sidecar_key,
-                    &bundle_key,
-                    &mut staged_keys,
-                )
-                .await?;
+                self.sign_and_store_statement(statement, &sidecar_key, &bundle_key, &mut staged_keys)
+                    .await?;
             }
 
-            let published_manifest_key = Self::published_legacy_manifest_key(
-                request.ecosystem,
-                &request.name,
-                &request.version,
-            )?;
+            let published_manifest_key =
+                Self::published_legacy_manifest_key(request.ecosystem, &request.name, &request.version)?;
             self.put_and_track(&published_manifest_key, metadata_bytes, &mut staged_keys)
                 .await?;
 
@@ -1151,22 +1000,12 @@ impl PublishingService for CachingPackageService {
                 yanked: metadata.yanked,
                 listed: request.listed,
             };
-            let record_key =
-                Self::published_record_key(request.ecosystem, &request.name, &request.version)?;
-            self.put_and_track(
-                &record_key,
-                Bytes::from(serde_json::to_vec(&record)?),
-                &mut staged_keys,
-            )
-            .await?;
-
-            let mut versions = self
-                .load_versions_for_publish(request.ecosystem, &request.name)
+            let record_key = Self::published_record_key(request.ecosystem, &request.name, &request.version)?;
+            self.put_and_track(&record_key, Bytes::from(serde_json::to_vec(&record)?), &mut staged_keys)
                 .await?;
-            if let Some(version) = versions
-                .iter_mut()
-                .find(|version| version.version == request.version)
-            {
+
+            let mut versions = self.load_versions_for_publish(request.ecosystem, &request.name).await?;
+            if let Some(version) = versions.iter_mut().find(|version| version.version == request.version) {
                 version.yanked = request.yanked;
             } else {
                 versions.push(VersionInfo {
@@ -1210,13 +1049,15 @@ impl PublishingService for CachingPackageService {
     async fn set_yanked(&self, request: YankRequest) -> Result<VersionMetadata> {
         self.check_package_allowed(&request.name)?;
         let metadata_key = Self::metadata_key(request.ecosystem, &request.name, &request.version)?;
-        let cached = self.storage.get(&metadata_key).await?.ok_or_else(|| {
-            StarmetalError::VersionNotFound {
+        let cached = self
+            .storage
+            .get(&metadata_key)
+            .await?
+            .ok_or_else(|| StarmetalError::VersionNotFound {
                 ecosystem: request.ecosystem.to_string(),
                 name: request.name.to_string(),
                 version: request.version.clone(),
-            }
-        })?;
+            })?;
         let mut metadata: VersionMetadata = serde_json::from_slice(&cached)?;
         metadata.yanked = request.yanked;
         self.policy.check(&metadata)?;
@@ -1249,25 +1090,16 @@ impl PublishingService for CachingPackageService {
                     &request.version,
                     "metadata.sig.json",
                 )?;
-                self.sign_and_store_statement(
-                    statement,
-                    &sidecar_key,
-                    &bundle_key,
-                    &mut staged_writes,
-                )
-                .await?;
+                self.sign_and_store_statement(statement, &sidecar_key, &bundle_key, &mut staged_writes)
+                    .await?;
             }
             self.put_and_track(&metadata_key, metadata_bytes.clone(), &mut staged_writes)
                 .await?;
-            let published_manifest_key = Self::published_legacy_manifest_key(
-                request.ecosystem,
-                &request.name,
-                &request.version,
-            )?;
+            let published_manifest_key =
+                Self::published_legacy_manifest_key(request.ecosystem, &request.name, &request.version)?;
             self.put_and_track(&published_manifest_key, metadata_bytes, &mut staged_writes)
                 .await?;
-            let record_key =
-                Self::published_record_key(request.ecosystem, &request.name, &request.version)?;
+            let record_key = Self::published_record_key(request.ecosystem, &request.name, &request.version)?;
             if let Some(record_bytes) = self.storage.get(&record_key).await? {
                 let mut record: PublishRecord = serde_json::from_slice(&record_bytes)?;
                 record.yanked = request.yanked;
@@ -1279,13 +1111,8 @@ impl PublishingService for CachingPackageService {
                 .await?;
             }
 
-            let mut versions = self
-                .load_versions_for_publish(request.ecosystem, &request.name)
-                .await?;
-            if let Some(version) = versions
-                .iter_mut()
-                .find(|version| version.version == request.version)
-            {
+            let mut versions = self.load_versions_for_publish(request.ecosystem, &request.name).await?;
+            if let Some(version) = versions.iter_mut().find(|version| version.version == request.version) {
                 version.yanked = request.yanked;
             } else {
                 versions.push(VersionInfo {
@@ -1351,9 +1178,7 @@ fn crate_safe_signature_filename(filename: &str) -> Result<String> {
     let encoded = filename
         .bytes()
         .map(|byte| match byte {
-            b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'.' | b'-' | b'_' => {
-                char::from(byte).to_string()
-            }
+            b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'.' | b'-' | b'_' => char::from(byte).to_string(),
             _ => format!("%{byte:02X}"),
         })
         .collect::<String>();
@@ -1386,9 +1211,8 @@ fn load_ed25519_signing_key(pem: &str, key_id: &str) -> Result<SigningKey> {
 }
 
 fn load_ed25519_verifying_key(pem: &str, key_id: &str) -> Result<VerifyingKey> {
-    let info = SubjectPublicKeyInfoOwned::from_pem(pem).map_err(|err| {
-        StarmetalError::Config(format!("invalid verification key {key_id}: {err}"))
-    })?;
+    let info = SubjectPublicKeyInfoOwned::from_pem(pem)
+        .map_err(|err| StarmetalError::Config(format!("invalid verification key {key_id}: {err}")))?;
     validate_ed25519_oid(info.algorithm.oid, key_id)?;
     let bytes = info.subject_public_key.as_bytes().ok_or_else(|| {
         StarmetalError::Config(format!(
@@ -1466,13 +1290,12 @@ fn verify_subresource_integrity(data: &Bytes, integrity_value: &str) -> Result<(
             _ => continue,
         };
 
-        let expected =
-            BASE64_STANDARD
-                .decode(encoded)
-                .map_err(|e| StarmetalError::IntegrityError {
-                    expected: format!("{algorithm}:{encoded}"),
-                    actual: format!("invalid SRI digest: {e}"),
-                })?;
+        let expected = BASE64_STANDARD
+            .decode(encoded)
+            .map_err(|e| StarmetalError::IntegrityError {
+                expected: format!("{algorithm}:{encoded}"),
+                actual: format!("invalid SRI digest: {e}"),
+            })?;
 
         if expected == actual {
             return Ok(());
@@ -1522,9 +1345,7 @@ mod tests {
             for (k, v) in entries {
                 map.insert(k.to_string(), v);
             }
-            Self {
-                data: Mutex::new(map),
-            }
+            Self { data: Mutex::new(map) }
         }
     }
 
@@ -1577,11 +1398,7 @@ mod tests {
             Ok(self.versions.clone())
         }
 
-        async fn fetch_metadata(
-            &self,
-            _name: &PackageName,
-            version: &str,
-        ) -> Result<VersionMetadata> {
+        async fn fetch_metadata(&self, _name: &PackageName, version: &str) -> Result<VersionMetadata> {
             self.metadata
                 .get(version)
                 .cloned()
@@ -1639,11 +1456,7 @@ mod tests {
         }
     }
 
-    fn build_service(
-        storage: Arc<MockStorage>,
-        upstream: MockUpstream,
-        policy: PolicyConfig,
-    ) -> CachingPackageService {
+    fn build_service(storage: Arc<MockStorage>, upstream: MockUpstream, policy: PolicyConfig) -> CachingPackageService {
         let eco = upstream.ecosystem();
         let mut clients: AHashMap<Ecosystem, Arc<dyn UpstreamClient>> = AHashMap::new();
         clients.insert(eco, Arc::new(upstream));
@@ -1667,11 +1480,7 @@ mod tests {
             })
         }
 
-        async fn fetch_metadata(
-            &self,
-            name: &PackageName,
-            version: &str,
-        ) -> Result<VersionMetadata> {
+        async fn fetch_metadata(&self, name: &PackageName, version: &str) -> Result<VersionMetadata> {
             Err(StarmetalError::VersionNotFound {
                 ecosystem: self.eco.to_string(),
                 name: name.as_str().to_string(),
@@ -1689,10 +1498,7 @@ mod tests {
         ecosystem: Ecosystem,
     ) -> CachingPackageService {
         let mut clients: AHashMap<Ecosystem, Arc<dyn UpstreamClient>> = AHashMap::new();
-        clients.insert(
-            ecosystem,
-            Arc::new(MissingPackageUpstream { eco: ecosystem }),
-        );
+        clients.insert(ecosystem, Arc::new(MissingPackageUpstream { eco: ecosystem }));
         CachingPackageService::new(storage, clients, PolicyConfig::default())
     }
 
@@ -1715,8 +1521,7 @@ mod tests {
     #[cfg(unix)]
     fn test_private_key_pem(secret: &[u8; ED25519_KEY_BYTES]) -> String {
         const PKCS8_ED25519_PREFIX: [u8; 16] = [
-            0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22,
-            0x04, 0x20,
+            0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20,
         ];
         let mut der = Vec::with_capacity(PKCS8_ED25519_PREFIX.len() + secret.len());
         der.extend_from_slice(&PKCS8_ED25519_PREFIX);
@@ -1726,9 +1531,7 @@ mod tests {
 
     #[cfg(unix)]
     fn test_public_key_pem(secret: &[u8; ED25519_KEY_BYTES]) -> String {
-        const SPKI_ED25519_PREFIX: [u8; 12] = [
-            0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00,
-        ];
+        const SPKI_ED25519_PREFIX: [u8; 12] = [0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00];
         let public_key = SigningKey::from_bytes(secret).verifying_key().to_bytes();
         let mut der = Vec::with_capacity(SPKI_ED25519_PREFIX.len() + public_key.len());
         der.extend_from_slice(&SPKI_ED25519_PREFIX);
@@ -1777,20 +1580,12 @@ mod tests {
         let hash = integrity::blake3_hex(&artifact_data);
         let storage = Arc::new(MockStorage::with_data(vec![
             (&artifact_id.storage_key(), artifact_data.clone()),
-            (
-                &format!("{}.blake3", artifact_id.storage_key()),
-                Bytes::from(hash),
-            ),
+            (&format!("{}.blake3", artifact_id.storage_key()), Bytes::from(hash)),
         ]));
         let mut metadata = AHashMap::new();
         metadata.insert(
             "2.31.0".to_string(),
-            test_metadata_with_artifact(
-                "requests",
-                "2.31.0",
-                "requests-2.31.0.tar.gz",
-                AHashMap::new(),
-            ),
+            test_metadata_with_artifact("requests", "2.31.0", "requests-2.31.0.tar.gz", AHashMap::new()),
         );
 
         let upstream = MockUpstream {
@@ -1842,10 +1637,7 @@ mod tests {
             .await
             .unwrap()
             .expect("artifact should be cached after fetch");
-        assert_eq!(
-            stored, artifact_data,
-            "stored data should match fetched data"
-        );
+        assert_eq!(stored, artifact_data, "stored data should match fetched data");
     }
 
     #[cfg(unix)]
@@ -1862,12 +1654,7 @@ mod tests {
         let mut metadata = AHashMap::new();
         metadata.insert(
             "2.31.0".to_string(),
-            test_metadata_with_artifact(
-                "requests",
-                "2.31.0",
-                "requests-2.31.0.tar.gz",
-                AHashMap::new(),
-            ),
+            test_metadata_with_artifact("requests", "2.31.0", "requests-2.31.0.tar.gz", AHashMap::new()),
         );
         let upstream = MockUpstream {
             eco: Ecosystem::PyPI,
@@ -1877,12 +1664,8 @@ mod tests {
         };
         let mut clients: AHashMap<Ecosystem, Arc<dyn UpstreamClient>> = AHashMap::new();
         clients.insert(Ecosystem::PyPI, Arc::new(upstream));
-        let service = CachingPackageService::new_with_signing(
-            storage.clone(),
-            clients,
-            PolicyConfig::default(),
-            Some(signing),
-        );
+        let service =
+            CachingPackageService::new_with_signing(storage.clone(), clients, PolicyConfig::default(), Some(signing));
 
         let first = service
             .get_version_metadata(Ecosystem::PyPI, &name, "2.31.0")
@@ -1895,8 +1678,7 @@ mod tests {
 
         assert_eq!(first.version, "2.31.0");
         assert_eq!(second.version, "2.31.0");
-        let metadata_key =
-            CachingPackageService::metadata_key(Ecosystem::PyPI, &name, "2.31.0").unwrap();
+        let metadata_key = CachingPackageService::metadata_key(Ecosystem::PyPI, &name, "2.31.0").unwrap();
         let sidecar_key = CachingPackageService::signature_sidecar_key(&metadata_key);
         assert!(
             storage.get(&sidecar_key).await.unwrap().is_some(),
@@ -1925,9 +1707,7 @@ mod tests {
 
         let service = build_service(storage, upstream, policy);
         let name = PackageName::new("evil-pkg");
-        let result = service
-            .get_version_metadata(Ecosystem::PyPI, &name, "1.0.0")
-            .await;
+        let result = service.get_version_metadata(Ecosystem::PyPI, &name, "1.0.0").await;
 
         assert!(result.is_err(), "should reject blocked package");
         let err = result.unwrap_err().to_string();
@@ -1958,16 +1738,11 @@ mod tests {
 
         let service = build_service(storage.clone(), upstream, policy);
         let name = PackageName::new("blocked-pkg");
-        let _ = service
-            .get_version_metadata(Ecosystem::Npm, &name, "2.0.0")
-            .await;
+        let _ = service.get_version_metadata(Ecosystem::Npm, &name, "2.0.0").await;
 
         let key = CachingPackageService::metadata_key(Ecosystem::Npm, &name, "2.0.0").unwrap();
         let cached = storage.get(&key).await.unwrap();
-        assert!(
-            cached.is_none(),
-            "blocked metadata must not be stored in cache"
-        );
+        assert!(cached.is_none(), "blocked metadata must not be stored in cache");
     }
 
     #[tokio::test]
@@ -1979,8 +1754,7 @@ mod tests {
             ("pypi/django/4.2.0/_metadata.json", Bytes::new()),
         ]));
 
-        let service =
-            CachingPackageService::new(storage.clone(), AHashMap::new(), PolicyConfig::default());
+        let service = CachingPackageService::new(storage.clone(), AHashMap::new(), PolicyConfig::default());
         let packages = service.list_packages(Ecosystem::PyPI).await.unwrap();
 
         let mut names: Vec<String> = packages.iter().map(|p| p.as_str().to_string()).collect();
@@ -1996,10 +1770,7 @@ mod tests {
         let name = PackageName::new("anything");
         let result = service.list_versions(Ecosystem::Hex, &name).await;
 
-        assert!(
-            result.is_err(),
-            "should error when no upstream is configured"
-        );
+        assert!(result.is_err(), "should error when no upstream is configured");
         let err = result.unwrap_err().to_string();
         assert!(
             err.contains("no upstream configured for hex"),
@@ -2010,8 +1781,7 @@ mod tests {
     #[tokio::test]
     async fn publish_package_stores_metadata_artifact_and_versions() {
         let storage = Arc::new(MockStorage::new());
-        let service =
-            CachingPackageService::new(storage.clone(), AHashMap::new(), PolicyConfig::default());
+        let service = CachingPackageService::new(storage.clone(), AHashMap::new(), PolicyConfig::default());
         let artifact_data = Bytes::from_static(b"published artifact");
         let request = PublishRequest {
             ecosystem: Ecosystem::PyPI,
@@ -2033,10 +1803,7 @@ mod tests {
         let result = service.publish_package(request).await.unwrap();
 
         assert_eq!(result.version, "1.0.0");
-        assert_eq!(
-            result.artifacts[0].blake3,
-            integrity::blake3_hex(&artifact_data)
-        );
+        assert_eq!(result.artifacts[0].blake3, integrity::blake3_hex(&artifact_data));
 
         let name = PackageName::new("sample");
         let metadata = service
@@ -2066,8 +1833,7 @@ mod tests {
             .unwrap();
         assert!(manifest.is_some(), "published manifest should be stored");
 
-        let record_key =
-            CachingPackageService::published_record_key(Ecosystem::PyPI, &name, "1.0.0").unwrap();
+        let record_key = CachingPackageService::published_record_key(Ecosystem::PyPI, &name, "1.0.0").unwrap();
         let record = storage
             .get(&record_key)
             .await
@@ -2085,9 +1851,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let key_path = dir.path().join("signing.pk8");
         write_test_signing_key(&key_path, 0o600);
-        let signing = SigningService::from_config(&signing_config(key_path))
-            .unwrap()
-            .unwrap();
+        let signing = SigningService::from_config(&signing_config(key_path)).unwrap().unwrap();
         let storage = Arc::new(MockStorage::new());
         let service = CachingPackageService::new_with_signing(
             storage.clone(),
@@ -2162,9 +1926,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let key_path = dir.path().join("signing.pk8");
         write_test_signing_key(&key_path, 0o600);
-        let signing = SigningService::from_config(&signing_config(key_path))
-            .unwrap()
-            .unwrap();
+        let signing = SigningService::from_config(&signing_config(key_path)).unwrap().unwrap();
         let storage = Arc::new(MockStorage::new());
         let service = CachingPackageService::new_with_signing(
             storage.clone(),
@@ -2194,8 +1956,7 @@ mod tests {
             .await
             .unwrap();
 
-        let record_key =
-            CachingPackageService::published_record_key(Ecosystem::PyPI, &name, "1.0.0").unwrap();
+        let record_key = CachingPackageService::published_record_key(Ecosystem::PyPI, &name, "1.0.0").unwrap();
         storage.delete(&record_key).await.unwrap();
         let artifact_id = ArtifactId {
             ecosystem: Ecosystem::PyPI,
@@ -2298,9 +2059,7 @@ mod tests {
             }],
             trust_roots: Vec::new(),
         };
-        let verifier = SigningService::from_config(&verify_config)
-            .unwrap()
-            .unwrap();
+        let verifier = SigningService::from_config(&verify_config).unwrap().unwrap();
 
         let verified = verifier.verify_envelope(&envelope_bytes).unwrap();
 
@@ -2343,8 +2102,7 @@ mod tests {
     #[tokio::test]
     async fn publish_package_rejects_duplicate_version_by_default() {
         let storage = Arc::new(MockStorage::new());
-        let service =
-            CachingPackageService::new(storage.clone(), AHashMap::new(), PolicyConfig::default());
+        let service = CachingPackageService::new(storage.clone(), AHashMap::new(), PolicyConfig::default());
         let request = PublishRequest {
             ecosystem: Ecosystem::Npm,
             name: PackageName::new("sample"),
@@ -2412,11 +2170,7 @@ mod tests {
             .unwrap();
 
         let metadata = service
-            .get_version_metadata(
-                Ecosystem::Maven,
-                &PackageName::new("com.example:sample"),
-                "1.0.0",
-            )
+            .get_version_metadata(Ecosystem::Maven, &PackageName::new("com.example:sample"), "1.0.0")
             .await
             .unwrap();
         let filenames = metadata
@@ -2466,8 +2220,7 @@ mod tests {
     #[tokio::test]
     async fn set_yanked_updates_metadata_and_version_listing() {
         let storage = Arc::new(MockStorage::new());
-        let service =
-            CachingPackageService::new(storage.clone(), AHashMap::new(), PolicyConfig::default());
+        let service = CachingPackageService::new(storage.clone(), AHashMap::new(), PolicyConfig::default());
         let name = PackageName::new("sample");
         service
             .publish_package(PublishRequest {
@@ -2500,15 +2253,10 @@ mod tests {
             .unwrap();
 
         assert!(metadata.yanked);
-        let versions = service
-            .list_versions(Ecosystem::RubyGems, &name)
-            .await
-            .unwrap();
+        let versions = service.list_versions(Ecosystem::RubyGems, &name).await.unwrap();
         assert!(versions[0].yanked);
 
-        let record_key =
-            CachingPackageService::published_record_key(Ecosystem::RubyGems, &name, "1.0.0")
-                .unwrap();
+        let record_key = CachingPackageService::published_record_key(Ecosystem::RubyGems, &name, "1.0.0").unwrap();
         let record = storage
             .get(&record_key)
             .await
@@ -2542,9 +2290,7 @@ mod tests {
         };
         let service = build_service(storage, upstream, policy);
 
-        let result = service
-            .get_version_metadata(Ecosystem::Npm, &name, "1.0.0")
-            .await;
+        let result = service.get_version_metadata(Ecosystem::Npm, &name, "1.0.0").await;
 
         assert!(matches!(result, Err(StarmetalError::PolicyViolation(_))));
     }
@@ -2562,20 +2308,12 @@ mod tests {
         let mut metadata = AHashMap::new();
         metadata.insert(
             "2.31.0".to_string(),
-            test_metadata_with_artifact(
-                "requests",
-                "2.31.0",
-                "requests-2.31.0.tar.gz",
-                AHashMap::new(),
-            ),
+            test_metadata_with_artifact("requests", "2.31.0", "requests-2.31.0.tar.gz", AHashMap::new()),
         );
 
         let storage = Arc::new(MockStorage::with_data(vec![
             (&artifact_id.storage_key(), artifact_data.clone()),
-            (
-                &format!("{}.blake3", artifact_id.storage_key()),
-                Bytes::from(hash),
-            ),
+            (&format!("{}.blake3", artifact_id.storage_key()), Bytes::from(hash)),
         ]));
 
         let upstream = MockUpstream {
@@ -2587,10 +2325,7 @@ mod tests {
 
         let service = build_service(storage, upstream, PolicyConfig::default());
         let result = service.get_artifact(&artifact_id).await.unwrap();
-        assert_eq!(
-            result, artifact_data,
-            "should return verified cached artifact"
-        );
+        assert_eq!(result, artifact_data, "should return verified cached artifact");
     }
 
     #[tokio::test]
@@ -2606,12 +2341,7 @@ mod tests {
         let mut metadata = AHashMap::new();
         metadata.insert(
             "2.31.0".to_string(),
-            test_metadata_with_artifact(
-                "requests",
-                "2.31.0",
-                "requests-2.31.0.tar.gz",
-                AHashMap::new(),
-            ),
+            test_metadata_with_artifact("requests", "2.31.0", "requests-2.31.0.tar.gz", AHashMap::new()),
         );
 
         let storage = Arc::new(MockStorage::with_data(vec![
@@ -2651,12 +2381,7 @@ mod tests {
         let mut metadata = AHashMap::new();
         metadata.insert(
             "2.31.0".to_string(),
-            test_metadata_with_artifact(
-                "requests",
-                "2.31.0",
-                "requests-2.31.0.tar.gz",
-                AHashMap::new(),
-            ),
+            test_metadata_with_artifact("requests", "2.31.0", "requests-2.31.0.tar.gz", AHashMap::new()),
         );
 
         let storage = Arc::new(MockStorage::with_data(vec![(
@@ -2710,10 +2435,7 @@ mod tests {
 
         let service = build_service(storage, upstream, policy);
         let result = service.get_artifact(&artifact_id).await;
-        assert!(
-            result.is_err(),
-            "should block artifact download for blocked package"
-        );
+        assert!(result.is_err(), "should block artifact download for blocked package");
         let err = result.unwrap_err().to_string();
         assert!(
             err.contains("policy violation"),
@@ -2877,11 +2599,7 @@ mod tests {
         let result = service.get_artifact(&artifact_id).await;
         assert!(result.is_err(), "should reject upstream hash mismatch");
         assert!(
-            storage
-                .get(&artifact_id.storage_key())
-                .await
-                .unwrap()
-                .is_none(),
+            storage.get(&artifact_id.storage_key()).await.unwrap().is_none(),
             "mismatched artifact must not be cached"
         );
     }

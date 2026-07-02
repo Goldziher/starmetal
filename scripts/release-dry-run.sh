@@ -2,16 +2,16 @@
 set -euo pipefail
 
 if [[ $# -lt 1 || $# -gt 2 ]]; then
-  echo "Usage: $0 <version-or-tag> [ref]" >&2
-  echo "Example: $0 0.1.0 main" >&2
-  exit 1
+	echo "Usage: $0 <version-or-tag> [ref]" >&2
+	echo "Example: $0 0.1.0 main" >&2
+	exit 1
 fi
 
 VERSION_OR_TAG="$1"
 REF="${2:-main}"
 TAG="$VERSION_OR_TAG"
 if [[ "$TAG" != v* ]]; then
-  TAG="v$TAG"
+	TAG="v$TAG"
 fi
 
 gh workflow run publish.yaml -f "tag=$TAG" -f "ref=$REF" -f dry_run=true

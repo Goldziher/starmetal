@@ -8,11 +8,7 @@ use axum::response::Response;
 
 use crate::state::AppState;
 
-pub async fn require_bearer_token(
-    State(state): State<AppState>,
-    request: Request,
-    next: Next,
-) -> Response {
+pub async fn require_bearer_token(State(state): State<AppState>, request: Request, next: Next) -> Response {
     if !state.config.auth.enabled {
         return next.run(request).await;
     }

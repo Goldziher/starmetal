@@ -41,19 +41,13 @@ pub trait HasNpmState: Clone + Send + Sync + 'static {
 /// Mount this under `/npm` in the top-level application router.
 pub fn router<S: HasNpmState>() -> Router<S> {
     Router::new()
-        .route(
-            "/{package}",
-            get(package_metadata::<S>).put(publish_package::<S>),
-        )
+        .route("/{package}", get(package_metadata::<S>).put(publish_package::<S>))
         .route(
             "/@{scope}/{name}",
             get(scoped_package_metadata::<S>).put(publish_scoped_package::<S>),
         )
         .route("/{package}/-/{filename}", get(download_tarball::<S>))
-        .route(
-            "/@{scope}/{name}/-/{filename}",
-            get(download_scoped_tarball::<S>),
-        )
+        .route("/@{scope}/{name}/-/{filename}", get(download_scoped_tarball::<S>))
 }
 
 async fn publish_package<S: HasNpmState>(
@@ -89,20 +83,14 @@ async fn publish_packument<S: HasNpmState>(
             "npm publish payload must be an object".to_string(),
         ));
     }
-    let versions = payload["versions"].as_object().ok_or_else(|| {
-        (
-            StatusCode::BAD_REQUEST,
-            "missing npm versions object".to_string(),
-        )
-    })?;
+    let versions = payload["versions"]
+        .as_object()
+        .ok_or_else(|| (StatusCode::BAD_REQUEST, "missing npm versions object".to_string()))?;
     let latest = match payload.get("dist-tags") {
         Some(tags) => {
-            let tags = tags.as_object().ok_or_else(|| {
-                (
-                    StatusCode::BAD_REQUEST,
-                    "npm dist-tags must be an object".to_string(),
-                )
-            })?;
+            let tags = tags
+                .as_object()
+                .ok_or_else(|| (StatusCode::BAD_REQUEST, "npm dist-tags must be an object".to_string()))?;
             match tags.get("latest") {
                 Some(value) => Some(value.as_str().ok_or_else(|| {
                     (
@@ -119,18 +107,11 @@ async fn publish_packument<S: HasNpmState>(
         .map(str::to_string)
         .or_else(|| versions.keys().next().cloned())
         .ok_or_else(|| (StatusCode::BAD_REQUEST, "missing npm version".to_string()))?;
-    let version_payload = versions.get(&version).ok_or_else(|| {
-        (
-            StatusCode::BAD_REQUEST,
-            "missing npm version metadata".to_string(),
-        )
-    })?;
-    let (filename, data) = attachment(&payload).ok_or_else(|| {
-        (
-            StatusCode::BAD_REQUEST,
-            "missing npm tarball attachment".to_string(),
-        )
-    })?;
+    let version_payload = versions
+        .get(&version)
+        .ok_or_else(|| (StatusCode::BAD_REQUEST, "missing npm version metadata".to_string()))?;
+    let (filename, data) =
+        attachment(&payload).ok_or_else(|| (StatusCode::BAD_REQUEST, "missing npm tarball attachment".to_string()))?;
     let upstream_hashes = validated_npm_dist_hashes(&data, version_payload)?;
 
     state
@@ -182,10 +163,7 @@ async fn publish_packument<S: HasNpmState>(
         .into_response())
 }
 
-fn sanitized_published_packument(
-    mut payload: serde_json::Value,
-    latest_version: &str,
-) -> serde_json::Value {
+fn sanitized_published_packument(mut payload: serde_json::Value, latest_version: &str) -> serde_json::Value {
     if let Some(object) = payload.as_object_mut() {
         object.remove("_attachments");
         let dist_tags = object
@@ -290,8 +268,7 @@ async fn serve_packument<S: HasNpmState>(
         .await
         .map_err(|err| map_error(&err))?
     {
-        serde_json::from_slice(&raw)
-            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?
+        serde_json::from_slice(&raw).map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?
     } else {
         // Cache miss — fetch from upstream
         let _versions = service
@@ -321,8 +298,7 @@ async fn serve_packument<S: HasNpmState>(
         .map_err(|err| map_error(&err))?;
     models::rewrite_packument_tarball_urls(&mut packument, base_url);
 
-    let body = serde_json::to_string(&packument)
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+    let body = serde_json::to_string(&packument).map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
     Ok(([(header::CONTENT_TYPE, "application/json")], body).into_response())
 }
 
@@ -369,21 +345,15 @@ async fn build_local_packument(
         if !dist.is_object() {
             *dist = serde_json::json!({});
         }
-        dist["tarball"] = serde_json::Value::String(format!(
-            "{base_url}/npm/{}/-/{}",
-            name.as_str(),
-            artifact.filename
-        ));
+        dist["tarball"] =
+            serde_json::Value::String(format!("{base_url}/npm/{}/-/{}", name.as_str(), artifact.filename));
         if let Some(shasum) = artifact.upstream_hashes.get("sha1") {
             dist["shasum"] = serde_json::Value::String(shasum.clone());
         }
         if let Some(integrity) = artifact.upstream_hashes.get("integrity") {
             dist["integrity"] = serde_json::Value::String(integrity.clone());
         }
-        version_map.insert(
-            version.version.clone(),
-            serde_json::Value::Object(version_payload),
-        );
+        version_map.insert(version.version.clone(), serde_json::Value::Object(version_payload));
     }
     let latest = versions.last().map(|version| version.version.clone());
     Ok(serde_json::json!({
@@ -400,8 +370,7 @@ async fn validate_packument_metadata(
     packument: &serde_json::Value,
 ) -> Result<(), StarmetalError> {
     for version in models::extract_version_infos(packument) {
-        if let Some(metadata) = models::extract_version_metadata(name, &version.version, packument)
-        {
+        if let Some(metadata) = models::extract_version_metadata(name, &version.version, packument) {
             service.validate_metadata(&metadata).await?;
         }
     }
@@ -433,12 +402,8 @@ async fn serve_tarball<S: HasNpmState>(
     filename: &str,
 ) -> Result<axum::response::Response, (StatusCode, String)> {
     // Extract version from filename: {name}-{version}.tgz
-    let version = extract_version_from_filename(name.as_str(), filename).ok_or_else(|| {
-        (
-            StatusCode::BAD_REQUEST,
-            "invalid filename format".to_string(),
-        )
-    })?;
+    let version = extract_version_from_filename(name.as_str(), filename)
+        .ok_or_else(|| (StatusCode::BAD_REQUEST, "invalid filename format".to_string()))?;
 
     let artifact_id = ArtifactId {
         ecosystem: Ecosystem::Npm,
@@ -491,17 +456,10 @@ fn authorize_publish<S: HasNpmState>(
     name: &PackageName,
 ) -> Result<(), (StatusCode, String)> {
     if !state.config().publishing.enabled {
-        return Err((
-            StatusCode::NOT_FOUND,
-            "publishing is not enabled".to_string(),
-        ));
+        return Err((StatusCode::NOT_FOUND, "publishing is not enabled".to_string()));
     }
-    let token = extract_write_token(headers).ok_or_else(|| {
-        (
-            StatusCode::UNAUTHORIZED,
-            "missing publishing token".to_string(),
-        )
-    })?;
+    let token = extract_write_token(headers)
+        .ok_or_else(|| (StatusCode::UNAUTHORIZED, "missing publishing token".to_string()))?;
     if state
         .config()
         .authorize_publish_token(&token, TokenScope::Publish, Ecosystem::Npm, name)
@@ -553,15 +511,9 @@ mod tests {
 
     #[test]
     fn should_return_none_for_invalid_filename() {
-        assert_eq!(
-            extract_version_from_filename("is-odd", "not-a-match.tgz"),
-            None
-        );
+        assert_eq!(extract_version_from_filename("is-odd", "not-a-match.tgz"), None);
         assert_eq!(extract_version_from_filename("is-odd", "is-odd-.tgz"), None);
-        assert_eq!(
-            extract_version_from_filename("is-odd", "is-odd-1.0.0.tar.gz"),
-            None
-        );
+        assert_eq!(extract_version_from_filename("is-odd", "is-odd-1.0.0.tar.gz"), None);
     }
 
     #[test]
@@ -598,10 +550,7 @@ mod tests {
     #[test]
     fn should_accept_matching_npm_integrity() {
         let data = bytes::Bytes::from_static(b"package");
-        let integrity = format!(
-            "sha512-{}",
-            BASE64_STANDARD.encode(sha2::Sha512::digest(&data))
-        );
+        let integrity = format!("sha512-{}", BASE64_STANDARD.encode(sha2::Sha512::digest(&data)));
         let metadata = serde_json::json!({
             "dist": {
                 "integrity": integrity

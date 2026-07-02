@@ -125,12 +125,8 @@ impl StorageConfig {
         if self.backend == "s3"
             && let Some(s3) = &self.s3
         {
-            options
-                .entry("bucket".to_string())
-                .or_insert_with(|| s3.bucket.clone());
-            options
-                .entry("region".to_string())
-                .or_insert_with(|| s3.region.clone());
+            options.entry("bucket".to_string()).or_insert_with(|| s3.bucket.clone());
+            options.entry("region".to_string()).or_insert_with(|| s3.region.clone());
             if let Some(endpoint) = &s3.endpoint {
                 options
                     .entry("endpoint".to_string())
@@ -343,12 +339,7 @@ impl Config {
                     "publishing.enabled only supports mode = \"local\" in this MVP".to_string(),
                 ));
             }
-            if self
-                .publishing
-                .upstream
-                .values()
-                .any(|upstream| upstream.enabled)
-            {
+            if self.publishing.upstream.values().any(|upstream| upstream.enabled) {
                 return Err(StarmetalError::Config(
                     "publishing upstream forwarding is not implemented in this MVP".to_string(),
                 ));
@@ -360,8 +351,7 @@ impl Config {
             });
             if !has_write_token {
                 return Err(StarmetalError::Config(
-                    "publishing.enabled requires at least one scoped publish, yank, or admin token"
-                        .to_string(),
+                    "publishing.enabled requires at least one scoped publish, yank, or admin token".to_string(),
                 ));
             }
         }
@@ -376,15 +366,11 @@ impl Config {
     }
 
     pub fn upstream_enabled(&self, name: &str) -> bool {
-        self.upstream
-            .get(name)
-            .map(|config| config.enabled)
-            .unwrap_or(true)
+        self.upstream.get(name).map(|config| config.enabled).unwrap_or(true)
     }
 
     pub fn redacted_value(&self) -> toml::Value {
-        let mut value =
-            toml::Value::try_from(self).unwrap_or_else(|_| toml::Value::Table(Default::default()));
+        let mut value = toml::Value::try_from(self).unwrap_or_else(|_| toml::Value::Table(Default::default()));
         if let Some(auth) = value.get_mut("auth").and_then(toml::Value::as_table_mut)
             && let Some(tokens) = auth.get_mut("tokens").and_then(toml::Value::as_array_mut)
         {
@@ -399,12 +385,8 @@ impl Config {
                 *token = toml::Value::String("<redacted>".to_string());
             }
         }
-        if let Some(publishing) = value
-            .get_mut("publishing")
-            .and_then(toml::Value::as_table_mut)
-            && let Some(tokens) = publishing
-                .get_mut("tokens")
-                .and_then(toml::Value::as_array_mut)
+        if let Some(publishing) = value.get_mut("publishing").and_then(toml::Value::as_table_mut)
+            && let Some(tokens) = publishing.get_mut("tokens").and_then(toml::Value::as_array_mut)
         {
             for token in tokens {
                 if let Some(table) = token.as_table_mut()
@@ -556,8 +538,8 @@ fn default_upstreams() -> HashMap<String, UpstreamConfig> {
 }
 
 fn validate_public_base_url(value: &str) -> Result<()> {
-    let parsed = url::Url::parse(value)
-        .map_err(|err| StarmetalError::Config(format!("invalid URL '{value}': {err}")))?;
+    let parsed =
+        url::Url::parse(value).map_err(|err| StarmetalError::Config(format!("invalid URL '{value}': {err}")))?;
     match parsed.scheme() {
         "http" | "https" => {}
         scheme => {
@@ -567,19 +549,14 @@ fn validate_public_base_url(value: &str) -> Result<()> {
         }
     }
     if parsed.host_str().is_none() {
-        return Err(StarmetalError::Config(format!(
-            "URL '{value}' must include a host"
-        )));
+        return Err(StarmetalError::Config(format!("URL '{value}' must include a host")));
     }
     Ok(())
 }
 
 fn validate_upstream_url(name: &str, value: &str, config: &UpstreamConfig) -> Result<()> {
-    let parsed = url::Url::parse(value).map_err(|err| {
-        StarmetalError::Config(format!(
-            "invalid upstream URL for {name} ('{value}'): {err}"
-        ))
-    })?;
+    let parsed = url::Url::parse(value)
+        .map_err(|err| StarmetalError::Config(format!("invalid upstream URL for {name} ('{value}'): {err}")))?;
 
     match parsed.scheme() {
         "https" => {}
@@ -591,9 +568,9 @@ fn validate_upstream_url(name: &str, value: &str, config: &UpstreamConfig) -> Re
         }
     }
 
-    let host = parsed.host_str().ok_or_else(|| {
-        StarmetalError::Config(format!("upstream.{name} URL must include a host"))
-    })?;
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| StarmetalError::Config(format!("upstream.{name} URL must include a host")))?;
     if is_private_host(host) && !config.allow_private_network {
         return Err(StarmetalError::Config(format!(
             "upstream.{name} URL points at a private/local host; set allow_private_network = true to permit it"
@@ -609,15 +586,9 @@ fn is_private_host(host: &str) -> bool {
     }
     match host.parse::<std::net::IpAddr>() {
         Ok(std::net::IpAddr::V4(ip)) => {
-            ip.is_private()
-                || ip.is_loopback()
-                || ip.is_link_local()
-                || ip.is_unspecified()
-                || ip.is_broadcast()
+            ip.is_private() || ip.is_loopback() || ip.is_link_local() || ip.is_unspecified() || ip.is_broadcast()
         }
-        Ok(std::net::IpAddr::V6(ip)) => {
-            ip.is_loopback() || ip.is_unspecified() || ip.is_unique_local()
-        }
+        Ok(std::net::IpAddr::V6(ip)) => ip.is_loopback() || ip.is_unspecified() || ip.is_unique_local(),
         Err(_) => false,
     }
 }
@@ -625,8 +596,7 @@ fn is_private_host(host: &str) -> bool {
 fn validate_encryption_config(config: &EncryptionConfig) -> Result<()> {
     if config.enabled {
         return Err(StarmetalError::Config(
-            "at-rest encryption is not implemented; config is reserved for the signing/PQ roadmap"
-                .to_string(),
+            "at-rest encryption is not implemented; config is reserved for the signing/PQ roadmap".to_string(),
         ));
     }
     Ok(())
@@ -648,15 +618,10 @@ fn validate_signing_config(config: &SigningConfig) -> Result<()> {
     let mut verification_keys = 0usize;
     for key in &config.keys {
         if key.id.trim().is_empty() {
-            return Err(StarmetalError::Config(
-                "signing key id must not be empty".to_string(),
-            ));
+            return Err(StarmetalError::Config("signing key id must not be empty".to_string()));
         }
         if !ids.insert(key.id.as_str()) {
-            return Err(StarmetalError::Config(format!(
-                "duplicate signing key id: {}",
-                key.id
-            )));
+            return Err(StarmetalError::Config(format!("duplicate signing key id: {}", key.id)));
         }
         if key.algorithm != SigningAlgorithm::Ed25519 {
             return Err(StarmetalError::Config(format!(
@@ -676,10 +641,8 @@ fn validate_signing_config(config: &SigningConfig) -> Result<()> {
                 key.id
             )));
         }
-        if matches!(
-            config.mode,
-            SigningMode::SignOnly | SigningMode::SignAndVerify
-        ) && key.status == SigningKeyStatus::Active
+        if matches!(config.mode, SigningMode::SignOnly | SigningMode::SignAndVerify)
+            && key.status == SigningKeyStatus::Active
         {
             active_keys += 1;
             if key.private_key_file.is_none() {
@@ -689,10 +652,8 @@ fn validate_signing_config(config: &SigningConfig) -> Result<()> {
                 )));
             }
         }
-        if matches!(
-            config.mode,
-            SigningMode::SignAndVerify | SigningMode::VerifyOnly
-        ) && key.status != SigningKeyStatus::Disabled
+        if matches!(config.mode, SigningMode::SignAndVerify | SigningMode::VerifyOnly)
+            && key.status != SigningKeyStatus::Disabled
             && (key.public_key_file.is_some() || key.private_key_file.is_some())
         {
             verification_keys += 1;
@@ -705,20 +666,12 @@ fn validate_signing_config(config: &SigningConfig) -> Result<()> {
         }
     }
 
-    if matches!(
-        config.mode,
-        SigningMode::SignOnly | SigningMode::SignAndVerify
-    ) && active_keys == 0
-    {
+    if matches!(config.mode, SigningMode::SignOnly | SigningMode::SignAndVerify) && active_keys == 0 {
         return Err(StarmetalError::Config(
             "signing requires at least one active signing key".to_string(),
         ));
     }
-    if matches!(
-        config.mode,
-        SigningMode::SignAndVerify | SigningMode::VerifyOnly
-    ) && verification_keys == 0
-    {
+    if matches!(config.mode, SigningMode::SignAndVerify | SigningMode::VerifyOnly) && verification_keys == 0 {
         return Err(StarmetalError::Config(
             "signature verification requires at least one public or active signing key".to_string(),
         ));
@@ -744,18 +697,12 @@ fn redact_signing_config(value: &mut toml::Value) {
                 "certificate_chain_file",
             ] {
                 if table.contains_key(field) {
-                    table.insert(
-                        field.to_string(),
-                        toml::Value::String("<redacted>".to_string()),
-                    );
+                    table.insert(field.to_string(), toml::Value::String("<redacted>".to_string()));
                 }
             }
         }
     }
-    if let Some(roots) = signing
-        .get_mut("trust_roots")
-        .and_then(toml::Value::as_array_mut)
-    {
+    if let Some(roots) = signing.get_mut("trust_roots").and_then(toml::Value::as_array_mut) {
         for root in roots {
             if let Some(table) = root.as_table_mut()
                 && table.contains_key("certificate_file")
@@ -785,8 +732,8 @@ mod tests {
     use super::*;
 
     fn load_fixtures() -> Vec<serde_json::Value> {
-        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("testing_data/config/01_config_parsing.json");
+        let path =
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("testing_data/config/01_config_parsing.json");
         let content = std::fs::read_to_string(&path).unwrap();
         serde_json::from_str(&content).unwrap()
     }
@@ -805,8 +752,7 @@ mod tests {
                 continue;
             }
 
-            let config: Config =
-                toml::from_str(toml_input).unwrap_or_else(|e| panic!("fixture '{name}': {e}"));
+            let config: Config = toml::from_str(toml_input).unwrap_or_else(|e| panic!("fixture '{name}': {e}"));
 
             if let Some(bind) = fix["expected"]["bind"].as_str() {
                 assert_eq!(config.server.bind, bind, "fixture '{name}' bind");
@@ -857,9 +803,7 @@ mod tests {
     #[test]
     fn defaults_have_all_upstreams() {
         let config = Config::default();
-        for ecosystem in [
-            "pypi", "npm", "cargo", "hex", "maven", "rubygems", "nuget", "pub",
-        ] {
+        for ecosystem in ["pypi", "npm", "cargo", "hex", "maven", "rubygems", "nuget", "pub"] {
             assert!(
                 config.upstream_enabled(ecosystem),
                 "{ecosystem} should be enabled by default"
@@ -875,16 +819,12 @@ mod tests {
 
         let options = config.storage.opendal_options();
         assert_eq!(options.get("bucket"), Some(&"pkg-cache".to_string()));
-        assert_eq!(
-            options.get("credential_path"),
-            Some(&"/tmp/gcs.json".to_string())
-        );
+        assert_eq!(options.get("credential_path"), Some(&"/tmp/gcs.json".to_string()));
     }
 
     #[test]
     fn legacy_fs_path_maps_to_root_option() {
-        let config: Config =
-            toml::from_str("[storage]\nbackend = \"fs\"\npath = \"./cache\"\n").unwrap();
+        let config: Config = toml::from_str("[storage]\nbackend = \"fs\"\npath = \"./cache\"\n").unwrap();
 
         assert_eq!(
             config.storage.opendal_options().get("root"),
@@ -1036,8 +976,7 @@ private_key_password_env = ""
 
     #[test]
     fn redacted_value_hides_auth_tokens() {
-        let config: Config =
-            toml::from_str("[auth]\nenabled = true\ntokens = [\"secret-token\"]\n").unwrap();
+        let config: Config = toml::from_str("[auth]\nenabled = true\ntokens = [\"secret-token\"]\n").unwrap();
         let output = toml::to_string_pretty(&config.redacted_value()).unwrap();
         assert!(!output.contains("secret-token"));
         assert!(output.contains("<redacted>"));

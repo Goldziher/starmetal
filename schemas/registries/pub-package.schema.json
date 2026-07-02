@@ -5,20 +5,14 @@
       "properties": {
         "archive_sha256": {
           "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "archive_url": {
           "type": "string"
         },
         "published": {
           "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "pubspec": {
           "$ref": "#/$defs/Pubspec"
@@ -27,11 +21,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "version",
-        "pubspec",
-        "archive_url"
-      ],
+      "required": ["version", "pubspec", "archive_url"],
       "type": "object"
     },
     "Pubspec": {
@@ -45,10 +35,7 @@
         },
         "description": {
           "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "dev_dependencies": {
           "additionalProperties": true,
@@ -64,29 +51,20 @@
         },
         "homepage": {
           "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "name": {
           "type": "string"
         },
         "repository": {
           "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "version": {
           "type": "string"
         }
       },
-      "required": [
-        "name",
-        "version"
-      ],
+      "required": ["name", "version"],
       "type": "object"
     }
   },
@@ -115,25 +93,15 @@
       "type": "array"
     }
   },
-  "required": [
-    "name",
-    "versions"
-  ],
+  "required": ["name", "versions"],
   "title": "Hosted Pub Package Metadata",
   "type": "object",
   "x-starmetal-source": {
     "generated_by": "starmetal-schema-manager",
     "schema_kind": "starmetal-derived-json-schema",
     "source_file": "crates/starmetal-core/src/registry/pubdev.rs",
-    "source_ids": [
-      "pub-hosted-repository-v2",
-      "pub-dev-supported-api",
-      "pub-dev-package-api-dtos"
-    ],
-    "source_kinds": [
-      "official-prose",
-      "official-dart-source"
-    ],
+    "source_ids": ["pub-hosted-repository-v2", "pub-dev-supported-api", "pub-dev-package-api-dtos"],
+    "source_kinds": ["official-prose", "official-dart-source"],
     "source_type": "starmetal_core::registry::pubdev::PubPackage",
     "validated_by": "crates/starmetal-core/tests/schema_validation.rs"
   }

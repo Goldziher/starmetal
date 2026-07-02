@@ -4,9 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Result, StarmetalError};
 use crate::package::VersionMetadata;
 
-#[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
-)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum VulnSeverity {
     Low,
@@ -31,11 +29,7 @@ pub struct PolicyConfig {
 impl PolicyConfig {
     /// Check a package version against configured policies.
     pub fn check(&self, metadata: &VersionMetadata) -> Result<()> {
-        if self
-            .blocked_packages
-            .iter()
-            .any(|b| b == metadata.name.as_str())
-        {
+        if self.blocked_packages.iter().any(|b| b == metadata.name.as_str()) {
             return Err(StarmetalError::PolicyViolation(format!(
                 "package {} is blocked",
                 metadata.name
@@ -71,8 +65,8 @@ mod tests {
     use crate::package::{ArtifactDigest, PackageName};
 
     fn load_fixtures() -> Vec<serde_json::Value> {
-        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("testing_data/policy/01_policy_checks.json");
+        let path =
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("testing_data/policy/01_policy_checks.json");
         let content = std::fs::read_to_string(&path).unwrap();
         serde_json::from_str(&content).unwrap()
     }
@@ -87,19 +81,11 @@ mod tests {
                 .unwrap_or_default(),
             allowed_licenses: p["allowed_licenses"]
                 .as_array()
-                .map(|a| {
-                    a.iter()
-                        .filter_map(|v| v.as_str().map(String::from))
-                        .collect()
-                })
+                .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
                 .unwrap_or_default(),
             blocked_packages: p["blocked_packages"]
                 .as_array()
-                .map(|a| {
-                    a.iter()
-                        .filter_map(|v| v.as_str().map(String::from))
-                        .collect()
-                })
+                .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
                 .unwrap_or_default(),
         }
     }
@@ -133,10 +119,7 @@ mod tests {
             let expected_allowed = fix["expected"]["allowed"].as_bool().unwrap();
 
             if expected_allowed {
-                assert!(
-                    result.is_ok(),
-                    "fixture '{name}' should pass but got: {result:?}"
-                );
+                assert!(result.is_ok(), "fixture '{name}' should pass but got: {result:?}");
             } else {
                 let err = result.unwrap_err();
                 let err_msg = err.to_string();

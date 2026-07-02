@@ -48,10 +48,7 @@ pub fn router<S: HasCargoState>() -> Router<S> {
         .route("/2/{name}", get(sparse_index::<S>))
         .route("/3/{first}/{name}", get(sparse_index_3::<S>))
         .route("/{first}/{second}/{name}", get(sparse_index_long::<S>))
-        .route(
-            "/crates/{name}/{version}/download",
-            get(download_crate::<S>),
-        )
+        .route("/crates/{name}/{version}/download", get(download_crate::<S>))
 }
 
 /// GET /config.json -- return the Cargo sparse index configuration.
@@ -67,14 +64,9 @@ async fn config_json<S: HasCargoState>(
     } else {
         models::build_config_json(&dl_base)
     };
-    let body = serde_json::to_string(&config)
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+    let body = serde_json::to_string(&config).map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
 
-    Ok((
-        [(axum::http::header::CONTENT_TYPE, "application/json")],
-        body,
-    )
-        .into_response())
+    Ok(([(axum::http::header::CONTENT_TYPE, "application/json")], body).into_response())
 }
 
 async fn publish_crate<S: HasCargoState>(
@@ -112,8 +104,7 @@ async fn publish_crate<S: HasCargoState>(
                 upstream_hashes,
             }],
             protocol_metadata: ProtocolMetadata::Cargo {
-                index_entry: serde_json::to_value(&entry)
-                    .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?,
+                index_entry: serde_json::to_value(&entry).map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?,
             },
             allow_overwrite: state.config().publishing.allow_overwrite,
             allow_shadowing: state.config().publishing.allow_shadowing,
@@ -161,10 +152,7 @@ async fn sparse_index_long<S: HasCargoState>(
 ///
 /// Triggers the caching lifecycle through PackageService, then serves the
 /// raw ndjson index data from the upstream client cache.
-async fn serve_index<S: HasCargoState>(
-    state: S,
-    name: String,
-) -> Result<Response, (StatusCode, String)> {
+async fn serve_index<S: HasCargoState>(state: S, name: String) -> Result<Response, (StatusCode, String)> {
     let package_name = PackageName::new(&name);
     let service = state.package_service();
 
@@ -174,8 +162,7 @@ async fn serve_index<S: HasCargoState>(
         .await
         .map_err(|err| map_error(&err))?
     {
-        String::from_utf8(raw.to_vec())
-            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?
+        String::from_utf8(raw.to_vec()).map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?
     } else {
         // Cache miss — fetch from upstream
         let _versions = service
@@ -193,11 +180,7 @@ async fn serve_index<S: HasCargoState>(
 
         // Persist to storage
         let _ = service
-            .put_raw_upstream(
-                Ecosystem::Cargo,
-                &package_name,
-                bytes::Bytes::from(ndjson.clone()),
-            )
+            .put_raw_upstream(Ecosystem::Cargo, &package_name, bytes::Bytes::from(ndjson.clone()))
             .await;
 
         ndjson
@@ -214,10 +197,7 @@ fn parse_publish_body(body: &Bytes) -> Result<(serde_json::Value, Bytes), (Statu
     let metadata_start = 4;
     let metadata_end = metadata_start + metadata_len;
     if body.len() < metadata_end + 4 {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "invalid cargo publish body".to_string(),
-        ));
+        return Err((StatusCode::BAD_REQUEST, "invalid cargo publish body".to_string()));
     }
     let metadata: serde_json::Value = serde_json::from_slice(&body[metadata_start..metadata_end])
         .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?;
@@ -225,21 +205,15 @@ fn parse_publish_body(body: &Bytes) -> Result<(serde_json::Value, Bytes), (Statu
     let crate_start = metadata_end + 4;
     let crate_end = crate_start + crate_len;
     if body.len() < crate_end {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "invalid cargo crate length".to_string(),
-        ));
+        return Err((StatusCode::BAD_REQUEST, "invalid cargo crate length".to_string()));
     }
     Ok((metadata, body.slice(crate_start..crate_end)))
 }
 
 fn read_u32(body: &Bytes, offset: usize) -> Result<u32, (StatusCode, String)> {
-    let bytes = body.get(offset..offset + 4).ok_or_else(|| {
-        (
-            StatusCode::BAD_REQUEST,
-            "invalid cargo publish body".to_string(),
-        )
-    })?;
+    let bytes = body
+        .get(offset..offset + 4)
+        .ok_or_else(|| (StatusCode::BAD_REQUEST, "invalid cargo publish body".to_string()))?;
     Ok(u32::from_le_bytes(bytes.try_into().unwrap_or([0; 4])))
 }
 
@@ -291,21 +265,13 @@ fn authorize_publish<S: HasCargoState>(
     name: &PackageName,
 ) -> Result<(), (StatusCode, String)> {
     if !state.config().publishing.enabled {
-        return Err((
-            StatusCode::NOT_FOUND,
-            "publishing is not enabled".to_string(),
-        ));
+        return Err((StatusCode::NOT_FOUND, "publishing is not enabled".to_string()));
     }
     let token = headers
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.strip_prefix("Bearer "))
-        .ok_or_else(|| {
-            (
-                StatusCode::UNAUTHORIZED,
-                "missing publishing token".to_string(),
-            )
-        })?;
+        .ok_or_else(|| (StatusCode::UNAUTHORIZED, "missing publishing token".to_string()))?;
     if state
         .config()
         .authorize_publish_token(token, TokenScope::Publish, Ecosystem::Cargo, name)
@@ -361,10 +327,7 @@ async fn download_crate<S: HasCargoState>(
         .map_err(|err| map_error(&err))?;
 
     Ok((
-        [(
-            axum::http::header::CONTENT_TYPE,
-            "application/x-tar".to_string(),
-        )],
+        [(axum::http::header::CONTENT_TYPE, "application/x-tar".to_string())],
         data,
     )
         .into_response())

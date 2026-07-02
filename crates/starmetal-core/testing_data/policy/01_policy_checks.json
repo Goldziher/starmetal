@@ -1,114 +1,114 @@
 [
-	{
-		"name": "allow everything by default",
-		"input": {
-			"policy": {},
-			"package": {
-				"name": "requests",
-				"version": "2.31.0",
-				"license": "Apache-2.0",
-				"yanked": false
-			}
-		},
-		"expected": { "allowed": true },
-		"error": null
-	},
-	{
-		"name": "block explicitly blocked package",
-		"input": {
-			"policy": { "blocked_packages": ["malware-pkg"] },
-			"package": {
-				"name": "malware-pkg",
-				"version": "1.0.0",
-				"license": "MIT",
-				"yanked": false
-			}
-		},
-		"expected": { "allowed": false },
-		"error": "malware-pkg is blocked"
-	},
-	{
-		"name": "block unlicensed when configured",
-		"input": {
-			"policy": { "block_unlicensed": true },
-			"package": {
-				"name": "no-license",
-				"version": "0.1.0",
-				"license": null,
-				"yanked": false
-			}
-		},
-		"expected": { "allowed": false },
-		"error": "no license"
-	},
-	{
-		"name": "allow unlicensed when not configured",
-		"input": {
-			"policy": { "block_unlicensed": false },
-			"package": {
-				"name": "no-license",
-				"version": "0.1.0",
-				"license": null,
-				"yanked": false
-			}
-		},
-		"expected": { "allowed": true },
-		"error": null
-	},
-	{
-		"name": "block license not in allowlist",
-		"input": {
-			"policy": { "allowed_licenses": ["MIT", "Apache-2.0"] },
-			"package": {
-				"name": "gpl-pkg",
-				"version": "1.0.0",
-				"license": "GPL-3.0",
-				"yanked": false
-			}
-		},
-		"expected": { "allowed": false },
-		"error": "not in allowed list"
-	},
-	{
-		"name": "allow license in allowlist",
-		"input": {
-			"policy": { "allowed_licenses": ["MIT", "Apache-2.0"] },
-			"package": {
-				"name": "good-pkg",
-				"version": "1.0.0",
-				"license": "MIT",
-				"yanked": false
-			}
-		},
-		"expected": { "allowed": true },
-		"error": null
-	},
-	{
-		"name": "empty allowlist allows all licenses",
-		"input": {
-			"policy": { "allowed_licenses": [] },
-			"package": {
-				"name": "any-pkg",
-				"version": "1.0.0",
-				"license": "WTFPL",
-				"yanked": false
-			}
-		},
-		"expected": { "allowed": true },
-		"error": null
-	},
-	{
-		"name": "non-blocked package passes",
-		"input": {
-			"policy": { "blocked_packages": ["other-pkg"] },
-			"package": {
-				"name": "good-pkg",
-				"version": "1.0.0",
-				"license": "MIT",
-				"yanked": false
-			}
-		},
-		"expected": { "allowed": true },
-		"error": null
-	}
+  {
+    "name": "allow everything by default",
+    "input": {
+      "policy": {},
+      "package": {
+        "name": "requests",
+        "version": "2.31.0",
+        "license": "Apache-2.0",
+        "yanked": false
+      }
+    },
+    "expected": { "allowed": true },
+    "error": null
+  },
+  {
+    "name": "block explicitly blocked package",
+    "input": {
+      "policy": { "blocked_packages": ["malware-pkg"] },
+      "package": {
+        "name": "malware-pkg",
+        "version": "1.0.0",
+        "license": "MIT",
+        "yanked": false
+      }
+    },
+    "expected": { "allowed": false },
+    "error": "malware-pkg is blocked"
+  },
+  {
+    "name": "block unlicensed when configured",
+    "input": {
+      "policy": { "block_unlicensed": true },
+      "package": {
+        "name": "no-license",
+        "version": "0.1.0",
+        "license": null,
+        "yanked": false
+      }
+    },
+    "expected": { "allowed": false },
+    "error": "no license"
+  },
+  {
+    "name": "allow unlicensed when not configured",
+    "input": {
+      "policy": { "block_unlicensed": false },
+      "package": {
+        "name": "no-license",
+        "version": "0.1.0",
+        "license": null,
+        "yanked": false
+      }
+    },
+    "expected": { "allowed": true },
+    "error": null
+  },
+  {
+    "name": "block license not in allowlist",
+    "input": {
+      "policy": { "allowed_licenses": ["MIT", "Apache-2.0"] },
+      "package": {
+        "name": "gpl-pkg",
+        "version": "1.0.0",
+        "license": "GPL-3.0",
+        "yanked": false
+      }
+    },
+    "expected": { "allowed": false },
+    "error": "not in allowed list"
+  },
+  {
+    "name": "allow license in allowlist",
+    "input": {
+      "policy": { "allowed_licenses": ["MIT", "Apache-2.0"] },
+      "package": {
+        "name": "good-pkg",
+        "version": "1.0.0",
+        "license": "MIT",
+        "yanked": false
+      }
+    },
+    "expected": { "allowed": true },
+    "error": null
+  },
+  {
+    "name": "empty allowlist allows all licenses",
+    "input": {
+      "policy": { "allowed_licenses": [] },
+      "package": {
+        "name": "any-pkg",
+        "version": "1.0.0",
+        "license": "WTFPL",
+        "yanked": false
+      }
+    },
+    "expected": { "allowed": true },
+    "error": null
+  },
+  {
+    "name": "non-blocked package passes",
+    "input": {
+      "policy": { "blocked_packages": ["other-pkg"] },
+      "package": {
+        "name": "good-pkg",
+        "version": "1.0.0",
+        "license": "MIT",
+        "yanked": false
+      }
+    },
+    "expected": { "allowed": true },
+    "error": null
+  }
 ]

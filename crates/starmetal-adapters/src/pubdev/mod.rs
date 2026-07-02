@@ -90,8 +90,7 @@ async fn package<S: HasPubState>(
         .await
         .map_err(|err| map_error(&err))?
     {
-        serde_json::from_slice(&raw)
-            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?
+        serde_json::from_slice(&raw).map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?
     } else {
         let fetched = match state.pub_upstream().fetch_package_json(&name).await {
             Ok(fetched) => fetched,
@@ -169,10 +168,7 @@ async fn version<S: HasPubState>(
         .await
         .map_err(|err| map_error(&err))?;
     let base_url = crate::public_base_url(state.config(), &headers);
-    let archive_url = format!(
-        "{base_url}/pub/api/archives/{}-{version}.tar.gz",
-        name.as_str()
-    );
+    let archive_url = format!("{base_url}/pub/api/archives/{}-{version}.tar.gz", name.as_str());
     Ok(json_response(serde_json::json!({
         "version": metadata.version,
         "archive_url": archive_url,
@@ -184,12 +180,8 @@ async fn archive<S: HasPubState>(
     State(state): State<S>,
     Path(filename): Path<String>,
 ) -> Result<Response, (StatusCode, String)> {
-    let (name, version) = parse_archive_filename(&filename).ok_or_else(|| {
-        (
-            StatusCode::BAD_REQUEST,
-            format!("invalid archive filename: {filename}"),
-        )
-    })?;
+    let (name, version) = parse_archive_filename(&filename)
+        .ok_or_else(|| (StatusCode::BAD_REQUEST, format!("invalid archive filename: {filename}")))?;
     let data = state
         .package_service()
         .get_artifact(&ArtifactId {
@@ -200,11 +192,7 @@ async fn archive<S: HasPubState>(
         })
         .await
         .map_err(|err| map_error(&err))?;
-    Ok((
-        [(header::CONTENT_TYPE, "application/octet-stream")],
-        Body::from(data),
-    )
-        .into_response())
+    Ok(([(header::CONTENT_TYPE, "application/octet-stream")], Body::from(data)).into_response())
 }
 
 async fn validate_package(
@@ -226,9 +214,8 @@ fn rewrite_archive_urls(package: &mut serde_json::Value, base_url: &str) {
     let name = package["name"].as_str().unwrap_or_default().to_string();
     for version in package["versions"].as_array_mut().into_iter().flatten() {
         if let Some(version_text) = version["version"].as_str() {
-            version["archive_url"] = serde_json::Value::String(format!(
-                "{base_url}/pub/api/archives/{name}-{version_text}.tar.gz"
-            ));
+            version["archive_url"] =
+                serde_json::Value::String(format!("{base_url}/pub/api/archives/{name}-{version_text}.tar.gz"));
         }
     }
 }
@@ -236,12 +223,7 @@ fn rewrite_archive_urls(package: &mut serde_json::Value, base_url: &str) {
 fn parse_archive_filename(filename: &str) -> Option<(&str, &str)> {
     let stem = filename.strip_suffix(".tar.gz")?;
     for idx in (1..stem.len()).rev() {
-        if stem.as_bytes()[idx] == b'-'
-            && stem
-                .as_bytes()
-                .get(idx + 1)
-                .is_some_and(|byte| byte.is_ascii_digit())
-        {
+        if stem.as_bytes()[idx] == b'-' && stem.as_bytes().get(idx + 1).is_some_and(|byte| byte.is_ascii_digit()) {
             return Some((&stem[..idx], &stem[idx + 1..]));
         }
     }
@@ -267,21 +249,13 @@ fn authorize_publish<S: HasPubState>(
     name: &PackageName,
 ) -> Result<(), (StatusCode, String)> {
     if !state.config().publishing.enabled {
-        return Err((
-            StatusCode::NOT_FOUND,
-            "publishing is not enabled".to_string(),
-        ));
+        return Err((StatusCode::NOT_FOUND, "publishing is not enabled".to_string()));
     }
     let token = headers
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.strip_prefix("Bearer "))
-        .ok_or_else(|| {
-            (
-                StatusCode::UNAUTHORIZED,
-                "missing publishing token".to_string(),
-            )
-        })?;
+        .ok_or_else(|| (StatusCode::UNAUTHORIZED, "missing publishing token".to_string()))?;
     if state
         .config()
         .authorize_publish_token(token, TokenScope::Publish, Ecosystem::Pub, name)

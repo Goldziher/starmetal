@@ -11,10 +11,7 @@
         },
         "gpg-sig": {
           "default": null,
-          "type": [
-            "boolean",
-            "null"
-          ]
+          "type": ["boolean", "null"]
         },
         "hashes": {
           "additionalProperties": {
@@ -23,24 +20,15 @@
           "type": "object"
         },
         "requires-python": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "size": {
           "format": "uint64",
           "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
+          "type": ["integer", "null"]
         },
         "upload-time": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "url": {
           "type": "string"
@@ -50,11 +38,7 @@
           "default": false
         }
       },
-      "required": [
-        "filename",
-        "url",
-        "hashes"
-      ],
+      "required": ["filename", "url", "hashes"],
       "type": "object"
     },
     "PypiMeta": {
@@ -63,9 +47,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "api-version"
-      ],
+      "required": ["api-version"],
       "type": "object"
     },
     "PypiYanked": {
@@ -104,11 +86,7 @@
       "type": "array"
     }
   },
-  "required": [
-    "meta",
-    "name",
-    "files"
-  ],
+  "required": ["meta", "name", "files"],
   "title": "PyPI Simple Repository API Project Detail",
   "type": "object",
   "x-starmetal-source": {
@@ -124,10 +102,7 @@
       "pypi-source-distribution-format",
       "pypi-json-api"
     ],
-    "source_kinds": [
-      "official-prose-index",
-      "official-prose"
-    ],
+    "source_kinds": ["official-prose-index", "official-prose"],
     "source_type": "starmetal_core::registry::pypi::PypiProject",
     "validated_by": "crates/starmetal-core/tests/schema_validation.rs; tests/conformance"
   }

@@ -12,10 +12,9 @@ async fn from_config_builds_fs_backend_with_explicit_root() {
         backend: "fs".to_string(),
         ..Default::default()
     };
-    config.options.insert(
-        "root".to_string(),
-        tempdir.path().to_string_lossy().to_string(),
-    );
+    config
+        .options
+        .insert("root".to_string(), tempdir.path().to_string_lossy().to_string());
 
     let storage = OpenDalStorage::from_config(&config).expect("fs backend should build");
     storage

@@ -13,11 +13,7 @@ use crate::statistics::StatisticsSnapshot;
 #[async_trait]
 pub trait PackageService: Send + Sync {
     /// List all versions of a package.
-    async fn list_versions(
-        &self,
-        ecosystem: Ecosystem,
-        name: &PackageName,
-    ) -> Result<Vec<VersionInfo>>;
+    async fn list_versions(&self, ecosystem: Ecosystem, name: &PackageName) -> Result<Vec<VersionInfo>>;
 
     /// Get metadata for a specific version.
     async fn get_version_metadata(
@@ -41,19 +37,10 @@ pub trait PackageService: Send + Sync {
     /// Protocol adapters use this to serve the full upstream response
     /// (preserving all protocol-specific fields) without depending on
     /// the upstream client's memory cache.
-    async fn get_raw_upstream(
-        &self,
-        ecosystem: Ecosystem,
-        name: &PackageName,
-    ) -> Result<Option<Bytes>>;
+    async fn get_raw_upstream(&self, ecosystem: Ecosystem, name: &PackageName) -> Result<Option<Bytes>>;
 
     /// Store the raw upstream response for a package.
-    async fn put_raw_upstream(
-        &self,
-        ecosystem: Ecosystem,
-        name: &PackageName,
-        data: Bytes,
-    ) -> Result<()>;
+    async fn put_raw_upstream(&self, ecosystem: Ecosystem, name: &PackageName, data: Bytes) -> Result<()>;
 }
 
 #[async_trait]
