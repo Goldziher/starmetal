@@ -13,7 +13,11 @@ use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
 use bytes::Bytes;
 use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey};
-use pkcs8::{DecodePrivateKey, DecodePublicKey};
+use pkcs8::{
+    DecodePrivateKey, ObjectIdentifier, PrivateKeyInfoOwned,
+    der::{Decode, DecodePem, asn1::OctetStringRef},
+    spki::SubjectPublicKeyInfoOwned,
+};
 use sha2::Digest;
 use starmetal_core::error::{Result, StarmetalError};
 use starmetal_core::integrity;
@@ -37,6 +41,8 @@ use starmetal_core::statistics::{EcosystemStatistics, StatisticsSnapshot};
 use zeroize::Zeroizing;
 
 const DSSE_PAE_PREFIX: &str = "DSSEv1";
+const ED25519_OID: &str = "1.3.101.112";
+const ED25519_KEY_BYTES: usize = 32;
 
 pub struct SigningService {
     mode: SigningMode,
@@ -95,23 +101,13 @@ impl SigningService {
                 }
                 validate_private_key_permissions(private_key_file)?;
                 let private_key_pem = Zeroizing::new(fs::read_to_string(private_key_file)?);
-                Some(
-                    SigningKey::from_pkcs8_pem(private_key_pem.as_str()).map_err(|err| {
-                        StarmetalError::Config(format!("invalid signing key {}: {err}", key.id))
-                    })?,
-                )
+                Some(load_ed25519_signing_key(private_key_pem.as_str(), &key.id)?)
             } else {
                 None
             };
             let verifying_key = if let Some(public_key_file) = &key.public_key_file {
                 let public_key_pem = fs::read_to_string(public_key_file)?;
-                let verifying_key =
-                    VerifyingKey::from_public_key_pem(&public_key_pem).map_err(|err| {
-                        StarmetalError::Config(format!(
-                            "invalid verification key {}: {err}",
-                            key.id
-                        ))
-                    })?;
+                let verifying_key = load_ed25519_verifying_key(&public_key_pem, &key.id)?;
                 if let Some(signing_key) = &signing_key
                     && signing_key.verifying_key().to_bytes() != verifying_key.to_bytes()
                 {
@@ -1381,6 +1377,56 @@ fn optional_pem_chain(path: Option<&Path>) -> Result<Vec<String>> {
     Ok(vec![pem])
 }
 
+fn load_ed25519_signing_key(pem: &str, key_id: &str) -> Result<SigningKey> {
+    let info = PrivateKeyInfoOwned::from_pkcs8_pem(pem)
+        .map_err(|err| StarmetalError::Config(format!("invalid signing key {key_id}: {err}")))?;
+    validate_ed25519_oid(info.algorithm.oid, key_id)?;
+    let private_key = extract_ed25519_private_key(info.private_key.as_bytes(), key_id)?;
+    Ok(SigningKey::from_bytes(&private_key))
+}
+
+fn load_ed25519_verifying_key(pem: &str, key_id: &str) -> Result<VerifyingKey> {
+    let info = SubjectPublicKeyInfoOwned::from_pem(pem).map_err(|err| {
+        StarmetalError::Config(format!("invalid verification key {key_id}: {err}"))
+    })?;
+    validate_ed25519_oid(info.algorithm.oid, key_id)?;
+    let bytes = info.subject_public_key.as_bytes().ok_or_else(|| {
+        StarmetalError::Config(format!(
+            "invalid verification key {key_id}: public key must be byte-aligned"
+        ))
+    })?;
+    let public_key = bytes.try_into().map_err(|_| {
+        StarmetalError::Config(format!(
+            "invalid verification key {key_id}: public key must be {ED25519_KEY_BYTES} bytes"
+        ))
+    })?;
+    VerifyingKey::from_bytes(public_key)
+        .map_err(|err| StarmetalError::Config(format!("invalid verification key {key_id}: {err}")))
+}
+
+fn validate_ed25519_oid(oid: ObjectIdentifier, key_id: &str) -> Result<()> {
+    if oid.to_string() == ED25519_OID {
+        return Ok(());
+    }
+    Err(StarmetalError::Config(format!(
+        "invalid signing key {key_id}: expected ed25519 key algorithm"
+    )))
+}
+
+fn extract_ed25519_private_key(bytes: &[u8], key_id: &str) -> Result<[u8; ED25519_KEY_BYTES]> {
+    if let Ok(key) = bytes.try_into() {
+        return Ok(key);
+    }
+    if let Ok(inner) = <&OctetStringRef>::from_der(bytes)
+        && let Ok(key) = inner.as_bytes().try_into()
+    {
+        return Ok(key);
+    }
+    Err(StarmetalError::Config(format!(
+        "invalid signing key {key_id}: private key must be {ED25519_KEY_BYTES} bytes"
+    )))
+}
+
 fn validate_private_key_permissions(path: &Path) -> Result<()> {
     let metadata = fs::metadata(path)?;
     #[cfg(unix)]
@@ -1455,8 +1501,6 @@ mod tests {
     use std::sync::Mutex;
 
     use super::*;
-    #[cfg(unix)]
-    use pkcs8::{EncodePrivateKey, EncodePublicKey, LineEnding};
     use starmetal_core::package::ArtifactDigest;
     use starmetal_core::publishing::PublishedArtifact;
     #[cfg(unix)]
@@ -1655,8 +1699,7 @@ mod tests {
     #[cfg(unix)]
     fn write_test_signing_key(path: &Path, mode: u32) {
         let secret = [7_u8; 32];
-        let signing_key = SigningKey::from_bytes(&secret);
-        let pem = signing_key.to_pkcs8_pem(LineEnding::LF).unwrap();
+        let pem = test_private_key_pem(&secret);
         fs::write(path, pem.as_bytes()).unwrap();
         fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap();
     }
@@ -1664,13 +1707,39 @@ mod tests {
     #[cfg(unix)]
     fn write_test_verification_key(path: &Path, mode: u32) {
         let secret = [7_u8; 32];
-        let signing_key = SigningKey::from_bytes(&secret);
-        let pem = signing_key
-            .verifying_key()
-            .to_public_key_pem(LineEnding::LF)
-            .unwrap();
+        let pem = test_public_key_pem(&secret);
         fs::write(path, pem.as_bytes()).unwrap();
         fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap();
+    }
+
+    #[cfg(unix)]
+    fn test_private_key_pem(secret: &[u8; ED25519_KEY_BYTES]) -> String {
+        const PKCS8_ED25519_PREFIX: [u8; 16] = [
+            0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22,
+            0x04, 0x20,
+        ];
+        let mut der = Vec::with_capacity(PKCS8_ED25519_PREFIX.len() + secret.len());
+        der.extend_from_slice(&PKCS8_ED25519_PREFIX);
+        der.extend_from_slice(secret);
+        pem_block("PRIVATE KEY", &der)
+    }
+
+    #[cfg(unix)]
+    fn test_public_key_pem(secret: &[u8; ED25519_KEY_BYTES]) -> String {
+        const SPKI_ED25519_PREFIX: [u8; 12] = [
+            0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00,
+        ];
+        let public_key = SigningKey::from_bytes(secret).verifying_key().to_bytes();
+        let mut der = Vec::with_capacity(SPKI_ED25519_PREFIX.len() + public_key.len());
+        der.extend_from_slice(&SPKI_ED25519_PREFIX);
+        der.extend_from_slice(&public_key);
+        pem_block("PUBLIC KEY", &der)
+    }
+
+    #[cfg(unix)]
+    fn pem_block(label: &str, der: &[u8]) -> String {
+        let encoded = BASE64_STANDARD.encode(der);
+        format!("-----BEGIN {label}-----\n{encoded}\n-----END {label}-----\n")
     }
 
     #[cfg(unix)]

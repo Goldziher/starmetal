@@ -1,6 +1,6 @@
 use rmcp::handler::server::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::{CallToolResult, Content, ServerCapabilities, ServerInfo};
+use rmcp::model::{CallToolResult, ServerCapabilities, ServerInfo};
 use rmcp::transport::stdio;
 use rmcp::{
     ErrorData as McpError, ServerHandler, ServiceExt, schemars, tool, tool_handler, tool_router,
@@ -245,7 +245,10 @@ pub async fn serve(
 }
 
 fn json_result(value: impl Serialize) -> Result<CallToolResult, McpError> {
-    Ok(CallToolResult::success(vec![Content::json(value)?]))
+    let value = serde_json::to_value(value).map_err(|err| {
+        McpError::internal_error(format!("failed to serialize MCP result: {err}"), None)
+    })?;
+    Ok(CallToolResult::structured(value))
 }
 
 fn mcp_error(err: StarmetalError) -> McpError {

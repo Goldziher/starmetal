@@ -59,11 +59,11 @@ jsonschema = "0.46"
 memchr = "2"
 
 # Storage
-opendal = "0.56"
+opendal = "0.57"
 pem-rfc7468 = "1"
-pkcs8 = { version = "0.10", features = ["pem"] }
+pkcs8 = { version = "0.11", features = ["pem"] }
 prost = "0.14"
-rand_core = "0.6"
+rand_core = "0.10"
 
 # HTTP client
 reqwest = { version = "0.13", default-features = false, features = [
@@ -73,7 +73,7 @@ reqwest = { version = "0.13", default-features = false, features = [
 ] }
 
 # MCP
-rmcp = { version = "1.7.0", default-features = false, features = [
+rmcp = { version = "2.0.0", default-features = false, features = [
     "macros",
     "server",
     "transport-io",
@@ -108,7 +108,7 @@ thiserror = "2"
 tokio = { version = "1", features = ["full"] }
 toml = "1.1"
 tower = { version = "0.5", features = ["full"] }
-tower-http = { version = "0.6", features = [
+tower-http = { version = "0.7", features = [
     "cors",
     "compression-full",
     "limit",
