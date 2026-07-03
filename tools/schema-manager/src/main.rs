@@ -18,6 +18,8 @@ const TOOL_NAME: &str = "starmetal-schema-manager";
 const DEFAULT_SOURCES: &str = "schemas/sources.toml";
 const DEFAULT_SCHEMA_ROOT: &str = "schemas";
 const MANIFEST_PATH: &str = "manifest.json";
+const JSON_INDENT_WIDTH: usize = 2;
+const JSON_MAX_LINE_WIDTH: usize = 120;
 
 type DynError = Box<dyn std::error::Error + Send + Sync + 'static>;
 type Result<T> = std::result::Result<T, DynError>;
@@ -546,9 +548,97 @@ fn blake3_hex(bytes: &[u8]) -> String {
 }
 
 fn json_pretty<T: Serialize>(value: &T) -> Result<String> {
-    let mut output = serde_json::to_string_pretty(value)?;
+    let value = serde_json::to_value(value)?;
+    let mut output = String::new();
+    write_json_value(&value, 0, &mut output)?;
     output.push('\n');
     Ok(output)
+}
+
+fn write_json_value(value: &Value, indent: usize, output: &mut String) -> Result<()> {
+    match value {
+        Value::Object(object) => write_json_object(object, indent, output),
+        Value::Array(array) => write_json_array(array, indent, output),
+        _ => {
+            output.push_str(&serde_json::to_string(value)?);
+            Ok(())
+        }
+    }
+}
+
+fn write_json_object(object: &serde_json::Map<String, Value>, indent: usize, output: &mut String) -> Result<()> {
+    if object.is_empty() {
+        output.push_str("{}");
+        return Ok(());
+    }
+
+    output.push_str("{\n");
+    let child_indent = indent + JSON_INDENT_WIDTH;
+    for (index, (key, value)) in object.iter().enumerate() {
+        write_indent(child_indent, output);
+        output.push_str(&serde_json::to_string(key)?);
+        output.push_str(": ");
+        write_json_value(value, child_indent, output)?;
+        if index + 1 != object.len() {
+            output.push(',');
+        }
+        output.push('\n');
+    }
+    write_indent(indent, output);
+    output.push('}');
+    Ok(())
+}
+
+fn write_json_array(array: &[Value], indent: usize, output: &mut String) -> Result<()> {
+    if array.is_empty() {
+        output.push_str("[]");
+        return Ok(());
+    }
+    if let Some(inline) = inline_scalar_array(array)?
+        && indent + inline.len() <= JSON_MAX_LINE_WIDTH
+    {
+        output.push_str(&inline);
+        return Ok(());
+    }
+
+    output.push_str("[\n");
+    let child_indent = indent + JSON_INDENT_WIDTH;
+    for (index, value) in array.iter().enumerate() {
+        write_indent(child_indent, output);
+        write_json_value(value, child_indent, output)?;
+        if index + 1 != array.len() {
+            output.push(',');
+        }
+        output.push('\n');
+    }
+    write_indent(indent, output);
+    output.push(']');
+    Ok(())
+}
+
+fn inline_scalar_array(array: &[Value]) -> Result<Option<String>> {
+    if !array
+        .iter()
+        .all(|value| value.is_string() || value.is_number() || value.is_boolean() || value.is_null())
+    {
+        return Ok(None);
+    }
+
+    let mut output = String::from("[");
+    for (index, value) in array.iter().enumerate() {
+        if index > 0 {
+            output.push_str(", ");
+        }
+        output.push_str(&serde_json::to_string(value)?);
+    }
+    output.push(']');
+    Ok(Some(output))
+}
+
+fn write_indent(indent: usize, output: &mut String) {
+    for _ in 0..indent {
+        output.push(' ');
+    }
 }
 
 #[allow(dead_code)]
@@ -575,6 +665,22 @@ mod tests {
             );
             assert_eq!(schema.blake3.len(), 64);
         }
+    }
+
+    #[test]
+    fn json_pretty_compacts_short_scalar_arrays() {
+        let value = json!({
+            "required": ["meta", "name", "files"],
+            "anyOf": [
+                { "type": "boolean" },
+                { "type": "string" }
+            ]
+        });
+
+        let output = json_pretty(&value).expect("json should render");
+
+        assert!(output.contains(r#""required": ["meta", "name", "files"]"#));
+        assert!(output.contains("\"anyOf\": [\n"));
     }
 
     #[test]
