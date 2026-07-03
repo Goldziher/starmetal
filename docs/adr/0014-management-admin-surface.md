@@ -46,8 +46,8 @@ Future browser UI direction:
 
 - Use Next.js, TypeScript, shadcn/ui, and Tailwind by default.
 - Build the UI against `/admin/api/v1/*`.
-- Ship it only after the admin API, auth, metrics, and deterministic Docker install/publish evidence
-  are stable.
+- Ship it only after the admin API, auth, metrics, deterministic Docker read/install evidence, and
+  npm/pnpm local publish evidence for the documented scope are stable.
 
 ## Deferred
 

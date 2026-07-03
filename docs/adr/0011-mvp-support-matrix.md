@@ -16,16 +16,16 @@ All implemented registry read/proxy adapters are core experimental capabilities 
 default in runtime config. Native publishing is not supported. Local publishing is experimental,
 disabled by default, and requires explicit scoped tokens when enabled.
 
-| Registry | Default route enablement | Read/proxy status | Write status |
-|----------|--------------------------|-------------------|--------------|
-| PyPI | Enabled | Experimental core capability | Native publishing not supported |
-| npm | Enabled | Experimental core capability | Native publishing not supported |
-| Cargo | Enabled | Experimental core capability | Native publishing not supported |
-| Hex | Enabled | Experimental core capability | Native publishing not supported |
-| Maven | Enabled | Experimental core capability | Native publishing not supported |
-| RubyGems | Enabled | Experimental core capability | Native publishing not supported |
-| NuGet | Enabled | Experimental core capability | Native publishing not supported |
-| pub.dev | Enabled | Experimental core capability | Native publishing not supported |
+| Registry | Default route enablement | Read/proxy status | Local publish substrate | Native publish status | Evidence |
+|----------|--------------------------|-------------------|-------------------------|-----------------------|----------|
+| PyPI | Enabled | Experimental core capability | Experimental, disabled by default | Not supported | HTTP route conformance and Docker proxy E2E |
+| npm | Enabled | Experimental core capability | Experimental, disabled by default | Not supported | HTTP/native Docker proxy E2E plus pnpm local publish-then-install |
+| Cargo | Enabled | Experimental core capability | Experimental, disabled by default | Not supported | HTTP route conformance and Docker proxy E2E |
+| Hex | Enabled | Experimental core capability | Experimental, disabled by default | Not supported | HTTP/protobuf route conformance and Docker proxy E2E |
+| Maven | Enabled | Experimental core capability | Experimental, disabled by default | Not supported | HTTP route conformance and Docker proxy E2E |
+| RubyGems | Enabled | Experimental core capability | Experimental, disabled by default | Not supported | HTTP/native Docker proxy E2E |
+| NuGet | Enabled | Experimental core capability | Experimental, disabled by default | Not supported | HTTP/native Docker proxy E2E |
+| pub.dev | Enabled | Experimental core capability | Experimental, disabled by default | Not supported | HTTP/native Docker proxy E2E |
 
 Planned registry work includes OCI/distribution, Go modules, Composer, Conda, Debian/APT, and
 RPM/YUM. Planned registries must not be described as implemented until adapters, upstream clients,
@@ -61,6 +61,23 @@ To promote native publishing in a future ADR, the registry must also have:
 2. Route-level publish conformance tests.
 3. Native publish-then-install or publish-then-restore E2E tests.
 4. Documented duplicate, shadowing, auth, rollback, and failure semantics.
+
+Native publish promotion gates are per ecosystem:
+
+| Ecosystem | Required native publish evidence before support claim |
+|-----------|-------------------------------------------------------|
+| PyPI | `twine` upload plus `pip` install after restart and fixture-upstream shutdown |
+| npm/pnpm | Native publish plus npm/pnpm install after restart and fixture-upstream shutdown |
+| Cargo | `cargo publish` plus fetch/install workflow after restart and fixture-upstream shutdown |
+| Hex | `mix hex.publish` against valid signed registry resources |
+| Maven | Native deploy plus Maven restore after restart and fixture-upstream shutdown |
+| RubyGems | `gem push` plus Bundler install after restart and fixture-upstream shutdown |
+| NuGet | `dotnet nuget push` plus restore after restart and fixture-upstream shutdown |
+| pub.dev | Hosted publish upload-info/finalize flow plus Dart install after restart |
+
+Signing support follows the same evidence rule. Configured Ed25519 Starmetal DSSE sidecars are
+experimental. Protocol-native signing, PQ signing, and client-verified PQ support are planned only
+until protocol clients verify them in deterministic tests.
 
 ## Consequences
 

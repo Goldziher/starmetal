@@ -44,6 +44,13 @@ response-size-limit, and sanitized-error check.
 with `package.json` and `pnpm-lock.yaml` updates, reinstall from the Starmetal cache with the
 fixture upstream offline, and experimental local npm publish-then-install through Starmetal.
 
+## Publish E2E Gate
+
+`task docker:publish:e2e` currently delegates to the npm/pnpm local publish evidence only. It must
+not be treated as native publish coverage for npm or as publish coverage for any other ecosystem.
+Each ecosystem needs its own native publish-then-install or publish-then-restore gate before docs can
+claim native publishing support.
+
 Docker proxy E2E writes logs, client output, and stored-file listings under
 `.artifacts/docker-proxy-e2e/`. CI uploads these artifacts on failure.
 
@@ -86,12 +93,16 @@ Before any non-private release claim:
 
 - Pass the required offline gate.
 - Pass the relevant live E2E gate.
-- Verify README, `docs/architecture.md`, `docs/deployment.md`, and ADR-0011 agree.
+- Verify README, `docs/architecture.md`, `docs/deployment.md`, ADR-0009, and ADR-0011 agree before
+  any publishing claim.
 - Verify generated AI instructions are regenerated if `.ai-rulez/` sources changed.
+- Treat `pq` feature checks as compile/schema reservation only; they are not PQ client-support
+  evidence.
 
 ## Consequences
 
 - Schema freshness and conformance are required before support claims.
 - Deterministic Docker integration is required for containerized proxy changes.
 - Live E2E is the promotion signal for read support.
+- Native publish support requires ecosystem-specific publish E2E evidence in ADR-0009 and ADR-0011.
 - Docs-only changes can use targeted docs checks, but final claims still require evidence.

@@ -27,7 +27,7 @@ Implemented CLI surface:
 | `sm package versions` | Implemented |
 | `sm package metadata` | Implemented |
 | `sm package fetch` | Implemented |
-| `sm package publish` | Experimental local publishing |
+| `sm package publish` | Experimental explicit local artifact publishing |
 | `sm package yank` | Experimental local publishing |
 | `sm package unyank` | Experimental local publishing |
 | `sm cache delete-artifact` | Implemented local cache operation |
@@ -53,7 +53,7 @@ MCP runs over stdio. Read tools are available by default. Mutating tools require
 - Remote administration over HTTP.
 - Full sync workflows.
 - Lock file verify and update workflows.
-- Native archive inference for operator publishing.
+- Native package-manager publishing and archive inference for operator publishing.
 - Treating MCP writes as safe without explicit startup opt-in.
 
 ## Consequences

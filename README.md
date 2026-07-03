@@ -52,19 +52,22 @@ native-client E2E passes for that ecosystem.
 
 ## Registry Support
 
-| Registry | Route | Default | Status |
-|---|---:|---:|---|
-| PyPI | `/pypi` | Enabled | Experimental core read/proxy adapter |
-| npm | `/npm` | Enabled | Experimental core read/proxy adapter |
-| Cargo | `/cargo` | Enabled | Experimental core read/proxy adapter |
-| Hex | `/hex` | Enabled | Experimental core read/proxy adapter |
-| Maven | `/maven` | Enabled | Experimental core read/proxy adapter |
-| RubyGems | `/rubygems` | Enabled | Experimental core read/proxy adapter |
-| NuGet | `/nuget` | Enabled | Experimental core read/proxy adapter |
-| pub.dev | `/pub` | Enabled | Experimental core read/proxy adapter |
+| Registry | Route | Read/proxy | Local publish substrate | Native publish support | Evidence |
+|---|---:|---|---|---|---|
+| PyPI | `/pypi` | Experimental | Experimental, disabled by default | Unsupported | HTTP route conformance and Docker proxy E2E |
+| npm | `/npm` | Experimental | Experimental, disabled by default | Unsupported | HTTP/native Docker proxy E2E plus pnpm local publish-then-install |
+| Cargo | `/cargo` | Experimental | Experimental, disabled by default | Unsupported | HTTP route conformance and Docker proxy E2E |
+| Hex | `/hex` | Experimental | Experimental, disabled by default | Unsupported | HTTP/protobuf route conformance and Docker proxy E2E |
+| Maven | `/maven` | Experimental | Experimental, disabled by default | Unsupported | HTTP route conformance and Docker proxy E2E |
+| RubyGems | `/rubygems` | Experimental | Experimental, disabled by default | Unsupported | HTTP/native Docker proxy E2E |
+| NuGet | `/nuget` | Experimental | Experimental, disabled by default | Unsupported | HTTP/native Docker proxy E2E |
+| pub.dev | `/pub` | Experimental | Experimental, disabled by default | Unsupported | HTTP/native Docker proxy E2E |
 
 Planned registry work includes OCI/distribution, Go modules, Composer, Conda, Debian/APT, and RPM/YUM.
 See [ADR-0011](docs/adr/0011-mvp-support-matrix.md) for experimental support criteria and promotion gates.
+Configured Ed25519 Starmetal DSSE sidecars are experimental. Protocol-native signing, PQ signing,
+and client-verified PQ support are planned only; `ecdsa-p256-sha256`, `ml-dsa65`, and the `pq`
+feature are reserved until matching client-visible verification is implemented and tested.
 
 ## Install
 
@@ -124,7 +127,9 @@ task test:e2e:cargo
 task test:e2e:hex
 ```
 
-`task ci:live-e2e` runs the same live gate plus live schema freshness checks.
+`task ci:live-e2e` runs live schema freshness plus the PyPI, npm, Cargo, and Hex read gates. Maven,
+RubyGems, NuGet, and pub.dev have separate live tasks and must pass before their workflows are
+promoted.
 
 ## Docker
 
@@ -153,8 +158,10 @@ network, exercises every implemented registry route with HTTP assertions, runs n
 containers for PyPI, npm, Cargo, Maven, RubyGems, NuGet, and pub.dev, restarts StarMetal with the
 same OpenDAL filesystem volume, and repeats the checks with the fixture upstream stopped. It also
 runs pnpm read-through install, cached reinstall with a fresh pnpm store, and experimental local npm
-publish-then-install. The native client pass disables read auth because package-manager support for
-Bearer read auth is uneven; the HTTP pass covers auth behavior.
+publish-then-install. The pnpm publish pass proves only the local npm publishing substrate; it is not
+a supported native publishing claim for npm or any other ecosystem. The native client pass disables
+read auth because package-manager support for Bearer read auth is uneven; the HTTP pass covers auth
+behavior.
 
 Use a mounted config file for production settings, auth tokens, `public_base_url`, and S3/GCS
 OpenDAL options:

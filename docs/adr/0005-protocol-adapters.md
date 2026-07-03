@@ -47,7 +47,8 @@ Each adapter owns:
 - Hex protobuf registry proxy for mix checksum behavior.
 - RubyGems Compact Index compatibility, including Bundler-native `checksum:<sha256>` metadata and
   legacy upstream `checksum:sha256=<sha256>` parsing.
-- Experimental local publish route plumbing when `publishing.enabled = true`.
+- Experimental local publish route substrate for all eight adapters when `publishing.enabled = true`;
+  see ADR-0009.
 
 ## Deferred
 

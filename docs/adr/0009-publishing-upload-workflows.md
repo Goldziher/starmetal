@@ -39,6 +39,19 @@ Implemented local publishing behavior:
 - Native upload routes call `PublishingService` when publishing is enabled, but these routes are
   experimental and do not create a native publishing support claim.
 
+Local publish substrate by ecosystem:
+
+| Ecosystem | Local route substrate | Position |
+|-----------|-----------------------|----------|
+| PyPI | `/legacy/` multipart upload | Experimental local only |
+| npm | `PUT /{package}` and scoped package routes | Experimental local only |
+| Cargo | `/api/v1/crates/new` | Experimental local only |
+| Hex | `/api/packages` | Experimental local only |
+| Maven | `PUT /{path}` deploy-style uploads | Experimental local only |
+| RubyGems | `/api/v1/gems` | Experimental local only |
+| NuGet | `/api/v2/package` | Experimental local only |
+| pub.dev | `/api/packages/versions/new` | Experimental local only |
+
 ## Implemented
 
 - Local publish metadata and artifact writes.
@@ -46,7 +59,7 @@ Implemented local publishing behavior:
 - Scoped publish token config with ecosystem and package constraints.
 - CLI explicit artifact publish.
 - MCP explicit artifact publish behind `--allow-writes`.
-- Route-level experimental publish parsing for multiple ecosystems.
+- Route-level experimental publish parsing for all eight implemented ecosystems.
 - Docker pnpm local npm publish-then-install evidence.
 - Bundler-compatible local RubyGems Compact Index metadata generation.
 - Yank and unyank service operations for locally known versions.
@@ -54,7 +67,6 @@ Implemented local publishing behavior:
 ## Deferred
 
 - Native publishing support claims.
-- Native publish-then-install E2E promotion criteria.
 - Upstream publish forwarding.
 - Full identity, owners, invitations, organizations, and audit logging.
 - Native yanking/unlisting parity for every ecosystem.
@@ -69,3 +81,7 @@ Implemented local publishing behavior:
   publishing support.
 - Any future publishing support requires native-client E2E coverage, documented failure semantics,
   and credential behavior per ecosystem.
+- Per-ecosystem native publishing promotion requires native client publish, fresh install or restore
+  through Starmetal, restart with persisted storage, cached reinstall or restore with fixture upstream
+  offline where applicable, auth behavior coverage, duplicate and shadowing failure coverage,
+  rollback or cleanup behavior, and exact documented client commands.
