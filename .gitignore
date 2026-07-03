@@ -1,5 +1,6 @@
 /target
 .artifacts/
+.polylint/
 .agents/
 packages/crates/starmetal/target/
 packages/pypi/.venv/

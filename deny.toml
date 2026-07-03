@@ -8,6 +8,8 @@ yanked = "deny"
 unused-ignored-advisory = "warn"
 ignore = [
     { id = "RUSTSEC-2023-0071", reason = "rsa is pulled only through optional OpenDAL GCS support via reqsign-google and has no fixed version. Remove when upstream ships a fix or GCS signing no longer depends on rsa." },
+    { id = "RUSTSEC-2026-0194", reason = "quick-xml is pulled through OpenDAL core/services and reqsign. OpenDAL 0.57 and reqsign-aws-v4 3.0.1 have no fixed crates.io release yet. Temporary until 2026-08-15; remove when upstream allows quick-xml >= 0.41." },
+    { id = "RUSTSEC-2026-0195", reason = "quick-xml is pulled through OpenDAL core/services and reqsign. OpenDAL 0.57 and reqsign-aws-v4 3.0.1 have no fixed crates.io release yet. Temporary until 2026-08-15; remove when upstream allows quick-xml >= 0.41." },
 ]
 
 [licenses]

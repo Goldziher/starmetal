@@ -12,7 +12,6 @@ tasks:
     desc: First-time setup — install hooks and generate AI config
     cmds:
       - task: setup:sccache
-      - task: setup:prek
       - task: setup:hooks
       - task: setup:ai-rulez
 
@@ -38,22 +37,10 @@ tasks:
         fi
         sccache --show-stats
 
-  setup:prek:
-    desc: Install prek if not present
-    status:
-      - command -v prek
-    cmds:
-      - |
-        if ! command -v brew &> /dev/null; then
-          echo "Error: Homebrew is not installed. Install it from https://brew.sh"
-          exit 1
-        fi
-        brew install prek
-
   setup:hooks:
-    desc: Install pre-commit hooks
+    desc: Install poly git hooks
     cmds:
-      - prek install
+      - poly hooks install
 
   docker:build:
     desc: Build the local Starmetal container image
@@ -308,7 +295,7 @@ tasks:
   audit:
     desc: Run cargo-audit with documented temporary ignores from audit.toml
     cmds:
-      - cargo audit --ignore RUSTSEC-2023-0071
+      - cargo audit --ignore RUSTSEC-2023-0071 --ignore RUSTSEC-2026-0194 --ignore RUSTSEC-2026-0195
 
   security:
     desc: Run Rust dependency policy and advisory checks
@@ -331,9 +318,10 @@ tasks:
       - task: test:all
 
   lint:
-    desc: Run pre-commit checks across the repository
+    desc: Run poly formatting and lint checks across the repository
     cmds:
-      - prek run --all-files
+      - poly fmt --check .
+      - poly lint .
 
   ci:
     desc: Run PR-safe CI checks

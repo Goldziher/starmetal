@@ -32,7 +32,7 @@ disable = ["MD012", "MD013", "MD024", "MD030", "MD033", "MD035", "MD036", "MD041
 disable = ["MD012", "MD013", "MD024", "MD030", "MD033", "MD035", "MD036", "MD041", "MD046", "MD051", "MD076"]
 
 [lint.typos]
-extend_words = { ba = "ba", bre = "bre", caf = "caf", charater = "charater", chlidren = "chlidren", cliper = "cliper", docling = "docling", edn = "edn", ein = "ein", execpt = "execpt", extention = "extention", faiure = "faiure", fith = "fith", flate = "flate", fo = "fo", formated = "formated", ges = "ges", headerr = "headerr", helo = "helo", hocr = "hocr", hom = "hom", inh = "inh", ist = "ist", iy = "iy", kreuzberg = "kreuzberg", markitdown = "markitdown", ment = "ment", mis = "mis", mkdocs = "mkdocs", mkdocstrings = "mkdocstrings", multline = "multline", nd = "nd", odf = "odf", onnx = "onnx", openwebui = "openwebui", opf = "opf", ove = "ove", pard = "pard", pdfium = "pdfium", pn = "pn", portait = "portait", pymupdf = "pymupdf", rumdl = "rumdl", similarily = "similarily", siz = "siz", specifing = "specifing", splitted = "splitted", substract = "substract", surrealdb = "surrealdb", tesseract = "tesseract", tha = "tha", thr = "thr", threed = "threed", ths = "ths", tre = "tre", unparseable = "unparseable", wasm = "wasm", webui = "webui", yor = "yor", zensical = "zensical" }
+extend_words = { ba = "ba", bre = "bre", caf = "caf", certifi = "certifi", charater = "charater", chlidren = "chlidren", cliper = "cliper", docling = "docling", edn = "edn", ein = "ein", execpt = "execpt", extention = "extention", faiure = "faiure", fith = "fith", flate = "flate", fo = "fo", formated = "formated", ges = "ges", headerr = "headerr", helo = "helo", hocr = "hocr", hom = "hom", inh = "inh", ist = "ist", iy = "iy", kreuzberg = "kreuzberg", markitdown = "markitdown", ment = "ment", mis = "mis", mkdocs = "mkdocs", mkdocstrings = "mkdocstrings", multline = "multline", nd = "nd", odf = "odf", onnx = "onnx", openwebui = "openwebui", opf = "opf", ove = "ove", pard = "pard", pdfium = "pdfium", pn = "pn", portait = "portait", pymupdf = "pymupdf", rumdl = "rumdl", similarily = "similarily", siz = "siz", specifing = "specifing", splitted = "splitted", substract = "substract", surrealdb = "surrealdb", tesseract = "tesseract", tha = "tha", thr = "thr", threed = "threed", ths = "ths", tre = "tre", unparseable = "unparseable", wasm = "wasm", webui = "webui", yor = "yor", zensical = "zensical" }
 extend_identifiers = { MarkItDown = "MarkItDown", PDFium = "PDFium", PyMuPDF = "PyMuPDF", SurrealDB = "SurrealDB", WebUI = "WebUI", traineddata = "traineddata" }
 extend_exclude = [
     "test_documents/",
@@ -135,12 +135,3 @@ enabled = true
 
 [tools.actionlint]
 enabled = true
-
-# --- lightweight inline script hooks (no toolchain) ---
-[hooks.pre-commit.scripts.ai_rulez_generate]
-# TODO: wire to vendored script / task target (was a shared pre-commit-hooks hook).
-run = "TODO-ai-rulez-generate"
-
-[hooks.pre-commit.scripts.gh_actions_updater]
-# TODO: wire to vendored script / task target (was a shared pre-commit-hooks hook).
-run = "TODO-gh-actions-updater"
