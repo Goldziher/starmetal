@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-04
+
+### Added
+
+- Starmetal signing substrate with Ed25519 DSSE-style statements, key configuration, signature sidecars, and
+  read-time verification paths.
+- Admin management metrics API and ADRs for the management surface and operational statistics.
+- Deterministic Docker proxy E2E coverage, including pnpm read-through and local publish/install cache validation.
+- Native local publish/readback coverage improvements across npm, PyPI, Cargo, Hex, Maven, RubyGems, NuGet, and
+  pub.dev conformance routes.
+
+### Changed
+
+- Migrated repository formatting, linting, and git hooks from prek-specific configuration to `poly`.
+- Refreshed Rust dependencies, including the `rmcp` 2.1 update and lockfile regeneration.
+- Stabilized generated schema JSON formatting so schema checks and `poly` formatting agree.
+- Clarified README and ADR support matrices: publishing remains experimental local substrate until native
+  publish-then-install E2E is green per ecosystem.
+- Hardened release and Docker CI paths, including native Docker image builds and GHCR dry-run validation.
+
+### Fixed
+
+- npm local publish now works when no upstream package metadata exists.
+- RubyGems compact index responses now emit checksum data correctly.
+- Signing verification paths now reject tampered or mismatched payloads more consistently.
+- CI release scripts now retain executable bits for Docker, namespace, package, Homebrew, version-sync, dry-run,
+  and tag workflows.
+
+## [0.1.0] - 2026-06-28
+
 ### Added
 
 - `starmetal-service` crate: application service layer with `CachingPackageService` implementing pull-through caching, blake3 integrity verification, and policy enforcement.

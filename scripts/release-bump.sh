@@ -19,9 +19,13 @@ node - "$VERSION" <<'NODE'
 const fs = require("node:fs");
 const version = process.argv[2];
 for (const file of ["packages/npm/package.json"]) {
-  const json = JSON.parse(fs.readFileSync(file, "utf8"));
-  json.version = version;
-  fs.writeFileSync(file, `${JSON.stringify(json, null, 2)}\n`);
+  const current = fs.readFileSync(file, "utf8");
+  const versionPattern = /("version": ")[^"]+(")/;
+  if (!versionPattern.test(current)) {
+    throw new Error(`failed to update version in ${file}`);
+  }
+  const next = current.replace(versionPattern, `$1${version}$2`);
+  fs.writeFileSync(file, next);
 }
 NODE
 
@@ -41,8 +45,37 @@ perl -0pi -e \
 	's/^__version__ = "[^"]+"/__version__ = "'"$PY_VERSION"'"/m' \
 	packages/pypi/src/starmetal/__init__.py
 
-cargo metadata --format-version 1 --no-deps >/dev/null
+metadata_file="$(mktemp)"
+trap 'rm -f "$metadata_file"' EXIT
+cargo metadata --format-version 1 --no-deps >"$metadata_file"
+node - "$VERSION" "$metadata_file" <<'NODE'
+const fs = require("node:fs");
+const version = process.argv[2];
+const metadata = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
+const workspaceMembers = new Set(metadata.workspace_members);
+const workspacePackageNames = new Set(
+  metadata.packages.filter((pkg) => workspaceMembers.has(pkg.id)).map((pkg) => pkg.name)
+);
+const lockfile = "Cargo.lock";
+const current = fs.readFileSync(lockfile, "utf8");
+let matchedWorkspacePackage = false;
+const next = current.replace(
+  /(\[\[package\]\]\nname = "([^"]+)"\nversion = ")[^"]+(")/g,
+  (match, prefix, name, suffix) => {
+    if (!workspacePackageNames.has(name)) {
+      return match;
+    }
+    matchedWorkspacePackage = true;
+    return `${prefix}${version}${suffix}`;
+  }
+);
+if (!matchedWorkspacePackage) {
+  throw new Error(`failed to update workspace package versions in ${lockfile}`);
+}
+fs.writeFileSync(lockfile, next);
+NODE
 (cd packages/crates/starmetal && cargo generate-lockfile)
+cargo metadata --locked --format-version 1 --no-deps >/dev/null
 
 echo "Synced StarMetal release version to $VERSION"
 echo "Release tag: v$VERSION"
