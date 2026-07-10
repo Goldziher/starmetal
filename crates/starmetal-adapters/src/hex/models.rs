@@ -271,7 +271,6 @@ mod tests {
         assert_eq!(response.releases.len(), 2);
         assert_eq!(response.releases[0].url, "/hex/tarballs/jason-1.4.1.tar");
         assert_eq!(response.releases[1].url, "/hex/tarballs/jason-1.3.0.tar");
-        // Meta should be preserved
         assert!(response.meta.is_some());
         assert_eq!(response.meta.as_ref().unwrap().licenses, vec!["Apache-2.0"]);
     }

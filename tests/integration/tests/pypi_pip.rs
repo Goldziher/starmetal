@@ -47,7 +47,7 @@ async fn pip_install(
 }
 
 #[tokio::test]
-#[ignore] // requires network + pip
+#[ignore]
 async fn pip_install_small_package() {
     let pip = require_pip().await;
     let server = TestServer::start().await;
@@ -56,7 +56,6 @@ async fn pip_install_small_package() {
     let tmp = tempfile::tempdir().expect("failed to create tempdir");
     let cache = tempfile::tempdir().expect("failed to create cache tempdir");
 
-    // Install `six` — small, pure-python, no native deps
     let output = pip_install(&pip, &index_url, "six==1.16.0", tmp.path(), cache.path()).await;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -71,7 +70,6 @@ async fn pip_install_small_package() {
         "pip install failed: {command}\nstdout: {stdout}\nstderr: {stderr}"
     );
 
-    // Verify the package was actually installed
     assert!(
         tmp.path().join("six.py").exists(),
         "six.py not found in install target. Contents: {:?}",
@@ -82,7 +80,7 @@ async fn pip_install_small_package() {
 }
 
 #[tokio::test]
-#[ignore] // requires network + pip
+#[ignore]
 async fn pip_install_cached_on_second_request() {
     let pip = require_pip().await;
     let server = TestServer::start().await;
@@ -93,13 +91,9 @@ async fn pip_install_cached_on_second_request() {
     let cache1 = tempfile::tempdir().expect("cache tempdir");
     let cache2 = tempfile::tempdir().expect("cache tempdir");
 
-    // First install — fetches from upstream
     let out1 = pip_install(&pip, &index_url, "six==1.16.0", tmp1.path(), cache1.path()).await;
     assert!(out1.status.success(), "first pip install failed");
 
-    // Second install — should hit starmetal's cache (we can't easily prove this
-    // from pip's output alone, but we verify it still works, which confirms
-    // the cached data is valid and serveable)
     let out2 = pip_install(&pip, &index_url, "six==1.16.0", tmp2.path(), cache2.path()).await;
     assert!(out2.status.success(), "second pip install (cached) failed");
 
@@ -109,7 +103,7 @@ async fn pip_install_cached_on_second_request() {
 }
 
 #[tokio::test]
-#[ignore] // requires network + pip
+#[ignore]
 async fn pip_install_nonexistent_package_fails() {
     let pip = require_pip().await;
     let server = TestServer::start().await;
@@ -127,7 +121,6 @@ async fn pip_install_nonexistent_package_fails() {
     )
     .await;
 
-    // pip should fail because the package doesn't exist
     assert!(
         !output.status.success(),
         "pip install should have failed for nonexistent package"
@@ -137,7 +130,7 @@ async fn pip_install_nonexistent_package_fails() {
 }
 
 #[tokio::test]
-#[ignore] // requires network
+#[ignore]
 async fn http_simple_index_returns_html() {
     let server = TestServer::start().await;
 
@@ -164,7 +157,7 @@ async fn http_simple_index_returns_html() {
 }
 
 #[tokio::test]
-#[ignore] // requires network
+#[ignore]
 async fn http_project_detail_returns_files() {
     let server = TestServer::start().await;
 
@@ -178,7 +171,6 @@ async fn http_project_detail_returns_files() {
     assert_eq!(response.status(), 200);
 
     let body = response.text().await.expect("failed to read body");
-    // Should contain links to six's files
     assert!(
         body.contains("six-"),
         "expected file links in response: {}",
@@ -191,7 +183,7 @@ async fn http_project_detail_returns_files() {
 }
 
 #[tokio::test]
-#[ignore] // requires network
+#[ignore]
 async fn http_json_content_negotiation() {
     let server = TestServer::start().await;
 
@@ -223,7 +215,7 @@ async fn http_json_content_negotiation() {
 }
 
 #[tokio::test]
-#[ignore] // requires network
+#[ignore]
 async fn http_nonexistent_package_returns_404() {
     let server = TestServer::start().await;
 

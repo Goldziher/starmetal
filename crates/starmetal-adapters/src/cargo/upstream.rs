@@ -61,7 +61,6 @@ impl CargoUpstreamClient {
     async fn fetch_index(&self, name: &PackageName) -> Result<Vec<CargoIndexEntry>> {
         let normalized = name.normalized(Ecosystem::Cargo).to_string();
 
-        // Check cache first
         {
             let cache = self.entries_cache.read().await;
             if let Some((inserted, entries)) = cache.get(&normalized)
@@ -106,7 +105,6 @@ impl CargoUpstreamClient {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        // Cache the entries
         self.entries_cache
             .write()
             .await

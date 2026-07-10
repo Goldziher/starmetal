@@ -68,7 +68,6 @@ impl NpmUpstreamClient {
     async fn fetch_packument_raw(&self, name: &PackageName) -> Result<serde_json::Value> {
         let normalized = name.normalized(Ecosystem::Npm).to_string();
 
-        // Check cache first
         {
             let cache = self.packument_cache.read().await;
             if let Some((inserted, packument)) = cache.get(&normalized)
@@ -101,7 +100,6 @@ impl NpmUpstreamClient {
             return Err(StarmetalError::Upstream(format!("upstream returned HTTP {status}")));
         }
 
-        // Fetch as raw JSON Value — handles any field shape without strict typing
         let packument: serde_json::Value =
             crate::upstream_http::json_limited(response, self.max_response_bytes, "npm packument").await?;
 

@@ -40,7 +40,7 @@ dependencies:
 }
 
 #[tokio::test]
-#[ignore] // requires network + dart
+#[ignore]
 async fn dart_pub_get_installs_package_through_starmetal() {
     let dart = require_dart().await;
     let server = TestServer::start_all_enabled().await;
@@ -69,7 +69,7 @@ async fn dart_pub_get_installs_package_through_starmetal() {
 }
 
 #[tokio::test]
-#[ignore] // requires network
+#[ignore]
 async fn pub_serves_metadata_and_archive() {
     let server = TestServer::start_all_enabled().await;
     let client = reqwest::Client::new();
@@ -112,7 +112,7 @@ async fn pub_serves_metadata_and_archive() {
 }
 
 #[tokio::test]
-#[ignore] // requires network + dart
+#[ignore]
 async fn dart_pub_get_works_from_starmetal_cache() {
     let dart = require_dart().await;
     let server = TestServer::start_all_enabled().await;

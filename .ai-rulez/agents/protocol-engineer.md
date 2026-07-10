@@ -1,6 +1,7 @@
 ---
 name: protocol-engineer
 description: "Registry protocol adapter specialist for PyPI, npm, Cargo, Hex, Maven, RubyGems, NuGet, and pub.dev"
+model: sonnet
 ---
 
 # Protocol Engineer

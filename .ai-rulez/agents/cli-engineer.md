@@ -1,6 +1,7 @@
 ---
 name: cli-engineer
 description: "CLI binary and user-facing command specialist"
+model: sonnet
 ---
 
 # CLI Engineer

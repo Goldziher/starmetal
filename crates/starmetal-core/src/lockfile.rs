@@ -101,7 +101,6 @@ mod tests {
             let name = fix["name"].as_str().unwrap_or("?");
 
             if fix["error"].is_string() {
-                // Should fail to parse
                 assert!(LockFile::from_toml(toml_input).is_err(), "fixture '{name}' should fail");
                 continue;
             }
@@ -125,7 +124,6 @@ mod tests {
                 );
             }
 
-            // Roundtrip: serialize and re-parse
             let serialized = lock.to_toml().unwrap();
             let reparsed =
                 LockFile::from_toml(&serialized).unwrap_or_else(|e| panic!("fixture '{name}' roundtrip failed: {e}"));
@@ -192,19 +190,16 @@ mod tests {
             }],
         };
 
-        // Valid data passes
         assert!(
             lock.verify_artifact(Ecosystem::PyPI, "requests", "requests-2.31.0.tar.gz", data)
                 .is_ok()
         );
 
-        // Tampered data fails
         assert!(
             lock.verify_artifact(Ecosystem::PyPI, "requests", "requests-2.31.0.tar.gz", b"tampered")
                 .is_err()
         );
 
-        // Missing package fails
         assert!(
             lock.verify_artifact(Ecosystem::Npm, "lodash", "lodash.tgz", data)
                 .is_err()

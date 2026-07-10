@@ -57,7 +57,7 @@ async fn dotnet_restore(
 }
 
 #[tokio::test]
-#[ignore] // requires network + dotnet
+#[ignore]
 async fn dotnet_restores_package_through_starmetal() {
     let dotnet = require_dotnet().await;
     let server = TestServer::start_all_enabled().await;
@@ -94,7 +94,7 @@ async fn dotnet_restores_package_through_starmetal() {
 }
 
 #[tokio::test]
-#[ignore] // requires network
+#[ignore]
 async fn nuget_serves_v3_resources() {
     let server = TestServer::start_all_enabled().await;
     let client = reqwest::Client::new();
@@ -123,7 +123,7 @@ async fn nuget_serves_v3_resources() {
 }
 
 #[tokio::test]
-#[ignore] // requires network + dotnet
+#[ignore]
 async fn dotnet_restore_works_from_starmetal_cache() {
     let dotnet = require_dotnet().await;
     let server = TestServer::start_all_enabled().await;

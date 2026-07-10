@@ -213,7 +213,6 @@ async fn simple_project<S: HasPypiState>(
     let name = PackageName::new(name.normalized(Ecosystem::PyPI).into_owned());
     let service = state.package_service();
 
-    // Storage is the source of truth — check there first
     let mut project: starmetal_core::registry::pypi::PypiProject = if let Some(raw) = service
         .get_raw_upstream(Ecosystem::PyPI, &name)
         .await
@@ -221,7 +220,6 @@ async fn simple_project<S: HasPypiState>(
     {
         serde_json::from_slice(&raw).map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?
     } else {
-        // Cache miss — fetch from upstream
         let _versions = service
             .list_versions(Ecosystem::PyPI, &name)
             .await
@@ -233,7 +231,6 @@ async fn simple_project<S: HasPypiState>(
             .await
             .unwrap_or(build_local_project(service.as_ref(), &name).await?);
 
-        // Persist to storage — this is now starmetal's data
         if let Ok(raw) = serde_json::to_vec(&upstream_project) {
             let _ = service
                 .put_raw_upstream(Ecosystem::PyPI, &name, bytes::Bytes::from(raw))
@@ -243,7 +240,6 @@ async fn simple_project<S: HasPypiState>(
         upstream_project
     };
 
-    // Rewrite file URLs to point through starmetal
     validate_project_metadata(service.as_ref(), &name, &project)
         .await
         .map_err(|err| map_error(&err))?;

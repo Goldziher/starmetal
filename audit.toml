@@ -1,15 +1,3 @@
-# cargo-audit does not consume this file directly; keep it in sync with
-# `task audit` and `.github/workflows/ci.yml`.
 
 [advisories]
-ignore = [
-    # RUSTSEC-2023-0071: rsa is pulled only through optional GCS storage
-    # support via reqsign-google. No fixed upgrade is available.
-    "RUSTSEC-2023-0071",
-    # RUSTSEC-2026-0194/RUSTSEC-2026-0195: quick-xml is pulled through
-    # OpenDAL core/services and reqsign. OpenDAL 0.57 and reqsign-aws-v4
-    # 3.0.1 have no fixed crates.io release yet. Temporary until
-    # 2026-08-15; remove when upstream allows quick-xml >= 0.41.
-    "RUSTSEC-2026-0194",
-    "RUSTSEC-2026-0195",
-]
+ignore = ["RUSTSEC-2023-0071", "RUSTSEC-2026-0194", "RUSTSEC-2026-0195"]

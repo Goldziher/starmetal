@@ -58,7 +58,7 @@ gem "rack", "2.2.8"
 }
 
 #[tokio::test]
-#[ignore] // requires network + bundle
+#[ignore]
 async fn bundler_installs_gem_through_starmetal() {
     let bundle = require_bundle().await;
     let server = TestServer::start_all_enabled().await;
@@ -95,7 +95,7 @@ async fn bundler_installs_gem_through_starmetal() {
 }
 
 #[tokio::test]
-#[ignore] // requires network
+#[ignore]
 async fn rubygems_serves_compact_index() {
     let server = TestServer::start_all_enabled().await;
     let client = reqwest::Client::new();
@@ -117,7 +117,7 @@ async fn rubygems_serves_compact_index() {
 }
 
 #[tokio::test]
-#[ignore] // requires network + bundle
+#[ignore]
 async fn bundler_install_works_from_starmetal_cache() {
     let bundle = require_bundle().await;
     let server = TestServer::start_all_enabled().await;

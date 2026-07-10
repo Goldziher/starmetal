@@ -70,10 +70,8 @@ fn main() {
             }
         };
 
-        // Derive a module-level prefix from the fixture path.
         let module_prefix = derive_module_prefix(relative);
 
-        // Detect category from the first directory component of the relative path.
         let category = detect_category(relative);
 
         writeln!(output, "// Fixture: {}", relative.display()).unwrap();
@@ -117,10 +115,7 @@ fn collect_fixture_files(directory: &Path) -> Vec<PathBuf> {
         .filter_map(|entry| entry.ok())
         .filter(|entry| entry.file_type().is_file())
         .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "json"))
-        .filter(|entry| {
-            // Skip the schema file itself.
-            !entry.file_name().to_str().is_some_and(|name| name.starts_with("00-"))
-        })
+        .filter(|entry| !entry.file_name().to_str().is_some_and(|name| name.starts_with("00-")))
         .map(|entry| entry.into_path())
         .collect();
 
@@ -167,20 +162,16 @@ fn sanitize_identifier(input: &str) -> String {
         .map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' })
         .collect();
 
-    // Collapse consecutive underscores.
     while result.contains("__") {
         result = result.replace("__", "_");
     }
 
-    // Strip leading/trailing underscores.
     result = result.trim_matches('_').to_string();
 
-    // Prefix with underscore if it starts with a digit.
     if result.starts_with(|c: char| c.is_ascii_digit()) {
         result = format!("_{result}");
     }
 
-    // Fallback for empty.
     if result.is_empty() {
         result = "unnamed_test".to_string();
     }
@@ -211,13 +202,11 @@ fn generate_test_function(
 fn generate_package_test(output: &mut String, function_name: &str, case: &TestCase, fixture_path: &Path) {
     let fixture_name = &case.name;
 
-    // Detect sub-type based on expected keys and input keys.
     let has_normalized = case.expected.get("normalized").is_some();
     let has_key = case.expected.get("key").is_some();
     let has_value_input = case.input.get("value").is_some();
 
     if has_normalized {
-        // Normalization test
         let input_name = case.input["name"].as_str().unwrap_or("");
         let input_ecosystem = case.input["ecosystem"].as_str().unwrap_or("");
         let expected_normalized = case.expected["normalized"].as_str().unwrap_or("");
@@ -252,7 +241,6 @@ fn generate_package_test(output: &mut String, function_name: &str, case: &TestCa
         writeln!(output, "}}").unwrap();
         writeln!(output).unwrap();
     } else if has_key {
-        // Storage key test
         let ecosystem = case.input["ecosystem"].as_str().unwrap_or("");
         let name = case.input["name"].as_str().unwrap_or("");
         let version = case.input["version"].as_str().unwrap_or("");
@@ -292,7 +280,6 @@ fn generate_package_test(output: &mut String, function_name: &str, case: &TestCa
         writeln!(output, "}}").unwrap();
         writeln!(output).unwrap();
     } else if has_value_input {
-        // Ecosystem parsing test
         let input_value = case.input["value"].as_str().unwrap_or("");
 
         writeln!(output, "#[test]").unwrap();
@@ -370,7 +357,6 @@ fn generate_integrity_test(output: &mut String, function_name: &str, case: &Test
     )
     .unwrap();
 
-    // If expected.blake3 is a non-null string, assert exact match.
     if let Some(serde_json::Value::String(expected_hash)) = expected_blake3 {
         writeln!(
             output,
@@ -380,7 +366,6 @@ fn generate_integrity_test(output: &mut String, function_name: &str, case: &Test
         .unwrap();
     }
 
-    // Always verify roundtrip.
     writeln!(
         output,
         "    assert!(starmetal_core::integrity::verify_blake3(&bytes::Bytes::from({:?}.to_string()), &hash), \"fixture '{}': roundtrip verification failed\");",
@@ -431,7 +416,6 @@ fn generate_policy_test(output: &mut String, function_name: &str, case: &TestCas
     )
     .unwrap();
 
-    // Allowed licenses
     write!(output, "        allowed_licenses: vec![").unwrap();
     for (i, lic) in allowed_licenses.iter().enumerate() {
         if i > 0 {
@@ -441,7 +425,6 @@ fn generate_policy_test(output: &mut String, function_name: &str, case: &TestCas
     }
     writeln!(output, "],").unwrap();
 
-    // Blocked packages
     write!(output, "        blocked_packages: vec![").unwrap();
     for (i, pkg) in blocked_packages.iter().enumerate() {
         if i > 0 {
@@ -453,7 +436,6 @@ fn generate_policy_test(output: &mut String, function_name: &str, case: &TestCas
 
     writeln!(output, "    }};").unwrap();
 
-    // Build metadata
     writeln!(output, "    let metadata = starmetal_core::package::VersionMetadata {{").unwrap();
     writeln!(
         output,
@@ -463,7 +445,6 @@ fn generate_policy_test(output: &mut String, function_name: &str, case: &TestCas
     .unwrap();
     writeln!(output, "        version: {:?}.to_string(),", pkg_version).unwrap();
 
-    // License: handle null vs string
     match pkg_license {
         Some(serde_json::Value::String(s)) => {
             writeln!(output, "        license: Some({:?}.to_string()),", s).unwrap();
@@ -532,7 +513,6 @@ fn generate_config_test(output: &mut String, function_name: &str, case: &TestCas
     .unwrap();
 
     if let Some(error_str) = &case.error {
-        // Error case
         writeln!(
             output,
             "    let result = toml::from_str::<starmetal_core::config::Config>({:?});",
@@ -545,9 +525,8 @@ fn generate_config_test(output: &mut String, function_name: &str, case: &TestCas
             fixture_name
         )
         .unwrap();
-        let _ = error_str; // We just verify is_err
+        let _ = error_str;
     } else {
-        // Success case
         writeln!(
             output,
             "    let config: starmetal_core::config::Config = toml::from_str({:?}).expect(\"fixture '{}' should parse\");",
@@ -689,7 +668,6 @@ fn generate_lockfile_test(output: &mut String, function_name: &str, case: &TestC
             .unwrap();
         }
 
-        // Roundtrip: serialize and re-parse
         writeln!(
             output,
             "    let serialized = lock.to_toml().expect(\"serialize lockfile\");"

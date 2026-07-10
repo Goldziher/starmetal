@@ -1,10 +1,10 @@
 <!--
 🤖 AI-RULEZ :: GENERATED FILE — DO NOT EDIT DIRECTLY
 Project: starmetal
-Generated: 2026-07-02 13:43:02
+Generated: 2026-07-08 15:53:42
 Source: .ai-rulez/config.toml
 Target: CLAUDE.md
-Content: rules=39, sections=0, agents=9
+Content: rules=38, sections=0, agents=9
 
 WHAT IS AI-RULEZ
 AI-Rulez is a directory-based AI governance tool. All configuration lives in
@@ -46,8 +46,8 @@ INSTRUCTIONS FOR AI AGENTS
    c. Commit both .ai-rulez/ and generated files
 
 Documentation: https://github.com/Goldziher/ai-rulez
-Content-Hash: blake3:1a425d5122df853c2bc6d9b7c40b78097d700503617b863cde15995146eaca5c
-Source-Hash: blake3:15b9ef91aa58b783851a85186d3d76c974f4977d353826f02ff278ecb78fc068
+Content-Hash: blake3:9349c5bf6a9ec6cf1b14628c434e36c510981fc6d4d485c3ef77c58c931d4495
+Source-Hash: blake3:e00328718fdf9d52bee0235cd24c90a7a87623124516cc3c56678f1fbd117d4b
 -->
 
 # starmetal
@@ -160,12 +160,6 @@ Zero tolerance for critical/high CVEs. Automate dependency update PRs where poss
 - HTTP handlers map `StarmetalError` variants to appropriate status codes.
 - Use `thiserror` for all error enums.
 - Never use `.unwrap()` or `.expect()` in library crates. The CLI binary may use `.unwrap_or_else()` with proper error messages for startup code only.
-
-### error-handling
-
-**Priority:** high
-
-Always wrap errors with context describing what operation failed. Never swallow errors silently — either handle, propagate, or log them. Use language-idiomatic patterns: `Result<T, E>` in Rust, `if err != nil` with `fmt.Errorf("doing X: %w", err)` in Go, typed exceptions in Python/Java. Fail fast on unrecoverable errors.
 
 ### explain-reasoning
 

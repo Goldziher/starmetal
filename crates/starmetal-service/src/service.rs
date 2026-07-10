@@ -813,7 +813,6 @@ impl PackageService for CachingPackageService {
         let mut packages = Vec::new();
 
         for key in &keys {
-            // Keys are "<ecosystem>/<name>/..." — extract second component
             let rest = key.strip_prefix(&prefix).unwrap_or(key);
             if let Some(name) = rest.split('/').next()
                 && !name.is_empty()
@@ -1592,7 +1591,7 @@ mod tests {
             eco: Ecosystem::PyPI,
             versions: vec![],
             metadata,
-            artifacts: AHashMap::new(), // Empty: should never be called
+            artifacts: AHashMap::new(),
         };
 
         let service = build_service(storage, upstream, PolicyConfig::default());
@@ -1631,7 +1630,6 @@ mod tests {
         let result = service.get_artifact(&artifact_id).await.unwrap();
         assert_eq!(result, artifact_data, "should return upstream data");
 
-        // Verify it was stored
         let stored = storage
             .get(&artifact_id.storage_key())
             .await

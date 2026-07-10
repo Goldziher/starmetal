@@ -3,7 +3,7 @@ use tokio::process::Command;
 use starmetal_integration_tests::TestServer;
 
 #[tokio::test]
-#[ignore] // requires network
+#[ignore]
 async fn cargo_config_json() {
     let server = TestServer::start().await;
 
@@ -27,7 +27,7 @@ async fn cargo_config_json() {
 }
 
 #[tokio::test]
-#[ignore] // requires network
+#[ignore]
 async fn cargo_sparse_index_lookup() {
     let server = TestServer::start().await;
 
@@ -43,7 +43,6 @@ async fn cargo_sparse_index_lookup() {
     let body = response.text().await.expect("failed to read body");
     assert!(!body.is_empty(), "expected non-empty ndjson body");
 
-    // Each line should be valid JSON with name=once_cell
     for line in body.lines() {
         if line.is_empty() {
             continue;
@@ -57,7 +56,7 @@ async fn cargo_sparse_index_lookup() {
 }
 
 #[tokio::test]
-#[ignore] // requires network
+#[ignore]
 async fn cargo_crate_download() {
     let server = TestServer::start().await;
 
@@ -77,7 +76,7 @@ async fn cargo_crate_download() {
 }
 
 #[tokio::test]
-#[ignore] // requires network
+#[ignore]
 async fn cargo_nonexistent_crate_returns_404() {
     let server = TestServer::start().await;
 
@@ -101,7 +100,7 @@ async fn cargo_nonexistent_crate_returns_404() {
 }
 
 #[tokio::test]
-#[ignore] // requires network
+#[ignore]
 async fn cargo_short_crate_name_index() {
     let server = TestServer::start().await;
 
@@ -117,7 +116,6 @@ async fn cargo_short_crate_name_index() {
     let body = response.text().await.expect("failed to read body");
     assert!(!body.is_empty(), "expected non-empty ndjson body");
 
-    // Verify at least one line has name=cc
     let first_line = body.lines().next().expect("expected at least one line");
     let entry: serde_json::Value = serde_json::from_str(first_line).expect("invalid JSON in first line");
     assert_eq!(entry["name"], "cc", "expected name=cc in index entry");
@@ -135,7 +133,6 @@ async fn cargo_fetch_from_starmetal(
     let tmp = tempfile::tempdir().expect("tempdir");
     let cargo_home = tempfile::tempdir().expect("cargo home tempdir");
 
-    // Write a minimal Cargo.toml pointing to our starmetal as a registry
     let cargo_toml = format!(
         r#"[package]
 name = "starmetal-test-project"
@@ -150,7 +147,6 @@ edition = "2021"
     std::fs::create_dir_all(tmp.path().join("src")).unwrap();
     std::fs::write(tmp.path().join("src/lib.rs"), "").unwrap();
 
-    // Write .cargo/config.toml for the custom registry
     let cargo_dir = tmp.path().join(".cargo");
     std::fs::create_dir_all(&cargo_dir).unwrap();
     let config_toml = format!(
@@ -173,7 +169,7 @@ index = "sparse+{base_url}/cargo/"
 }
 
 #[tokio::test]
-#[ignore] // requires network + cargo
+#[ignore]
 async fn cargo_fetch_crate_via_sparse_index() {
     let server = TestServer::start().await;
 
@@ -191,7 +187,7 @@ async fn cargo_fetch_crate_via_sparse_index() {
 }
 
 #[tokio::test]
-#[ignore] // requires network + cargo
+#[ignore]
 async fn cargo_fetch_cached_on_second_request() {
     let server = TestServer::start().await;
 

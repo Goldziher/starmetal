@@ -748,7 +748,7 @@ mod tests {
             if let Some(expected_err) = fix["error"].as_str() {
                 let result: std::result::Result<Config, _> = toml::from_str(toml_input);
                 assert!(result.is_err(), "fixture '{name}' should fail to parse");
-                let _ = expected_err; // error type verified by is_err
+                let _ = expected_err;
                 continue;
             }
 

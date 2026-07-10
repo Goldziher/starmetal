@@ -31,8 +31,5 @@ EXPOSE 8080
 
 USER 65532:65532
 
-# One image covers both modes:
-# - `docker run starmetal:local` starts the API server via `sm serve`.
-# - `docker run starmetal:local <args>` runs the `sm` CLI/MCP command passed by the caller.
 ENTRYPOINT ["/usr/local/bin/sm"]
 CMD ["serve"]

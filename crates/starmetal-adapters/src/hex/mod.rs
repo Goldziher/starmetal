@@ -112,7 +112,6 @@ async fn package_metadata<S: HasHexState>(
     let name = PackageName::new(name);
     let service = state.package_service();
 
-    // Storage is the source of truth
     let package: starmetal_core::registry::hex::HexPackage = if let Some(raw) = service
         .get_raw_upstream(Ecosystem::Hex, &name)
         .await
@@ -120,7 +119,6 @@ async fn package_metadata<S: HasHexState>(
     {
         serde_json::from_slice(&raw).map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?
     } else {
-        // Cache miss — fetch from upstream
         let _versions = service
             .list_versions(Ecosystem::Hex, &name)
             .await
@@ -141,7 +139,6 @@ async fn package_metadata<S: HasHexState>(
         upstream_package
     };
 
-    // Build response with URLs rewritten to point through starmetal
     validate_package_metadata(service.as_ref(), &name, &package)
         .await
         .map_err(|err| map_error(&err))?;
@@ -373,7 +370,6 @@ fn parse_tarball_name(tarball: &str) -> Option<(&str, &str)> {
     let stem = tarball.strip_suffix(".tar")?;
     let bytes = stem.as_bytes();
 
-    // Scan from end, find last hyphen followed by a digit
     for idx in (1..bytes.len()).rev() {
         if bytes[idx] == b'-' && bytes.get(idx + 1).is_some_and(|b| b.is_ascii_digit()) {
             return Some((&stem[..idx], &stem[idx + 1..]));

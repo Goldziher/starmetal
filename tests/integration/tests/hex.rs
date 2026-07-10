@@ -33,7 +33,7 @@ async fn ensure_mix_hex_package(hex_home: &std::path::Path, mix_home: &std::path
 }
 
 #[tokio::test]
-#[ignore] // requires network
+#[ignore]
 async fn hex_package_metadata_returns_json() {
     let server = TestServer::start().await;
 
@@ -58,7 +58,7 @@ async fn hex_package_metadata_returns_json() {
 }
 
 #[tokio::test]
-#[ignore] // requires network
+#[ignore]
 async fn hex_tarball_download() {
     let server = TestServer::start().await;
 
@@ -84,7 +84,7 @@ async fn hex_tarball_download() {
 }
 
 #[tokio::test]
-#[ignore] // requires network
+#[ignore]
 async fn hex_nonexistent_package_returns_404() {
     let server = TestServer::start().await;
 
@@ -104,7 +104,7 @@ async fn hex_nonexistent_package_returns_404() {
 }
 
 #[tokio::test]
-#[ignore] // requires network
+#[ignore]
 async fn hex_package_has_license_info() {
     let server = TestServer::start().await;
 
@@ -129,7 +129,7 @@ async fn hex_package_has_license_info() {
 }
 
 #[tokio::test]
-#[ignore] // requires network
+#[ignore]
 async fn hex_cached_on_second_request() {
     let server = TestServer::start().await;
 
@@ -153,7 +153,7 @@ async fn hex_cached_on_second_request() {
 }
 
 #[tokio::test]
-#[ignore] // requires network + mix
+#[ignore]
 async fn mix_hex_package_fetch() {
     let server = TestServer::start().await;
     let hex_mirror = format!("{}/hex", server.base_url());
@@ -196,7 +196,7 @@ async fn mix_hex_package_fetch() {
 }
 
 #[tokio::test]
-#[ignore] // requires network + mix
+#[ignore]
 async fn mix_hex_package_fetch_cached() {
     let server = TestServer::start().await;
     let hex_mirror = format!("{}/hex", server.base_url());
@@ -210,7 +210,6 @@ async fn mix_hex_package_fetch_cached() {
     ensure_mix_hex_package(hex_home1.path(), mix_home1.path()).await;
     ensure_mix_hex_package(hex_home2.path(), mix_home2.path()).await;
 
-    // First fetch
     let out1 = Command::new("mix")
         .args([
             "hex.package",
@@ -228,7 +227,6 @@ async fn mix_hex_package_fetch_cached() {
         .expect("failed to run mix");
     assert!(out1.status.success(), "first mix fetch failed");
 
-    // Second fetch — hits starmetal cache
     let out2 = Command::new("mix")
         .args([
             "hex.package",
@@ -252,7 +250,7 @@ async fn mix_hex_package_fetch_cached() {
 }
 
 #[tokio::test]
-#[ignore] // requires network + mix
+#[ignore]
 async fn mix_hex_package_fetch_nonexistent_fails() {
     let server = TestServer::start().await;
     let hex_mirror = format!("{}/hex", server.base_url());

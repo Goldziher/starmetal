@@ -1,11 +1,9 @@
-# AI-Rulez Configuration (migrated to V4 TOML format)
-# Documentation: https://github.com/Goldziher/ai-rulez
 
 version = '4.0'
 name = 'starmetal'
 description = 'Multi-language high-performance self-hosted package registry and registry proxy'
 gitignore = true
-presets = ['claude', 'codex']
+presets = ["claude", "codex"]
 builtins = ['rust', 'default-commands']
 
 [[marketplaces]]

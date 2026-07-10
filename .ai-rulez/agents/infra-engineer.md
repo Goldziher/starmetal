@@ -1,6 +1,7 @@
 ---
 name: infra-engineer
 description: "Storage, middleware, and server infrastructure specialist"
+model: sonnet
 ---
 
 # Infrastructure Engineer

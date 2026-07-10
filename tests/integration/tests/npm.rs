@@ -41,7 +41,7 @@ async fn npm_install(
 }
 
 #[tokio::test]
-#[ignore] // requires network
+#[ignore]
 async fn npm_package_metadata_returns_json() {
     let server = TestServer::start().await;
     let client = reqwest::Client::new();
@@ -77,12 +77,11 @@ async fn npm_package_metadata_returns_json() {
 }
 
 #[tokio::test]
-#[ignore] // requires network
+#[ignore]
 async fn npm_package_tarball_download() {
     let server = TestServer::start().await;
     let client = reqwest::Client::new();
 
-    // First get metadata to find latest version
     let meta_response = client
         .get(format!("{}/npm/is-odd", server.base_url()))
         .send()
@@ -108,7 +107,7 @@ async fn npm_package_tarball_download() {
 }
 
 #[tokio::test]
-#[ignore] // requires network
+#[ignore]
 async fn npm_scoped_package() {
     let server = TestServer::start().await;
     let client = reqwest::Client::new();
@@ -119,7 +118,6 @@ async fn npm_scoped_package() {
         .await
         .expect("request failed");
 
-    // Should be 200 (found) or 404 (not found), but never 500 (server error)
     let status = response.status().as_u16();
     assert!(status == 200 || status == 404, "expected 200 or 404, got {status}");
 
@@ -127,7 +125,7 @@ async fn npm_scoped_package() {
 }
 
 #[tokio::test]
-#[ignore] // requires network
+#[ignore]
 async fn npm_nonexistent_package_returns_404() {
     let server = TestServer::start().await;
     let client = reqwest::Client::new();
@@ -144,7 +142,7 @@ async fn npm_nonexistent_package_returns_404() {
 }
 
 #[tokio::test]
-#[ignore] // requires network
+#[ignore]
 async fn npm_cached_on_second_request() {
     let server = TestServer::start().await;
     let client = reqwest::Client::new();
@@ -167,7 +165,7 @@ async fn npm_cached_on_second_request() {
 }
 
 #[tokio::test]
-#[ignore] // requires network + npm
+#[ignore]
 async fn npm_install_small_package() {
     let npm = require_npm().await;
     let server = TestServer::start().await;
@@ -190,7 +188,6 @@ async fn npm_install_small_package() {
         "npm install failed: {command}\nstdout: {stdout}\nstderr: {stderr}"
     );
 
-    // Verify the package was installed
     assert!(
         tmp.path().join("node_modules/is-odd").exists(),
         "is-odd not found in node_modules. Contents: {:?}",
@@ -201,7 +198,7 @@ async fn npm_install_small_package() {
 }
 
 #[tokio::test]
-#[ignore] // requires network + npm
+#[ignore]
 async fn npm_install_cached_on_second() {
     let npm = require_npm().await;
     let server = TestServer::start().await;
@@ -224,7 +221,7 @@ async fn npm_install_cached_on_second() {
 }
 
 #[tokio::test]
-#[ignore] // requires network + npm
+#[ignore]
 async fn npm_install_nonexistent_package_fails() {
     let npm = require_npm().await;
     let server = TestServer::start().await;
@@ -251,7 +248,7 @@ async fn npm_install_nonexistent_package_fails() {
 }
 
 #[tokio::test]
-#[ignore] // requires network + npm
+#[ignore]
 async fn npm_install_package_with_deps() {
     let npm = require_npm().await;
     let server = TestServer::start().await;
@@ -259,8 +256,6 @@ async fn npm_install_package_with_deps() {
 
     let tmp = tempfile::tempdir().expect("failed to create tempdir");
 
-    // is-odd depends on is-number — this tests that dependencies
-    // are preserved in the packument response (not empty)
     let output = Command::new(&npm)
         .args([
             "install",
@@ -285,7 +280,6 @@ async fn npm_install_package_with_deps() {
         "npm install with deps failed.\nstdout: {stdout}\nstderr: {stderr}"
     );
 
-    // Verify is-odd AND its transitive dependency is-number were both installed
     assert!(
         tmp.path().join("node_modules/is-odd").exists(),
         "is-odd not found in node_modules"
@@ -299,7 +293,7 @@ async fn npm_install_package_with_deps() {
 }
 
 #[tokio::test]
-#[ignore] // requires network + npm
+#[ignore]
 async fn npm_install_express_full_tree() {
     let npm = require_npm().await;
     let server = TestServer::start().await;
@@ -307,7 +301,6 @@ async fn npm_install_express_full_tree() {
 
     let tmp = tempfile::tempdir().expect("failed to create tempdir");
 
-    // express has ~65 transitive dependencies — tests real-world dep resolution
     let output = Command::new(&npm)
         .args([
             "install",
@@ -332,12 +325,10 @@ async fn npm_install_express_full_tree() {
         "npm install express failed.\nstdout: {stdout}\nstderr: {stderr}"
     );
 
-    // Verify express and key transitive deps were installed
     assert!(tmp.path().join("node_modules/express").exists());
     assert!(tmp.path().join("node_modules/body-parser").exists());
     assert!(tmp.path().join("node_modules/debug").exists());
 
-    // Should have installed 50+ packages
     let pkg_count = std::fs::read_dir(tmp.path().join("node_modules"))
         .map(|d| d.count())
         .unwrap_or(0);

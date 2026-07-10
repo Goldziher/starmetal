@@ -7,8 +7,6 @@ use crate::publishing::{PublishRequest, PublishResult, YankRequest};
 use crate::statistics::StatisticsSnapshot;
 
 // ---------------------------------------------------------------------------
-// Inbound port: the core service that protocol adapters call into
-// ---------------------------------------------------------------------------
 
 #[async_trait]
 pub trait PackageService: Send + Sync {
@@ -54,10 +52,6 @@ pub trait StatisticsService: Send + Sync {
     fn statistics(&self) -> StatisticsSnapshot;
 }
 
-// ---------------------------------------------------------------------------
-// Outbound port: storage
-// ---------------------------------------------------------------------------
-
 #[async_trait]
 pub trait StoragePort: Send + Sync {
     async fn get(&self, key: &str) -> Result<Option<Bytes>>;
@@ -66,10 +60,6 @@ pub trait StoragePort: Send + Sync {
     async fn delete(&self, key: &str) -> Result<()>;
     async fn list_prefix(&self, prefix: &str) -> Result<Vec<String>>;
 }
-
-// ---------------------------------------------------------------------------
-// Outbound port: upstream registry client
-// ---------------------------------------------------------------------------
 
 #[async_trait]
 pub trait UpstreamClient: Send + Sync {

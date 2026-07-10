@@ -40,7 +40,6 @@ mod tests {
 
     #[test]
     fn empty_input_known_hash() {
-        // blake3 hash of empty input is well-known
         let hash = blake3_hex(b"");
         assert_eq!(hash, "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262");
     }
@@ -94,7 +93,6 @@ mod tests {
             if let Some(expected) = fix["expected"]["blake3"].as_str() {
                 assert_eq!(hash, expected, "fixture '{}'", fix["name"].as_str().unwrap_or("?"));
             }
-            // For fixtures without a pre-computed hash, verify roundtrip
             let data = Bytes::from(input.to_string());
             assert!(verify_blake3(&data, &hash));
         }

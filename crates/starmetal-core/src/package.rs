@@ -206,7 +206,6 @@ fn hex_value(byte: u8) -> Option<u8> {
 /// PEP 503: lowercase, replace runs of `.`, `-`, `_` with a single `-`.
 fn normalize_pypi(name: &str) -> String {
     let lower = name.to_ascii_lowercase();
-    // Fast path: check if any separator chars exist using memchr
     if memchr::memchr3(b'.', b'-', b'_', lower.as_bytes()).is_none() {
         return lower;
     }
@@ -223,7 +222,6 @@ fn normalize_pypi(name: &str) -> String {
             prev_sep = false;
         }
     }
-    // Trim trailing separator
     while result.ends_with('-') {
         result.pop();
     }
@@ -258,7 +256,6 @@ impl ArtifactId {
     pub fn storage_key(&self) -> String {
         let eco = self.ecosystem.to_string();
         let name = self.name.as_str();
-        // Pre-calculate capacity: eco + / + name + / + version + / + filename
         let cap = eco.len() + 1 + name.len() + 1 + self.version.len() + 1 + self.filename.len();
         let mut key = String::with_capacity(cap);
         key.push_str(&eco);
@@ -455,7 +452,6 @@ mod tests {
 
     #[test]
     fn pypi_normalization_pep503() {
-        // PEP 503 specific: runs of separators collapse to single hyphen
         let pkg = PackageName::new("My..Cool--Package__Name");
         assert_eq!(pkg.normalized(Ecosystem::PyPI).as_ref(), "my-cool-package-name");
     }

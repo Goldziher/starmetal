@@ -21,61 +21,44 @@ license = "MIT"
 
 [workspace.dependencies]
 
-# Fast hashing
 ahash = { version = "0.8", features = ["serde"] }
 
-# Async traits
 async-trait = "0.1"
 
-# Web framework & middleware
 axum = { version = "0.8", features = ["multipart"] }
 
-# Encoding / digests
 base64 = "0.22"
 
-# Integrity
 blake3 = "1"
 
-# Bytes / streaming
 bytes = "1"
 
-# Time
 chrono = { version = "0.4", features = ["serde"] }
 
-# CLI
 clap = { version = "4", features = ["derive"] }
 ed25519-dalek = { version = "2", features = ["pkcs8"] }
 
-# Compression
 flate2 = "1"
 
-# Hex encoding
 hex = "0.4"
 
-# JSON schema validation
 jsonschema = "0.46"
 
-# Fast byte scanning
 memchr = "2"
 
-# Storage
 opendal = "0.57"
 pem-rfc7468 = "1"
 pkcs8 = { version = "0.11", features = ["pem"] }
 prost = "0.14"
 rand_core = "0.10"
 
-# HTTP client
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "stream"] }
 
-# MCP
 rmcp = { version = "2.1.0", default-features = false, features = ["macros", "server", "transport-io"] }
 
-# JSON schema generation
 schemars = "1.2"
 secrecy = "0.10"
 
-# Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9.34"
@@ -83,7 +66,6 @@ sha1 = "0.11"
 sha2 = "0.11"
 starmetal-adapters = { path = "crates/starmetal-adapters", default-features = false }
 
-# Workspace crates
 starmetal-core = { path = "crates/starmetal-core" }
 starmetal-ops = { path = "crates/starmetal-ops", default-features = false }
 starmetal-server = { path = "crates/starmetal-server", default-features = false }
@@ -91,18 +73,14 @@ starmetal-service = { path = "crates/starmetal-service" }
 starmetal-storage = { path = "crates/starmetal-storage", default-features = false }
 tar = "0.4.46"
 
-# Testing
 tempfile = "3"
 
-# Error handling
 thiserror = "2"
-# Async runtime
 tokio = { version = "1", features = ["full"] }
 toml = "1.1"
 tower = { version = "0.5", features = ["full"] }
 tower-http = { version = "0.7", features = ["cors", "compression-full", "limit", "trace"] }
 
-# Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2"

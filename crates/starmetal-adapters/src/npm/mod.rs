@@ -262,7 +262,6 @@ async fn serve_packument<S: HasNpmState>(
 ) -> Result<axum::response::Response, (StatusCode, String)> {
     let service = state.package_service();
 
-    // Try storage first — starmetal owns this data once fetched
     let mut packument: serde_json::Value = if let Some(raw) = service
         .get_raw_upstream(Ecosystem::Npm, name)
         .await
@@ -270,7 +269,6 @@ async fn serve_packument<S: HasNpmState>(
     {
         serde_json::from_slice(&raw).map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?
     } else {
-        // Cache miss — fetch from upstream
         let _versions = service
             .list_versions(Ecosystem::Npm, name)
             .await
@@ -282,7 +280,6 @@ async fn serve_packument<S: HasNpmState>(
             .await
             .unwrap_or(build_local_packument(service.as_ref(), name, base_url).await?);
 
-        // Persist to storage — this is now starmetal's data
         let raw = serde_json::to_vec(&upstream_packument)
             .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
         let _ = service
@@ -292,7 +289,6 @@ async fn serve_packument<S: HasNpmState>(
         upstream_packument
     };
 
-    // Rewrite tarball URLs to point through starmetal
     validate_packument_metadata(service.as_ref(), name, &packument)
         .await
         .map_err(|err| map_error(&err))?;
@@ -401,7 +397,6 @@ async fn serve_tarball<S: HasNpmState>(
     name: &PackageName,
     filename: &str,
 ) -> Result<axum::response::Response, (StatusCode, String)> {
-    // Extract version from filename: {name}-{version}.tgz
     let version = extract_version_from_filename(name.as_str(), filename)
         .ok_or_else(|| (StatusCode::BAD_REQUEST, "invalid filename format".to_string()))?;
 

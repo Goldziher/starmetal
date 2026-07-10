@@ -156,7 +156,6 @@ async fn serve_index<S: HasCargoState>(state: S, name: String) -> Result<Respons
     let package_name = PackageName::new(&name);
     let service = state.package_service();
 
-    // Storage is the source of truth
     let body = if let Some(raw) = service
         .get_raw_upstream(Ecosystem::Cargo, &package_name)
         .await
@@ -164,7 +163,6 @@ async fn serve_index<S: HasCargoState>(state: S, name: String) -> Result<Respons
     {
         String::from_utf8(raw.to_vec()).map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?
     } else {
-        // Cache miss — fetch from upstream
         let _versions = service
             .list_versions(Ecosystem::Cargo, &package_name)
             .await
@@ -178,7 +176,6 @@ async fn serve_index<S: HasCargoState>(state: S, name: String) -> Result<Respons
 
         let ndjson = models::entries_to_ndjson(&entries);
 
-        // Persist to storage
         let _ = service
             .put_raw_upstream(Ecosystem::Cargo, &package_name, bytes::Bytes::from(ndjson.clone()))
             .await;

@@ -74,7 +74,6 @@ impl PypiUpstreamClient {
     async fn fetch_project(&self, name: &PackageName) -> Result<PypiProject> {
         let normalized = name.normalized(Ecosystem::PyPI).to_string();
 
-        // Check project cache first
         {
             let cache = self.project_cache.read().await;
             if let Some((inserted, project)) = cache.get(&normalized)
@@ -123,7 +122,6 @@ impl PypiUpstreamClient {
             parse_pep503_html(&normalized, &url, &html)
         };
 
-        // Populate caches
         self.cache_file_urls(&project).await;
         self.project_cache
             .write()
@@ -257,7 +255,6 @@ impl UpstreamClient for PypiUpstreamClient {
 
     #[instrument(skip(self), fields(ecosystem = "pypi"))]
     async fn fetch_artifact(&self, artifact_id: &ArtifactId) -> Result<Bytes> {
-        // Look up the upstream URL from cache
         let url = {
             let cache = self.url_cache.read().await;
             cache.get(&artifact_id.filename).and_then(|(inserted, url)| {
@@ -272,7 +269,6 @@ impl UpstreamClient for PypiUpstreamClient {
         let url = match url {
             Some(u) => u,
             None => {
-                // Cache miss: fetch project metadata to populate cache, then retry
                 debug!(
                     filename = %artifact_id.filename,
                     "url cache miss, fetching project to populate"

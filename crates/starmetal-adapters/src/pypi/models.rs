@@ -27,7 +27,6 @@ pub fn negotiate_format(accept: Option<&str>) -> PypiFormat {
 /// Handles both sdist (`name-version.tar.gz`, `.zip`) and wheel
 /// (`name-version-pytag-abitag-platform.whl`) naming conventions.
 fn version_from_filename(filename: &str) -> Option<String> {
-    // Strip known extensions to get the stem
     let stem = if let Some(s) = filename.strip_suffix(".tar.gz") {
         s
     } else if let Some(s) = filename.strip_suffix(".tar.bz2") {
@@ -35,8 +34,6 @@ fn version_from_filename(filename: &str) -> Option<String> {
     } else if let Some(s) = filename.strip_suffix(".zip") {
         s
     } else if let Some(s) = filename.strip_suffix(".whl") {
-        // Wheel: name-version-pytag-abitag-platform.whl
-        // We need the second segment after first hyphen
         let parts: Vec<&str> = s.splitn(3, '-').collect();
         return if parts.len() >= 2 {
             Some(parts[1].to_string())
@@ -47,8 +44,6 @@ fn version_from_filename(filename: &str) -> Option<String> {
         filename.strip_suffix(".egg")?
     };
 
-    // sdist: name-version — find the last hyphen that separates name from version
-    // The version always starts with a digit
     let bytes = stem.as_bytes();
     for (idx, &byte) in bytes.iter().enumerate().rev() {
         if byte == b'-'
@@ -84,12 +79,10 @@ pub fn pypi_project_to_version_infos(project: &PypiProject) -> Vec<VersionInfo> 
             .collect();
     }
 
-    // Derive versions from filenames
     let mut seen = AHashMap::new();
     for file in &project.files {
         if let Some(version) = version_from_filename(&file.filename) {
             let entry = seen.entry(version).or_insert((false, true));
-            // Track if ALL files for this version are yanked
             if !file.yanked.is_yanked() {
                 entry.1 = false;
             }
@@ -262,7 +255,6 @@ pub fn render_project_html_from_upstream(project: &PypiProject) -> String {
     for file in &project.files {
         let mut attrs = format!("href=\"{}\"", file.url);
         if let Some(sha256) = file.hashes.get("sha256") {
-            // Append hash fragment for PEP 503 integrity checking
             attrs = format!("href=\"{}#sha256={sha256}\"", file.url);
         }
         if let Some(requires_python) = &file.requires_python {

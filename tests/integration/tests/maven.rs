@@ -71,7 +71,7 @@ async fn maven_resolve(
 }
 
 #[tokio::test]
-#[ignore] // requires network + mvn
+#[ignore]
 async fn maven_resolves_dependency_through_starmetal() {
     let mvn = require_mvn().await;
     let server = TestServer::start_all_enabled().await;
@@ -100,7 +100,7 @@ async fn maven_resolves_dependency_through_starmetal() {
 }
 
 #[tokio::test]
-#[ignore] // requires network
+#[ignore]
 async fn maven_serves_artifacts_and_checksum_sidecars() {
     let server = TestServer::start_all_enabled().await;
     let client = reqwest::Client::new();
@@ -138,7 +138,7 @@ async fn maven_serves_artifacts_and_checksum_sidecars() {
 }
 
 #[tokio::test]
-#[ignore] // requires network + mvn
+#[ignore]
 async fn maven_resolve_works_from_starmetal_cache() {
     let mvn = require_mvn().await;
     let server = TestServer::start_all_enabled().await;

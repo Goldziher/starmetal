@@ -70,7 +70,6 @@ impl HexUpstreamClient {
     async fn fetch_package(&self, name: &PackageName) -> Result<HexPackage> {
         let normalized = name.normalized(Ecosystem::Hex).to_string();
 
-        // Check cache first
         {
             let cache = self.package_cache.read().await;
             if let Some((inserted, pkg)) = cache.get(&normalized)
@@ -106,7 +105,6 @@ impl HexUpstreamClient {
         let pkg: HexPackage =
             crate::upstream_http::json_limited(response, self.max_response_bytes, "Hex package").await?;
 
-        // Populate cache
         self.package_cache
             .write()
             .await
@@ -135,7 +133,6 @@ impl HexUpstreamClient {
     pub async fn fetch_registry_entry(&self, name: &str) -> Result<Bytes> {
         let normalized = name.to_ascii_lowercase();
 
-        // Check cache
         {
             let cache = self.registry_cache.read().await;
             if let Some((inserted, bytes)) = cache.get(&normalized)

@@ -71,18 +71,15 @@ impl TestServer {
         let storage = OpenDalStorage::memory().expect("failed to create memory storage");
         let mut upstream_clients: AHashMap<Ecosystem, Arc<dyn UpstreamClient>> = AHashMap::new();
 
-        // PyPI
         let pypi_url = std::env::var("STARMETAL_TEST_UPSTREAM_PYPI_URL").unwrap_or_else(|_| "https://pypi.org".into());
         let pypi_client = Arc::new(PypiUpstreamClient::new(pypi_url));
         upstream_clients.insert(Ecosystem::PyPI, pypi_client.clone());
 
-        // npm
         let npm_url =
             std::env::var("STARMETAL_TEST_UPSTREAM_NPM_URL").unwrap_or_else(|_| "https://registry.npmjs.org".into());
         let npm_client = Arc::new(NpmUpstreamClient::new(npm_url));
         upstream_clients.insert(Ecosystem::Npm, npm_client.clone());
 
-        // Cargo
         let cargo_index_url = std::env::var("STARMETAL_TEST_UPSTREAM_CARGO_INDEX_URL")
             .unwrap_or_else(|_| "https://index.crates.io".into());
         let cargo_dl_url = std::env::var("STARMETAL_TEST_UPSTREAM_CARGO_DL_URL")
@@ -90,7 +87,6 @@ impl TestServer {
         let cargo_client = Arc::new(CargoUpstreamClient::new(cargo_index_url, cargo_dl_url));
         upstream_clients.insert(Ecosystem::Cargo, cargo_client.clone());
 
-        // Hex
         let hex_url = std::env::var("STARMETAL_TEST_UPSTREAM_HEX_URL").unwrap_or_else(|_| "https://hex.pm".into());
         let hex_repo_url =
             std::env::var("STARMETAL_TEST_UPSTREAM_HEX_REPO_URL").unwrap_or_else(|_| "https://repo.hex.pm".into());

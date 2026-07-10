@@ -1,6 +1,7 @@
 ---
 name: qa-engineer
 description: "Testing, CI, and quality assurance specialist"
+model: sonnet
 ---
 
 # QA Engineer

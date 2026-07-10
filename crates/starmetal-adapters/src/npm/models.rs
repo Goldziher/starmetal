@@ -48,7 +48,6 @@ pub fn extract_version_metadata(
         upstream_hashes,
     };
 
-    // License can be a string or absent; old packages use "licenses" (array)
     let license = ver["license"].as_str().map(|s| s.to_string()).or_else(|| {
         ver["licenses"]
             .as_array()
@@ -164,7 +163,6 @@ mod tests {
             packument["versions"]["2.0.0"]["dist"]["tarball"],
             "http://localhost:8080/npm/is-odd/-/is-odd-2.0.0.tgz"
         );
-        // Other fields preserved
         assert_eq!(packument["dist-tags"]["latest"], "2.0.0");
         assert_eq!(packument["versions"]["1.0.0"]["dependencies"]["is-number"], "^4.0.0");
     }

@@ -1,6 +1,7 @@
 ---
 name: core-architect
 description: "Domain modeling and core business logic specialist for starmetal-core"
+model: opus
 ---
 
 # Core Architect
