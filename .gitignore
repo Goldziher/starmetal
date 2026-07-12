@@ -18,3 +18,4 @@ packages/pypi/*.egg-info/
 AGENTS.md
 CLAUDE.md
 # END ai-rulez
+poly.local.toml
