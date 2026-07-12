@@ -42,7 +42,7 @@ flate2 = "1"
 
 hex = "0.4"
 
-jsonschema = "0.46"
+jsonschema = "0.47"
 
 memchr = "2"
 
