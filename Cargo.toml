@@ -1,17 +1,17 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/starmetal-adapters",
-    "crates/starmetal-cli",
-    "crates/starmetal-core",
-    "crates/starmetal-ops",
-    "crates/starmetal-server",
-    "crates/starmetal-service",
-    "crates/starmetal-storage",
-    "tests/conformance",
-    "tests/integration",
-    "tools/schema-manager",
-    "tools/test-generator",
+  "crates/starmetal-adapters",
+  "crates/starmetal-cli",
+  "crates/starmetal-core",
+  "crates/starmetal-ops",
+  "crates/starmetal-server",
+  "crates/starmetal-service",
+  "crates/starmetal-storage",
+  "tests/conformance",
+  "tests/integration",
+  "tools/schema-manager",
+  "tools/test-generator",
 ]
 
 [workspace.package]
@@ -27,7 +27,7 @@ async-trait = "0.1"
 
 axum = { version = "0.8", features = ["multipart"] }
 
-base64 = "0.22"
+base64 = "0.23"
 
 blake3 = "1"
 
@@ -36,13 +36,13 @@ bytes = "1"
 chrono = { version = "0.4", features = ["serde"] }
 
 clap = { version = "4", features = ["derive"] }
-ed25519-dalek = { version = "2", features = ["pkcs8"] }
+ed25519-dalek = { version = "3", features = ["pkcs8"] }
 
 flate2 = "1"
 
 hex = "0.4"
 
-jsonschema = "0.46"
+jsonschema = "0.48"
 
 memchr = "2"
 
@@ -54,7 +54,7 @@ rand_core = "0.10"
 
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "stream"] }
 
-rmcp = { version = "2.1.0", default-features = false, features = ["macros", "server", "transport-io"] }
+rmcp = { version = "2.2.0", default-features = false, features = ["macros", "server", "transport-io"] }
 
 schemars = "1.2"
 secrecy = "0.10"
