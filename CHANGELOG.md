@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-24
+
+### Added
+
+- Dependency-update engine (experimental, Phase 0). `sm update scan <path>` scans a local checkout's
+  Cargo manifests and reports available updates classified as patch/minor/major (with `--pin` and
+  `--allow-prerelease`); `sm update run <owner>/<name>` scans a GitHub repository and opens or updates
+  a pull request (`--dry-run` reports without opening one). The GitHub token is read from `--token` or
+  the `STARMETAL_GITHUB_TOKEN` environment variable.
+- Five feature-gated crates mirroring the hexagonal split: `starmetal-update-core` (framework-free
+  domain types and the `Manager`, `Versioning`, `Datasource`, and `Forge` ports),
+  `starmetal-versioning` (Cargo semver), `starmetal-managers` (Cargo.toml parse and
+  formatting-preserving edits), `starmetal-forge` (GitHub over its HTTP API), and `starmetal-updater`
+  (the update engine).
+- The update engine reuses `PackageService` as its version datasource, so update lookups flow through
+  the registry proxy's pull-through cache, blake3 integrity verification, and policy enforcement.
+- ADR-0016 (dependency-update engine) and ADR-0017 (forge and git integration port).
+
+### Changed
+
+- Added a `StarmetalError::Update` variant so update-engine errors surface as a dedicated kind at the
+  CLI boundary.
+
 ## [0.2.0] - 2026-07-04
 
 ### Added

@@ -45,6 +45,7 @@ Starmetal sits between package-manager clients and upstream registries:
 | Protocol adapters | Feature-gated routers for PyPI, npm, Cargo, Hex, Maven, RubyGems, NuGet, and pub.dev |
 | Storage | OpenDAL-backed filesystem, S3, GCS, and memory backends |
 | Operations | CLI plus stdio MCP tools over the same local operations layer |
+| Dependency updates | Scans manifests and opens update PRs, reusing the proxy as the version datasource (experimental; Cargo + GitHub) |
 
 Starmetal is built for private/internal deployments first. It is not yet a public internet-facing
 registry product, and every registry workflow should be treated as experimental until fresh live
@@ -231,6 +232,26 @@ sm mcp serve --allow-writes
 MCP read tools are always available. Mutating tools, including experimental local publish, yank,
 unyank, and cache delete, require `--allow-writes`.
 
+### Dependency Updates
+
+The experimental `update` feature (included in the CLI `full` build) adds a Phase 0 dependency-update
+engine, scoped to Cargo manifests and GitHub. It reuses `PackageService` as its version datasource, so
+update lookups go through the same pull-through cache, Blake3 verification, and policy checks as the
+proxy.
+
+```bash
+sm update scan .
+sm update run goldziher/starmetal --dry-run
+```
+
+`sm update scan <path>` scans a local directory tree for `Cargo.toml` files and reports available
+patch, minor, and major updates. `sm update run <owner>/<name>` scans a GitHub repository and opens
+or updates a pull request; `--dry-run` reports available updates without opening a pull request. Both
+commands accept `--pin` and `--allow-prerelease`. `run` requires a GitHub token, passed with `--token`
+or, preferably, the `STARMETAL_GITHUB_TOKEN` environment variable. See
+[ADR-0016](docs/adr/0016-dependency-update-engine.md) and
+[ADR-0017](docs/adr/0017-forge-git-port.md).
+
 ## Architecture
 
 Starmetal uses hexagonal architecture: protocol adapters and storage backends sit outside a shared
@@ -245,6 +266,11 @@ service/core boundary.
 | `starmetal-server` | Axum app assembly and Tower middleware |
 | `starmetal-ops` | Shared local operator API used by CLI and MCP |
 | `starmetal-cli` | Clap CLI and stdio MCP server |
+| `starmetal-update-core` | Framework-free dependency-update domain types and ports (experimental) |
+| `starmetal-versioning` | Cargo semver comparison, range membership, and constraint rewriting (experimental) |
+| `starmetal-managers` | Cargo.toml manifest parsing and formatting-preserving edits (experimental) |
+| `starmetal-forge` | GitHub forge backend over its HTTP API (experimental) |
+| `starmetal-updater` | Dependency-update engine: scan and run workflows (experimental) |
 
 See [docs/architecture.md](docs/architecture.md) for diagrams and component details.
 
@@ -294,6 +320,8 @@ under [`schemas/`](schemas/):
 - [0013 - Basemind and AI-Rulez Alignment](docs/adr/0013-basemind-ai-rulez-alignment.md)
 - [0014 - Management Admin Surface](docs/adr/0014-management-admin-surface.md)
 - [0015 - Statistics and Operational Metrics](docs/adr/0015-statistics-operational-metrics.md)
+- [0016 - Dependency Update Engine](docs/adr/0016-dependency-update-engine.md)
+- [0017 - Forge and Git Integration Port](docs/adr/0017-forge-git-port.md)
 
 ## License
 
