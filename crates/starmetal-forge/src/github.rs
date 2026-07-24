@@ -21,6 +21,45 @@ const DEFAULT_BRANCH_CACHE_TTL: Duration = Duration::from_secs(300);
 /// Key into the default-branch cache: `(owner, name)`.
 type RepoKey = (String, String);
 
+/// A small TTL cache of resolved repository default branches.
+///
+/// Deliberately free of any `octocrab`/HTTP dependency so its logic is unit-testable without
+/// constructing a network client (which would require a Tokio runtime and a rustls crypto
+/// provider).
+#[derive(Debug)]
+struct DefaultBranchCache {
+    entries: Mutex<HashMap<RepoKey, (Instant, String)>>,
+    ttl: Duration,
+}
+
+impl DefaultBranchCache {
+    /// Create an empty cache with the given entry time-to-live.
+    fn new(ttl: Duration) -> Self {
+        Self {
+            entries: Mutex::new(HashMap::new()),
+            ttl,
+        }
+    }
+
+    /// Return the cached branch for `key` if present and younger than the TTL.
+    fn get(&self, key: &RepoKey) -> Option<String> {
+        let entries = self.entries.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        entries.get(key).and_then(|(inserted, branch)| {
+            if inserted.elapsed() < self.ttl {
+                Some(branch.clone())
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Store `branch` as the resolved default branch for `key`.
+    fn put(&self, key: RepoKey, branch: String) {
+        let mut entries = self.entries.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        entries.insert(key, (Instant::now(), branch));
+    }
+}
+
 /// A [`Forge`] implementation that talks to GitHub (or GitHub Enterprise) via the REST API.
 ///
 /// Credentials are handed to `octocrab` as a [`SecretString`] and are never logged; the
@@ -30,7 +69,7 @@ pub struct GithubForge {
     /// Cache of resolved repository default branches, so repeated operations against the same
     /// repository (list files, read file, submit pull request) do not each pay for a
     /// `GET /repos/{owner}/{repo}` round trip just to resolve the default branch.
-    default_branch_cache: Mutex<HashMap<RepoKey, (Instant, String)>>,
+    default_branch_cache: DefaultBranchCache,
 }
 
 impl GithubForge {
@@ -47,7 +86,7 @@ impl GithubForge {
             .map_err(to_forge_error)?;
         Ok(Self {
             client,
-            default_branch_cache: Mutex::new(HashMap::new()),
+            default_branch_cache: DefaultBranchCache::new(DEFAULT_BRANCH_CACHE_TTL),
         })
     }
 
@@ -74,7 +113,7 @@ impl GithubForge {
             .map_err(to_forge_error)?;
         Ok(Self {
             client,
-            default_branch_cache: Mutex::new(HashMap::new()),
+            default_branch_cache: DefaultBranchCache::new(DEFAULT_BRANCH_CACHE_TTL),
         })
     }
 
@@ -86,7 +125,7 @@ impl GithubForge {
             return Ok(branch.clone());
         }
         let key: RepoKey = (repo.owner.clone(), repo.name.clone());
-        if let Some(branch) = self.cached_default_branch(&key) {
+        if let Some(branch) = self.default_branch_cache.get(&key) {
             return Ok(branch);
         }
         let repository = self
@@ -98,33 +137,8 @@ impl GithubForge {
         let branch = repository
             .default_branch
             .ok_or_else(|| UpdateError::Forge(format!("{}/{} has no default branch", repo.owner, repo.name)))?;
-        self.cache_default_branch(key, branch.clone());
+        self.default_branch_cache.put(key, branch.clone());
         Ok(branch)
-    }
-
-    /// Return the cached default branch for `key`, if present and not older than
-    /// [`DEFAULT_BRANCH_CACHE_TTL`].
-    fn cached_default_branch(&self, key: &RepoKey) -> Option<String> {
-        let cache = self
-            .default_branch_cache
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        cache.get(key).and_then(|(inserted, branch)| {
-            if inserted.elapsed() < DEFAULT_BRANCH_CACHE_TTL {
-                Some(branch.clone())
-            } else {
-                None
-            }
-        })
-    }
-
-    /// Cache `branch` as the resolved default branch for `key`.
-    fn cache_default_branch(&self, key: RepoKey, branch: String) {
-        let mut cache = self
-            .default_branch_cache
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        cache.insert(key, (Instant::now(), branch));
     }
 
     /// Fetch the commit SHA that `branch` currently points at.
@@ -681,34 +695,32 @@ mod tests {
         );
     }
 
-    // `GithubForge::new` builds an `octocrab::Octocrab` client, which spawns a `tower` buffer
-    // task and therefore requires an active Tokio runtime; these cache tests run under
-    // `#[tokio::test]` for that reason even though the cache logic itself is synchronous.
+    // The default-branch cache is tested directly (not through `GithubForge`), so these tests
+    // need neither a Tokio runtime nor a rustls crypto provider — building an `octocrab` client
+    // would require both.
 
-    #[tokio::test]
-    async fn default_branch_cache_returns_cached_value_within_ttl() {
-        let forge = GithubForge::new("test-token").expect("build forge");
+    #[test]
+    fn default_branch_cache_returns_cached_value_within_ttl() {
+        let cache = DefaultBranchCache::new(DEFAULT_BRANCH_CACHE_TTL);
         let key: RepoKey = ("octocat".to_string(), "hello-world".to_string());
-        forge.cache_default_branch(key.clone(), "main".to_string());
-        assert_eq!(forge.cached_default_branch(&key), Some("main".to_string()));
+        cache.put(key.clone(), "main".to_string());
+        assert_eq!(cache.get(&key), Some("main".to_string()));
     }
 
-    #[tokio::test]
-    async fn default_branch_cache_misses_for_unknown_key() {
-        let forge = GithubForge::new("test-token").expect("build forge");
+    #[test]
+    fn default_branch_cache_misses_for_unknown_key() {
+        let cache = DefaultBranchCache::new(DEFAULT_BRANCH_CACHE_TTL);
         let key: RepoKey = ("octocat".to_string(), "hello-world".to_string());
-        assert_eq!(forge.cached_default_branch(&key), None);
+        assert_eq!(cache.get(&key), None);
     }
 
-    #[tokio::test]
-    async fn default_branch_cache_expires_after_ttl() {
-        let forge = GithubForge::new("test-token").expect("build forge");
+    #[test]
+    fn default_branch_cache_expires_after_ttl() {
+        // A zero TTL makes every stored entry immediately stale, so no manufactured (and
+        // potentially underflowing) past `Instant` is needed.
+        let cache = DefaultBranchCache::new(Duration::ZERO);
         let key: RepoKey = ("octocat".to_string(), "hello-world".to_string());
-        {
-            let mut cache = forge.default_branch_cache.lock().expect("lock cache");
-            let stale_insert = Instant::now() - DEFAULT_BRANCH_CACHE_TTL - Duration::from_secs(1);
-            cache.insert(key.clone(), (stale_insert, "stale-branch".to_string()));
-        }
-        assert_eq!(forge.cached_default_branch(&key), None);
+        cache.put(key.clone(), "main".to_string());
+        assert_eq!(cache.get(&key), None);
     }
 }
