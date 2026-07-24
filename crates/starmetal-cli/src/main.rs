@@ -99,6 +99,56 @@ enum Commands {
         #[command(subcommand)]
         action: LockAction,
     },
+
+    /// Scan repositories for dependency updates and open pull requests.
+    #[cfg(feature = "update")]
+    Update {
+        #[command(subcommand)]
+        action: UpdateAction,
+    },
+}
+
+#[cfg(feature = "update")]
+#[derive(Subcommand)]
+enum UpdateAction {
+    /// Scan a local directory tree and report available updates.
+    Scan(UpdateScanArgs),
+    /// Scan a GitHub repository and open a pull request with updates.
+    Run(UpdateRunArgs),
+}
+
+#[cfg(feature = "update")]
+#[derive(Args)]
+struct UpdateScanArgs {
+    /// Directory to scan. Defaults to the current directory.
+    #[arg(default_value = ".")]
+    path: PathBuf,
+    /// Pin ranges to the exact target version.
+    #[arg(long)]
+    pin: bool,
+    /// Consider pre-release versions as update targets.
+    #[arg(long)]
+    allow_prerelease: bool,
+}
+
+#[cfg(feature = "update")]
+#[derive(Args)]
+struct UpdateRunArgs {
+    /// GitHub repository in <owner>/<name> form.
+    repository: String,
+    /// GitHub token. Prefer the STARMETAL_GITHUB_TOKEN env var; a token passed here is
+    /// visible in shell history and process listings.
+    #[arg(long)]
+    token: Option<String>,
+    /// Report updates without opening a pull request.
+    #[arg(long)]
+    dry_run: bool,
+    /// Pin ranges to the exact target version.
+    #[arg(long)]
+    pin: bool,
+    /// Consider pre-release versions as update targets.
+    #[arg(long)]
+    allow_prerelease: bool,
 }
 
 #[derive(Subcommand)]
@@ -260,6 +310,27 @@ async fn run(cli: Cli) -> starmetal_core::error::Result<()> {
             LockAction::Verify => commands::lock::verify(),
             LockAction::Update => commands::lock::update(),
         },
+        #[cfg(feature = "update")]
+        Commands::Update { action } => {
+            let runtime = StarmetalRuntime::new(config_options).await?;
+            match action {
+                UpdateAction::Scan(args) => {
+                    commands::update::scan(&runtime, args.path, args.pin, args.allow_prerelease, cli.output).await
+                }
+                UpdateAction::Run(args) => {
+                    commands::update::run(
+                        &runtime,
+                        args.repository,
+                        args.token,
+                        args.dry_run,
+                        args.pin,
+                        args.allow_prerelease,
+                        cli.output,
+                    )
+                    .await
+                }
+            }
+        }
     }
 }
 

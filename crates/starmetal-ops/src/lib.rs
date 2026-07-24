@@ -248,6 +248,23 @@ impl StarmetalRuntime {
             .await
     }
 
+    /// Compose the dependency-update engine over this runtime's package service.
+    ///
+    /// The engine's datasource is the runtime `PackageService`, so update lookups
+    /// reuse the proxy cache, integrity verification, and policy enforcement.
+    #[cfg(feature = "update")]
+    pub fn update_engine(&self, config: starmetal_update_core::UpdateConfig) -> starmetal_updater::UpdateEngine {
+        let datasource = std::sync::Arc::new(starmetal_updater::PackageServiceDatasource::new(
+            self.package_service.clone(),
+        ));
+        starmetal_updater::UpdateEngine::new(
+            starmetal_managers::all(),
+            starmetal_versioning::all(),
+            datasource,
+            config,
+        )
+    }
+
     pub async fn delete_cached_artifact(&self, artifact: &ArtifactId) -> Result<CacheDeleteResult> {
         let key = artifact.validated_storage_key()?.into_string();
         let sidecar = format!("{key}.blake3");
