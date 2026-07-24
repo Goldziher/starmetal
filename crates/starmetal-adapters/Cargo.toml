@@ -7,17 +7,17 @@ license.workspace = true
 
 [package.metadata.cargo-machete]
 ignored = [
-    "ahash",
-    "async-trait",
-    "axum",
-    "bytes",
-    "starmetal-core",
-    "reqwest",
-    "serde",
-    "serde_json",
-    "thiserror",
-    "tokio",
-    "tracing",
+  "ahash",
+  "async-trait",
+  "axum",
+  "bytes",
+  "starmetal-core",
+  "reqwest",
+  "serde",
+  "serde_json",
+  "thiserror",
+  "tokio",
+  "tracing",
 ]
 
 [features]

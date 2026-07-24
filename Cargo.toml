@@ -4,10 +4,15 @@ members = [
   "crates/starmetal-adapters",
   "crates/starmetal-cli",
   "crates/starmetal-core",
+  "crates/starmetal-forge",
+  "crates/starmetal-managers",
   "crates/starmetal-ops",
   "crates/starmetal-server",
   "crates/starmetal-service",
   "crates/starmetal-storage",
+  "crates/starmetal-update-core",
+  "crates/starmetal-updater",
+  "crates/starmetal-versioning",
   "tests/conformance",
   "tests/integration",
   "tools/schema-manager",
@@ -46,6 +51,7 @@ jsonschema = "0.48"
 
 memchr = "2"
 
+octocrab = "0.44"
 opendal = "0.57"
 pem-rfc7468 = "1"
 pkcs8 = { version = "0.11", features = ["pem"] }
@@ -59,6 +65,7 @@ rmcp = { version = "2.2.0", default-features = false, features = ["macros", "ser
 schemars = "1.2"
 secrecy = "0.10"
 
+semver = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9.34"
@@ -67,10 +74,15 @@ sha2 = "0.11"
 starmetal-adapters = { path = "crates/starmetal-adapters", default-features = false }
 
 starmetal-core = { path = "crates/starmetal-core" }
+starmetal-forge = { path = "crates/starmetal-forge", default-features = false }
+starmetal-managers = { path = "crates/starmetal-managers", default-features = false }
 starmetal-ops = { path = "crates/starmetal-ops", default-features = false }
 starmetal-server = { path = "crates/starmetal-server", default-features = false }
 starmetal-service = { path = "crates/starmetal-service" }
 starmetal-storage = { path = "crates/starmetal-storage", default-features = false }
+starmetal-update-core = { path = "crates/starmetal-update-core", default-features = false }
+starmetal-updater = { path = "crates/starmetal-updater", default-features = false }
+starmetal-versioning = { path = "crates/starmetal-versioning", default-features = false }
 tar = "0.4.46"
 
 tempfile = "3"

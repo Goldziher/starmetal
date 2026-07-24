@@ -21,6 +21,14 @@ backend-s3 = ["starmetal-storage/backend-s3"]
 backend-gcs = ["starmetal-storage/backend-gcs"]
 pq = ["starmetal-core/pq"]
 signing-x509 = ["starmetal-core/signing-x509"]
+update = [
+  "dep:starmetal-update-core",
+  "dep:starmetal-updater",
+  "dep:starmetal-versioning",
+  "dep:starmetal-managers",
+  "starmetal-versioning/semver",
+  "starmetal-managers/cargo",
+]
 
 [dependencies]
 ahash.workspace = true
@@ -29,9 +37,13 @@ schemars.workspace = true
 serde.workspace = true
 starmetal-adapters = { workspace = true, default-features = false }
 starmetal-core.workspace = true
+starmetal-managers = { workspace = true, optional = true }
 starmetal-server = { workspace = true, default-features = false }
 starmetal-service.workspace = true
 starmetal-storage = { workspace = true, default-features = false }
+starmetal-update-core = { workspace = true, optional = true }
+starmetal-updater = { workspace = true, optional = true }
+starmetal-versioning = { workspace = true, optional = true }
 tokio.workspace = true
 
 [dev-dependencies]

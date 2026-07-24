@@ -167,6 +167,9 @@ fn map_admin_error(err: starmetal_core::error::StarmetalError) -> (StatusCode, S
         | starmetal_core::error::StarmetalError::ArtifactNotFound(_) => (StatusCode::NOT_FOUND, err.to_string()),
         starmetal_core::error::StarmetalError::PolicyViolation(_) => (StatusCode::FORBIDDEN, err.to_string()),
         starmetal_core::error::StarmetalError::Adapter(_) => (StatusCode::BAD_REQUEST, err.to_string()),
+        starmetal_core::error::StarmetalError::Update(_) => {
+            (StatusCode::INTERNAL_SERVER_ERROR, "update operation failed".to_string())
+        }
         starmetal_core::error::StarmetalError::Publish(_) => (StatusCode::CONFLICT, err.to_string()),
         starmetal_core::error::StarmetalError::Upstream(_) => {
             (StatusCode::BAD_GATEWAY, "upstream registry request failed".to_string())

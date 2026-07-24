@@ -39,6 +39,9 @@ pub enum StarmetalError {
     #[error("adapter error: {0}")]
     Adapter(String),
 
+    #[error("update error: {0}")]
+    Update(String),
+
     #[error("lockfile error: {0}")]
     Lockfile(String),
 

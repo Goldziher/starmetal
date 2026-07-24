@@ -1,0 +1,15 @@
+[package]
+name = "starmetal-versioning"
+description = "Versioning-scheme implementations for the Starmetal dependency-update engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = ["semver"]
+semver = ["dep:semver"]
+
+[dependencies]
+semver = { workspace = true, optional = true }
+starmetal-core.workspace = true
+starmetal-update-core.workspace = true

@@ -15,14 +15,14 @@ flate2.workspace = true
 roxmltree = "0.21"
 serde_json.workspace = true
 starmetal-adapters = { path = "../../crates/starmetal-adapters", default-features = false, features = [
-    "cargo-registry",
-    "hex",
-    "maven",
-    "npm",
-    "nuget",
-    "pypi",
-    "pub",
-    "rubygems",
+  "cargo-registry",
+  "hex",
+  "maven",
+  "npm",
+  "nuget",
+  "pypi",
+  "pub",
+  "rubygems",
 ] }
 starmetal-core.workspace = true
 starmetal-service.workspace = true
