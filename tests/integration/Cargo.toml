@@ -10,25 +10,25 @@ publish = false
 ahash.workspace = true
 axum.workspace = true
 starmetal-adapters = { workspace = true, features = [
-    "cargo-registry",
-    "hex",
-    "maven",
-    "npm",
-    "nuget",
-    "pypi",
-    "pub",
-    "rubygems",
+  "cargo-registry",
+  "hex",
+  "maven",
+  "npm",
+  "nuget",
+  "pypi",
+  "pub",
+  "rubygems",
 ] }
 starmetal-core.workspace = true
 starmetal-server = { workspace = true, features = [
-    "cargo-registry",
-    "hex",
-    "maven",
-    "npm",
-    "nuget",
-    "pypi",
-    "pub",
-    "rubygems",
+  "cargo-registry",
+  "hex",
+  "maven",
+  "npm",
+  "nuget",
+  "pypi",
+  "pub",
+  "rubygems",
 ] }
 starmetal-service.workspace = true
 starmetal-storage = { workspace = true, features = ["backend-memory"] }
