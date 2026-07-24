@@ -1,0 +1,18 @@
+[package]
+name = "starmetal-updater"
+description = "Dependency-update engine composing managers, versioning, datasource, and forge ports"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = []
+
+[dependencies]
+async-trait.workspace = true
+starmetal-core.workspace = true
+starmetal-update-core.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
