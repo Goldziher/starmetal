@@ -533,7 +533,7 @@ jobs:
           skip-existing: true
 
   publish_homebrew:
-    name: Update Homebrew formula and dispatch bottles
+    name: Update Homebrew formula
     needs: [meta, finalize_release]
     if: >-
       needs.meta.outputs.dry_run != 'true' &&
@@ -547,7 +547,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ needs.meta.outputs.checkout_ref }}
 
-      - name: Update tap formula and start bottle workflow
+      - name: Update tap formula
         env:
           HOMEBREW_TOKEN: ${{ secrets.HOMEBREW_TOKEN }}
           GH_TOKEN: ${{ secrets.HOMEBREW_TOKEN }}
@@ -577,9 +577,5 @@ jobs:
             git commit -m "starmetal ${version}"
             git push
           fi
-
-          gh workflow run bottle.yml \
-            --repo Goldziher/homebrew-tap \
-            -f formula=starmetal \
-            -f tag="$tag" \
-            -f release_repo="$GITHUB_REPOSITORY"
+          # Bottles are built centrally by the tap's auto-bottle workflow, which
+          # triggers on this formula push (Goldziher/homebrew-tap).
