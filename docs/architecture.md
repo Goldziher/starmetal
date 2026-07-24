@@ -132,6 +132,11 @@ graph LR
 | `starmetal-server` | Axum app assembly and Tower middleware |
 | `starmetal-ops` | Shared local runtime and operator operations |
 | `starmetal-cli` | Clap CLI and stdio MCP server |
+| `starmetal-update-core` | Framework-free dependency-update domain types and ports (experimental) |
+| `starmetal-versioning` | Cargo semver comparison, range membership, and constraint rewriting (experimental) |
+| `starmetal-managers` | Cargo.toml manifest parsing and formatting-preserving edits (experimental) |
+| `starmetal-forge` | GitHub forge backend over its HTTP API (experimental) |
+| `starmetal-updater` | Dependency-update engine: scan and run workflows (experimental) |
 | `tests/conformance` | Offline schema, protocol, and route conformance tests |
 | `tests/integration` | Ignored live native-client E2E tests |
 
@@ -204,6 +209,41 @@ local publishing surfaces:
 - Do not forward uploads upstream.
 - Do not provide full owner, organization, invitation, search, or admin behavior.
 
+## Dependency Update Engine
+
+Experimental, Phase 0. A Renovate-style dependency-update engine, scoped to Cargo manifests and
+GitHub, lives in five feature-gated crates that mirror the hexagonal split:
+
+| Crate | Role |
+|-------|------|
+| `starmetal-update-core` | Framework-free update domain types and the `Manager`, `Versioning`, `Datasource`, and `Forge` ports |
+| `starmetal-versioning` | `Versioning` implementation for Cargo semver: compare, range membership, diff, constraint rewriting |
+| `starmetal-managers` | `Manager` implementation for Cargo.toml: parse dependencies and apply surgical, formatting-preserving edits |
+| `starmetal-forge` | `Forge` implementation for GitHub over its HTTP API: read files, create branches/commits, open pull requests |
+| `starmetal-updater` | Engine composing the ports into scan-local, scan-remote, and run workflows |
+
+Ports defined in `starmetal-update-core`:
+
+| Port | Direction | Purpose |
+|------|-----------|---------|
+| `Manager` | Inbound | Detect manifest files, extract dependencies, patch a dependency's value in file text |
+| `Datasource` | Outbound | Return available versions and release metadata for a package |
+| `Versioning` | Outbound | Parse, validate, and compare versions; test range membership; compute a new constraint value |
+| `Forge` | Outbound | Read a repository, create branches/commits, open and update pull requests |
+
+The production `Datasource` implementation is an adapter over `PackageService`, not a direct upstream
+client. Update runs therefore query versions through the same cached, Blake3-verified, policy-gated
+path the registry proxy already uses. `starmetal-updater` depends on the `PackageService` trait, not
+on `starmetal-service` internals.
+
+`starmetal-forge` talks to `api.github.com` through its HTTP API only; it does not use a local git
+clone. No forge or HTTP-client dependency reaches `starmetal-update-core`, `starmetal-versioning`, or
+`starmetal-managers`.
+
+The `update` CLI feature (included in the `full` build) exposes `sm update scan` and `sm update run`,
+composed through `starmetal-ops`. See [ADR-0016](adr/0016-dependency-update-engine.md) and
+[ADR-0017](adr/0017-forge-git-port.md) for scope, deferred work, and consequences.
+
 ## Storage
 
 Artifact keys use:
@@ -261,3 +301,5 @@ not create support claims without live E2E evidence.
 - [0013 - Basemind and AI-Rulez Alignment](adr/0013-basemind-ai-rulez-alignment.md)
 - [0014 - Management Admin Surface](adr/0014-management-admin-surface.md)
 - [0015 - Statistics and Operational Metrics](adr/0015-statistics-operational-metrics.md)
+- [0016 - Dependency Update Engine](adr/0016-dependency-update-engine.md)
+- [0017 - Forge and Git Integration Port](adr/0017-forge-git-port.md)
