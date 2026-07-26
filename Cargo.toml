@@ -51,7 +51,7 @@ jsonschema = "0.48"
 
 memchr = "2"
 
-octocrab = "0.44"
+octocrab = "0.54"
 opendal = "0.57"
 pem-rfc7468 = "1"
 pkcs8 = { version = "0.11", features = ["pem"] }
