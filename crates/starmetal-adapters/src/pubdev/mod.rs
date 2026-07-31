@@ -15,7 +15,7 @@ use starmetal_core::config::Config;
 use starmetal_core::error::StarmetalError;
 use starmetal_core::package::{ArtifactId, Ecosystem, PackageName};
 use starmetal_core::ports::{PackageService, PublishingService};
-use starmetal_core::publishing::{ProtocolMetadata, PublishRequest, PublishedArtifact, TokenScope};
+use starmetal_core::publishing::{ProtocolMetadata, PublishRequest, PublishedArtifact};
 
 use self::upstream::PubUpstreamClient;
 use crate::archive;
@@ -25,6 +25,15 @@ pub trait HasPubState: Clone + Send + Sync + 'static {
     fn package_service(&self) -> &Arc<dyn PackageService>;
     fn publishing_service(&self) -> &Arc<dyn PublishingService>;
     fn pub_upstream(&self) -> &Arc<PubUpstreamClient>;
+
+    /// Authorize a publish (`Action::Add`) of `name` in `ecosystem` for the given bearer
+    /// credential (`None` when the request carried no bearer token).
+    fn authorize_publish(
+        &self,
+        credential: Option<&str>,
+        ecosystem: Ecosystem,
+        name: &PackageName,
+    ) -> crate::PublishAuthorization;
 }
 
 pub fn router<S: HasPubState>() -> Router<S> {
@@ -254,17 +263,15 @@ fn authorize_publish<S: HasPubState>(
     let token = headers
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("Bearer "))
-        .ok_or_else(|| (StatusCode::UNAUTHORIZED, "missing publishing token".to_string()))?;
-    if state
-        .config()
-        .authorize_publish_token(token, TokenScope::Publish, Ecosystem::Pub, name)
-    {
-        Ok(())
-    } else {
-        Err((
+        .and_then(|value| value.strip_prefix("Bearer "));
+    match state.authorize_publish(token, Ecosystem::Pub, name) {
+        crate::PublishAuthorization::Allowed => Ok(()),
+        crate::PublishAuthorization::Unauthenticated => {
+            Err((StatusCode::UNAUTHORIZED, "missing publishing token".to_string()))
+        }
+        crate::PublishAuthorization::Forbidden => Err((
             StatusCode::FORBIDDEN,
             "publishing token is not authorized for this package".to_string(),
-        ))
+        )),
     }
 }

@@ -24,6 +24,7 @@ starmetal-adapters = { path = "../../crates/starmetal-adapters", default-feature
   "pub",
   "rubygems",
 ] }
+starmetal-authz.workspace = true
 starmetal-core.workspace = true
 starmetal-service.workspace = true
 starmetal-storage = { workspace = true, features = ["backend-memory"] }

@@ -4036,6 +4036,7 @@ dependencies = [
  "roxmltree",
  "serde_json",
  "starmetal-adapters",
+ "starmetal-authz",
  "starmetal-core",
  "starmetal-service",
  "starmetal-storage",

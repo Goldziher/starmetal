@@ -12,9 +12,11 @@ use starmetal_adapters::nuget::upstream::NuGetUpstreamClient;
 use starmetal_adapters::pubdev::upstream::PubUpstreamClient;
 use starmetal_adapters::pypi::upstream::PypiUpstreamClient;
 use starmetal_adapters::rubygems::upstream::RubyGemsUpstreamClient;
-use starmetal_adapters::{cargo, hex, maven, npm, nuget, pubdev, pypi, rubygems};
+use starmetal_adapters::{PublishAuthorization, cargo, hex, maven, npm, nuget, pubdev, pypi, rubygems};
+use starmetal_authz::LocalAuthorizer;
+use starmetal_core::authz::{Action, Authenticator, Coordinate, Resource};
 use starmetal_core::config::Config;
-use starmetal_core::package::Ecosystem;
+use starmetal_core::package::{Ecosystem, PackageName};
 use starmetal_core::policy::PolicyConfig;
 use starmetal_core::ports::{PackageService, PublishingService, UpstreamClient};
 use starmetal_service::CachingPackageService;
@@ -24,6 +26,7 @@ use tower::ServiceExt;
 #[derive(Clone)]
 struct PublishRouteState {
     config: Arc<Config>,
+    authorizer: Arc<LocalAuthorizer>,
     package_service: Arc<dyn PackageService>,
     publishing_service: Arc<dyn PublishingService>,
     cargo_upstream: Arc<CargoUpstreamClient>,
@@ -34,6 +37,40 @@ struct PublishRouteState {
     rubygems_upstream: Arc<RubyGemsUpstreamClient>,
     nuget_upstream: Arc<NuGetUpstreamClient>,
     pub_upstream: Arc<PubUpstreamClient>,
+}
+
+/// Resolve a publish authorization check through the ADR-0022 Authenticator/Authorizer seam,
+/// mirroring `starmetal_server::state::resolve_publish_authorization`.
+fn resolve_publish_authorization(
+    authorizer: &LocalAuthorizer,
+    credential: Option<&str>,
+    ecosystem: Ecosystem,
+    name: &PackageName,
+) -> PublishAuthorization {
+    let Some(token) = credential else {
+        return PublishAuthorization::Unauthenticated;
+    };
+    let Some(principal) = authorizer.authenticate_bearer(token) else {
+        return PublishAuthorization::Forbidden;
+    };
+    let resource = Resource {
+        namespace: starmetal_authz::default_namespace(),
+        ecosystem: Some(ecosystem),
+        repository: Some(name.clone()),
+        coordinate: Some(Coordinate {
+            ecosystem,
+            name: name.clone(),
+            version: None,
+        }),
+    };
+    if authorizer
+        .authorize_sync(&principal, Action::Add, &resource)
+        .is_allowed()
+    {
+        PublishAuthorization::Allowed
+    } else {
+        PublishAuthorization::Forbidden
+    }
 }
 
 impl PublishRouteState {
@@ -57,6 +94,7 @@ impl PublishRouteState {
         ));
 
         Self {
+            authorizer: Arc::new(LocalAuthorizer::from_config(&config)),
             config: Arc::new(config),
             package_service: service.clone(),
             publishing_service: service,
@@ -94,6 +132,14 @@ impl cargo::HasCargoState for PublishRouteState {
     fn cargo_upstream(&self) -> &Arc<CargoUpstreamClient> {
         &self.cargo_upstream
     }
+    fn authorize_publish(
+        &self,
+        credential: Option<&str>,
+        ecosystem: Ecosystem,
+        name: &PackageName,
+    ) -> PublishAuthorization {
+        resolve_publish_authorization(&self.authorizer, credential, ecosystem, name)
+    }
 }
 
 impl pypi::HasPypiState for PublishRouteState {
@@ -111,6 +157,14 @@ impl pypi::HasPypiState for PublishRouteState {
 
     fn pypi_upstream(&self) -> &Arc<PypiUpstreamClient> {
         &self.pypi_upstream
+    }
+    fn authorize_publish(
+        &self,
+        credential: Option<&str>,
+        ecosystem: Ecosystem,
+        name: &PackageName,
+    ) -> PublishAuthorization {
+        resolve_publish_authorization(&self.authorizer, credential, ecosystem, name)
     }
 }
 
@@ -130,6 +184,14 @@ impl npm::HasNpmState for PublishRouteState {
     fn npm_upstream(&self) -> &Arc<NpmUpstreamClient> {
         &self.npm_upstream
     }
+    fn authorize_publish(
+        &self,
+        credential: Option<&str>,
+        ecosystem: Ecosystem,
+        name: &PackageName,
+    ) -> PublishAuthorization {
+        resolve_publish_authorization(&self.authorizer, credential, ecosystem, name)
+    }
 }
 
 impl maven::HasMavenState for PublishRouteState {
@@ -147,6 +209,14 @@ impl maven::HasMavenState for PublishRouteState {
 
     fn maven_upstream(&self) -> &Arc<MavenUpstreamClient> {
         &self.maven_upstream
+    }
+    fn authorize_publish(
+        &self,
+        credential: Option<&str>,
+        ecosystem: Ecosystem,
+        name: &PackageName,
+    ) -> PublishAuthorization {
+        resolve_publish_authorization(&self.authorizer, credential, ecosystem, name)
     }
 }
 
@@ -166,6 +236,14 @@ impl hex::HasHexState for PublishRouteState {
     fn hex_upstream(&self) -> &Arc<HexUpstreamClient> {
         &self.hex_upstream
     }
+    fn authorize_publish(
+        &self,
+        credential: Option<&str>,
+        ecosystem: Ecosystem,
+        name: &PackageName,
+    ) -> PublishAuthorization {
+        resolve_publish_authorization(&self.authorizer, credential, ecosystem, name)
+    }
 }
 
 impl rubygems::HasRubyGemsState for PublishRouteState {
@@ -183,6 +261,14 @@ impl rubygems::HasRubyGemsState for PublishRouteState {
 
     fn rubygems_upstream(&self) -> &Arc<RubyGemsUpstreamClient> {
         &self.rubygems_upstream
+    }
+    fn authorize_publish(
+        &self,
+        credential: Option<&str>,
+        ecosystem: Ecosystem,
+        name: &PackageName,
+    ) -> PublishAuthorization {
+        resolve_publish_authorization(&self.authorizer, credential, ecosystem, name)
     }
 }
 
@@ -202,6 +288,14 @@ impl nuget::HasNuGetState for PublishRouteState {
     fn nuget_upstream(&self) -> &Arc<NuGetUpstreamClient> {
         &self.nuget_upstream
     }
+    fn authorize_publish(
+        &self,
+        credential: Option<&str>,
+        ecosystem: Ecosystem,
+        name: &PackageName,
+    ) -> PublishAuthorization {
+        resolve_publish_authorization(&self.authorizer, credential, ecosystem, name)
+    }
 }
 
 impl pubdev::HasPubState for PublishRouteState {
@@ -219,6 +313,14 @@ impl pubdev::HasPubState for PublishRouteState {
 
     fn pub_upstream(&self) -> &Arc<PubUpstreamClient> {
         &self.pub_upstream
+    }
+    fn authorize_publish(
+        &self,
+        credential: Option<&str>,
+        ecosystem: Ecosystem,
+        name: &PackageName,
+    ) -> PublishAuthorization {
+        resolve_publish_authorization(&self.authorizer, credential, ecosystem, name)
     }
 }
 

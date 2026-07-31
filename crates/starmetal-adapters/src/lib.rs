@@ -31,6 +31,19 @@ pub mod nuget;
 #[cfg(feature = "pub")]
 pub mod pubdev;
 
+/// The outcome of a publish authorization check (ADR-0022), which each adapter maps to HTTP.
+///
+/// `Unauthenticated` means no bearer credential was presented (→ 401). A credential that is
+/// present but unrecognized, or recognized but not granted `Add` on the target, is `Forbidden`
+/// (→ 403) — preserving the pre-ADR-0022 behavior where an unknown/insufficient publish token
+/// returned 403, not 401.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PublishAuthorization {
+    Allowed,
+    Unauthenticated,
+    Forbidden,
+}
+
 #[allow(dead_code)]
 pub(crate) fn public_base_url(config: &Config, headers: &HeaderMap) -> String {
     config.server.public_base_url.clone().unwrap_or_else(|| {

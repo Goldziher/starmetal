@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
-use starmetal_authz::LocalAuthorizer;
+use starmetal_adapters::PublishAuthorization;
+use starmetal_authz::{LocalAuthorizer, default_namespace};
+use starmetal_core::authz::{Action, Authenticator, Coordinate, Resource};
 use starmetal_core::config::Config;
+use starmetal_core::package::{Ecosystem, PackageName};
 use starmetal_core::ports::{PackageService, PublishingService, StatisticsService};
 
 /// Shared application state, passed to all handlers via axum's State extractor.
@@ -62,6 +65,48 @@ impl AppState {
     }
 }
 
+/// Resolve a publish authorization check (`Action::Add`) through the ADR-0022
+/// Authenticator/Authorizer seam, shared by every `Has*State::authorize_publish` impl below.
+///
+/// A missing credential is `Unauthenticated`. A present-but-unrecognized token is `Forbidden` —
+/// not `Unauthenticated` — matching the pre-ADR-0022 behavior where an unknown/insufficient
+/// publish token returned 403.
+///
+/// Unused (and `#[allow(dead_code)]`) when no adapter feature is enabled, since every call site
+/// lives in a `#[cfg(feature = "...")]`-gated `Has*State` impl below.
+#[allow(dead_code)]
+fn resolve_publish_authorization(
+    authorizer: &LocalAuthorizer,
+    credential: Option<&str>,
+    ecosystem: Ecosystem,
+    name: &PackageName,
+) -> PublishAuthorization {
+    let Some(token) = credential else {
+        return PublishAuthorization::Unauthenticated;
+    };
+    let Some(principal) = authorizer.authenticate_bearer(token) else {
+        return PublishAuthorization::Forbidden;
+    };
+    let resource = Resource {
+        namespace: default_namespace(),
+        ecosystem: Some(ecosystem),
+        repository: Some(name.clone()),
+        coordinate: Some(Coordinate {
+            ecosystem,
+            name: name.clone(),
+            version: None,
+        }),
+    };
+    if authorizer
+        .authorize_sync(&principal, Action::Add, &resource)
+        .is_allowed()
+    {
+        PublishAuthorization::Allowed
+    } else {
+        PublishAuthorization::Forbidden
+    }
+}
+
 #[cfg(feature = "pypi")]
 impl starmetal_adapters::pypi::HasPypiState for AppState {
     fn config(&self) -> &Arc<Config> {
@@ -78,6 +123,15 @@ impl starmetal_adapters::pypi::HasPypiState for AppState {
 
     fn pypi_upstream(&self) -> &Arc<starmetal_adapters::pypi::upstream::PypiUpstreamClient> {
         &self.upstreams.pypi_upstream
+    }
+
+    fn authorize_publish(
+        &self,
+        credential: Option<&str>,
+        ecosystem: Ecosystem,
+        name: &PackageName,
+    ) -> PublishAuthorization {
+        resolve_publish_authorization(&self.authorizer, credential, ecosystem, name)
     }
 }
 
@@ -98,6 +152,15 @@ impl starmetal_adapters::npm::HasNpmState for AppState {
     fn npm_upstream(&self) -> &Arc<starmetal_adapters::npm::upstream::NpmUpstreamClient> {
         &self.upstreams.npm_upstream
     }
+
+    fn authorize_publish(
+        &self,
+        credential: Option<&str>,
+        ecosystem: Ecosystem,
+        name: &PackageName,
+    ) -> PublishAuthorization {
+        resolve_publish_authorization(&self.authorizer, credential, ecosystem, name)
+    }
 }
 
 #[cfg(feature = "cargo-registry")]
@@ -116,6 +179,15 @@ impl starmetal_adapters::cargo::HasCargoState for AppState {
 
     fn cargo_upstream(&self) -> &Arc<starmetal_adapters::cargo::upstream::CargoUpstreamClient> {
         &self.upstreams.cargo_upstream
+    }
+
+    fn authorize_publish(
+        &self,
+        credential: Option<&str>,
+        ecosystem: Ecosystem,
+        name: &PackageName,
+    ) -> PublishAuthorization {
+        resolve_publish_authorization(&self.authorizer, credential, ecosystem, name)
     }
 }
 
@@ -136,6 +208,15 @@ impl starmetal_adapters::hex::HasHexState for AppState {
     fn hex_upstream(&self) -> &Arc<starmetal_adapters::hex::upstream::HexUpstreamClient> {
         &self.upstreams.hex_upstream
     }
+
+    fn authorize_publish(
+        &self,
+        credential: Option<&str>,
+        ecosystem: Ecosystem,
+        name: &PackageName,
+    ) -> PublishAuthorization {
+        resolve_publish_authorization(&self.authorizer, credential, ecosystem, name)
+    }
 }
 
 #[cfg(feature = "maven")]
@@ -154,6 +235,15 @@ impl starmetal_adapters::maven::HasMavenState for AppState {
 
     fn maven_upstream(&self) -> &Arc<starmetal_adapters::maven::upstream::MavenUpstreamClient> {
         &self.upstreams.maven_upstream
+    }
+
+    fn authorize_publish(
+        &self,
+        credential: Option<&str>,
+        ecosystem: Ecosystem,
+        name: &PackageName,
+    ) -> PublishAuthorization {
+        resolve_publish_authorization(&self.authorizer, credential, ecosystem, name)
     }
 }
 
@@ -174,6 +264,15 @@ impl starmetal_adapters::rubygems::HasRubyGemsState for AppState {
     fn rubygems_upstream(&self) -> &Arc<starmetal_adapters::rubygems::upstream::RubyGemsUpstreamClient> {
         &self.upstreams.rubygems_upstream
     }
+
+    fn authorize_publish(
+        &self,
+        credential: Option<&str>,
+        ecosystem: Ecosystem,
+        name: &PackageName,
+    ) -> PublishAuthorization {
+        resolve_publish_authorization(&self.authorizer, credential, ecosystem, name)
+    }
 }
 
 #[cfg(feature = "nuget")]
@@ -193,6 +292,15 @@ impl starmetal_adapters::nuget::HasNuGetState for AppState {
     fn nuget_upstream(&self) -> &Arc<starmetal_adapters::nuget::upstream::NuGetUpstreamClient> {
         &self.upstreams.nuget_upstream
     }
+
+    fn authorize_publish(
+        &self,
+        credential: Option<&str>,
+        ecosystem: Ecosystem,
+        name: &PackageName,
+    ) -> PublishAuthorization {
+        resolve_publish_authorization(&self.authorizer, credential, ecosystem, name)
+    }
 }
 
 #[cfg(feature = "pub")]
@@ -211,5 +319,95 @@ impl starmetal_adapters::pubdev::HasPubState for AppState {
 
     fn pub_upstream(&self) -> &Arc<starmetal_adapters::pubdev::upstream::PubUpstreamClient> {
         &self.upstreams.pub_upstream
+    }
+
+    fn authorize_publish(
+        &self,
+        credential: Option<&str>,
+        ecosystem: Ecosystem,
+        name: &PackageName,
+    ) -> PublishAuthorization {
+        resolve_publish_authorization(&self.authorizer, credential, ecosystem, name)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use starmetal_core::config::{Config, PublishingConfig};
+    use starmetal_core::publishing::{PublishTokenConfig, TokenScope};
+
+    use super::*;
+
+    /// A `LocalAuthorizer` built from a publish token scoped to exactly one ecosystem + package.
+    fn authorizer_with_scoped_publish_token() -> LocalAuthorizer {
+        let config = Config {
+            publishing: PublishingConfig {
+                enabled: true,
+                tokens: vec![PublishTokenConfig {
+                    token: "scoped-secret".to_string(),
+                    scopes: vec![TokenScope::Publish],
+                    ecosystems: vec![Ecosystem::Npm],
+                    packages: vec!["left-pad".to_string()],
+                }],
+                ..PublishingConfig::default()
+            },
+            ..Config::default()
+        };
+        LocalAuthorizer::from_config(&config)
+    }
+
+    #[test]
+    fn resolve_publish_authorization_allows_in_scope_credential() {
+        let authorizer = authorizer_with_scoped_publish_token();
+        let decision = resolve_publish_authorization(
+            &authorizer,
+            Some("scoped-secret"),
+            Ecosystem::Npm,
+            &PackageName::new("left-pad"),
+        );
+        assert_eq!(decision, PublishAuthorization::Allowed);
+    }
+
+    #[test]
+    fn resolve_publish_authorization_denies_wrong_package() {
+        let authorizer = authorizer_with_scoped_publish_token();
+        let decision = resolve_publish_authorization(
+            &authorizer,
+            Some("scoped-secret"),
+            Ecosystem::Npm,
+            &PackageName::new("other-package"),
+        );
+        assert_eq!(decision, PublishAuthorization::Forbidden);
+    }
+
+    #[test]
+    fn resolve_publish_authorization_denies_wrong_ecosystem() {
+        let authorizer = authorizer_with_scoped_publish_token();
+        let decision = resolve_publish_authorization(
+            &authorizer,
+            Some("scoped-secret"),
+            Ecosystem::PyPI,
+            &PackageName::new("left-pad"),
+        );
+        assert_eq!(decision, PublishAuthorization::Forbidden);
+    }
+
+    #[test]
+    fn resolve_publish_authorization_denies_unknown_token() {
+        let authorizer = authorizer_with_scoped_publish_token();
+        let decision = resolve_publish_authorization(
+            &authorizer,
+            Some("not-configured"),
+            Ecosystem::Npm,
+            &PackageName::new("left-pad"),
+        );
+        assert_eq!(decision, PublishAuthorization::Forbidden);
+    }
+
+    #[test]
+    fn resolve_publish_authorization_is_unauthenticated_without_credential() {
+        let authorizer = authorizer_with_scoped_publish_token();
+        let decision = resolve_publish_authorization(&authorizer, None, Ecosystem::Npm, &PackageName::new("left-pad"));
+        assert_eq!(decision, PublishAuthorization::Unauthenticated);
     }
 }

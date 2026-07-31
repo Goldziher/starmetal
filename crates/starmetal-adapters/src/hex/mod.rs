@@ -23,7 +23,7 @@ use starmetal_core::config::Config;
 use starmetal_core::error::StarmetalError;
 use starmetal_core::package::{ArtifactId, Ecosystem, PackageName};
 use starmetal_core::ports::{PackageService, PublishingService};
-use starmetal_core::publishing::{ProtocolMetadata, PublishRequest, PublishedArtifact, TokenScope};
+use starmetal_core::publishing::{ProtocolMetadata, PublishRequest, PublishedArtifact};
 use starmetal_core::registry::hex::{HexMeta, HexPackage, HexRelease};
 
 use self::upstream::HexUpstreamClient;
@@ -38,6 +38,15 @@ pub trait HasHexState: Clone + Send + Sync + 'static {
     fn package_service(&self) -> &Arc<dyn PackageService>;
     fn publishing_service(&self) -> &Arc<dyn PublishingService>;
     fn hex_upstream(&self) -> &Arc<HexUpstreamClient>;
+
+    /// Authorize a publish (`Action::Add`) of `name` in `ecosystem` for the given bearer
+    /// credential (`None` when the request carried no bearer token).
+    fn authorize_publish(
+        &self,
+        credential: Option<&str>,
+        ecosystem: Ecosystem,
+        name: &PackageName,
+    ) -> crate::PublishAuthorization;
 }
 
 /// Build the Hex adapter router.
@@ -346,18 +355,16 @@ fn authorize_publish<S: HasHexState>(
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.strip_prefix("Bearer "))
-        .or_else(|| headers.get("x-hex-api-key").and_then(|value| value.to_str().ok()))
-        .ok_or_else(|| (StatusCode::UNAUTHORIZED, "missing publishing token".to_string()))?;
-    if state
-        .config()
-        .authorize_publish_token(token, TokenScope::Publish, Ecosystem::Hex, name)
-    {
-        Ok(())
-    } else {
-        Err((
+        .or_else(|| headers.get("x-hex-api-key").and_then(|value| value.to_str().ok()));
+    match state.authorize_publish(token, Ecosystem::Hex, name) {
+        crate::PublishAuthorization::Allowed => Ok(()),
+        crate::PublishAuthorization::Unauthenticated => {
+            Err((StatusCode::UNAUTHORIZED, "missing publishing token".to_string()))
+        }
+        crate::PublishAuthorization::Forbidden => Err((
             StatusCode::FORBIDDEN,
             "publishing token is not authorized for this package".to_string(),
-        ))
+        )),
     }
 }
 

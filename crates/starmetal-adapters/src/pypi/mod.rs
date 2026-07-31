@@ -21,7 +21,7 @@ use starmetal_core::config::Config;
 use starmetal_core::error::StarmetalError;
 use starmetal_core::package::{ArtifactId, Ecosystem, PackageName, VersionMetadata};
 use starmetal_core::ports::{PackageService, PublishingService};
-use starmetal_core::publishing::{ProtocolMetadata, PublishRequest, PublishedArtifact, TokenScope};
+use starmetal_core::publishing::{ProtocolMetadata, PublishRequest, PublishedArtifact};
 
 use self::upstream::PypiUpstreamClient;
 
@@ -34,6 +34,15 @@ pub trait HasPypiState: Clone + Send + Sync + 'static {
     fn package_service(&self) -> &Arc<dyn PackageService>;
     fn publishing_service(&self) -> &Arc<dyn PublishingService>;
     fn pypi_upstream(&self) -> &Arc<PypiUpstreamClient>;
+
+    /// Authorize a publish (`Action::Add`) of `name` in `ecosystem` for the given bearer
+    /// credential (`None` when the request carried no bearer token).
+    fn authorize_publish(
+        &self,
+        credential: Option<&str>,
+        ecosystem: Ecosystem,
+        name: &PackageName,
+    ) -> crate::PublishAuthorization;
 }
 
 /// Build the PyPI adapter router.
@@ -377,16 +386,15 @@ fn authorize_publish<S: HasPypiState>(state: &S, token: &str, name: &PackageName
     if !state.config().publishing.enabled {
         return Err((StatusCode::NOT_FOUND, "publishing is not enabled".to_string()));
     }
-    if state
-        .config()
-        .authorize_publish_token(token, TokenScope::Publish, Ecosystem::PyPI, name)
-    {
-        Ok(())
-    } else {
-        Err((
+    match state.authorize_publish(Some(token), Ecosystem::PyPI, name) {
+        crate::PublishAuthorization::Allowed => Ok(()),
+        crate::PublishAuthorization::Unauthenticated => {
+            Err((StatusCode::UNAUTHORIZED, "missing publishing token".to_string()))
+        }
+        crate::PublishAuthorization::Forbidden => Err((
             StatusCode::FORBIDDEN,
             "publishing token is not authorized for this package".to_string(),
-        ))
+        )),
     }
 }
 
