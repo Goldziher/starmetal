@@ -30,6 +30,7 @@ maven = []
 rubygems = []
 nuget = []
 pub = []
+scanner-osv = []
 
 [dependencies]
 ahash.workspace = true
