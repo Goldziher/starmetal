@@ -14,7 +14,20 @@ path = "src/main.rs"
 
 [features]
 default = ["full"]
-full = ["pypi", "npm", "cargo-registry", "hex", "maven", "rubygems", "nuget", "pub", "backend-fs", "update", "metadata"]
+full = [
+  "pypi",
+  "npm",
+  "cargo-registry",
+  "hex",
+  "maven",
+  "rubygems",
+  "nuget",
+  "pub",
+  "backend-fs",
+  "update",
+  "metadata",
+  "scanner-osv",
+]
 update = [
   "dep:starmetal-update-core",
   "dep:starmetal-updater",
@@ -41,6 +54,7 @@ backend-gcs = ["starmetal-ops/backend-gcs", "starmetal-storage/backend-gcs"]
 pq = ["starmetal-core/pq", "starmetal-ops/pq"]
 signing-x509 = ["starmetal-core/signing-x509", "starmetal-ops/signing-x509"]
 metadata = ["starmetal-ops/metadata"]
+scanner-osv = ["starmetal-ops/scanner-osv"]
 
 [dependencies]
 axum.workspace = true

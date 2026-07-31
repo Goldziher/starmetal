@@ -106,6 +106,25 @@ async fn attach_content_store(
     Ok(service.with_content_store(Arc::new(content_store)))
 }
 
+/// Attach a vulnerability scanner (ADR-0024) to the service when `supply_chain.enabled`, so publishes
+/// are gated at ingest. A disabled config leaves the service untouched (the `None` scanner path).
+#[cfg(feature = "scanner-osv")]
+fn attach_scanner(service: CachingPackageService, config: &Config) -> CachingPackageService {
+    use starmetal_adapters::scanner::OsvScanner;
+    use starmetal_core::config::ScannerKind;
+
+    if !config.supply_chain.enabled {
+        return service;
+    }
+    let scanner = match config.supply_chain.scanner {
+        ScannerKind::Osv => match &config.supply_chain.osv_endpoint {
+            Some(endpoint) => OsvScanner::with_endpoint(endpoint.clone()),
+            None => OsvScanner::new(),
+        },
+    };
+    service.with_scanner(Arc::new(scanner))
+}
+
 impl StarmetalRuntime {
     pub async fn new(options: ConfigLoadOptions) -> Result<Self> {
         let config = load_config(options)?;
@@ -140,6 +159,8 @@ impl StarmetalRuntime {
             CachingPackageService::new_with_signing(storage.clone(), clients, config.policies.clone(), signing);
         #[cfg(feature = "metadata")]
         let service = attach_content_store(service, &config, storage.clone()).await?;
+        #[cfg(feature = "scanner-osv")]
+        let service = attach_scanner(service, &config);
         let service = Arc::new(service);
         let upstreams = UpstreamClients {
             #[cfg(feature = "pypi")]

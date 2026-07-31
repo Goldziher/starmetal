@@ -339,6 +339,33 @@ enabled = true
 database_url = "postgresql://starmetal:password@localhost:5432/starmetal"
 ```
 
+## Supply Chain (Vulnerability Scanning)
+
+Disabled by default. When enabled, Starmetal scans each artifact at publish (ingest) time and rejects
+the publish when a finding's severity exceeds `policies.max_vuln_severity`. Because that threshold
+defaults to `critical` (the top of the scale), enabling the scanner is non-breaking until an operator
+lowers the bound — nothing exceeds `critical`. A scan that cannot complete fails the publish closed.
+Requires the `scanner-osv` build feature (included in `full`). Serve-time enforcement and scan-report
+persistence are not yet wired.
+
+The OSV backend queries the [OSV.dev](https://osv.dev) API by package coordinate; no CVE database is
+vendored. Point `osv_endpoint` at a self-hosted OSV mirror to avoid the public API.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `supply_chain.enabled` | `false` | Enables the ingest vulnerability gate. |
+| `supply_chain.scanner` | `"osv"` | Scanner backend. Only `osv` is available today. |
+| `supply_chain.osv_endpoint` | `null` | Override the OSV base URL (defaults to `https://api.osv.dev`). |
+
+```toml
+[supply_chain]
+enabled = true
+scanner = "osv"
+
+[policies]
+max_vuln_severity = "high"  # deny publishes carrying a critical-severity advisory
+```
+
 ## PQ Readiness
 
 The `pq` feature flag reserves Starmetal-level ML-DSA/ML-KEM configuration and schema surface for

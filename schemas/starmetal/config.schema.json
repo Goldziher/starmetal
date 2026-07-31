@@ -251,6 +251,16 @@
       "required": ["bucket", "region"],
       "type": "object"
     },
+    "ScannerKind": {
+      "description": "Which artifact scanner backs the supply-chain vulnerability gate (ADR-0024).",
+      "oneOf": [
+        {
+          "const": "osv",
+          "description": "The OSV.dev query-API scanner.",
+          "type": "string"
+        }
+      ]
+    },
     "ServerConfig": {
       "properties": {
         "bind": {
@@ -430,6 +440,26 @@
       },
       "type": "object"
     },
+    "SupplyChainConfig": {
+      "description": "Optional supply-chain security controls (ADR-0024). When enabled, publishes are gated at ingest:\neach artifact is scanned and denied when a finding exceeds `policies.max_vuln_severity`. Requires\nthe corresponding scanner build feature (e.g. `scanner-osv`); disabled by default.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "osv_endpoint": {
+          "default": null,
+          "description": "Override the OSV endpoint base URL (defaults to the public `https://api.osv.dev`). Useful for\na self-hosted OSV mirror.",
+          "type": ["string", "null"]
+        },
+        "scanner": {
+          "$ref": "#/$defs/ScannerKind",
+          "default": "osv",
+          "description": "The scanner backend to use."
+        }
+      },
+      "type": "object"
+    },
     "TokenScope": {
       "enum": ["read", "publish", "yank", "admin"],
       "type": "string"
@@ -558,6 +588,14 @@
         "options": {},
         "path": null,
         "s3": null
+      }
+    },
+    "supply_chain": {
+      "$ref": "#/$defs/SupplyChainConfig",
+      "default": {
+        "enabled": false,
+        "osv_endpoint": null,
+        "scanner": "osv"
       }
     },
     "upstream": {

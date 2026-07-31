@@ -38,6 +38,8 @@ pub struct Config {
     pub signing: SigningConfig,
     #[serde(default)]
     pub metadata: MetadataConfig,
+    #[serde(default)]
+    pub supply_chain: SupplyChainConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -268,6 +270,31 @@ impl Default for MetadataConfig {
             apply_schema: true,
         }
     }
+}
+
+/// Which artifact scanner backs the supply-chain vulnerability gate (ADR-0024).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum ScannerKind {
+    /// The OSV.dev query-API scanner.
+    #[default]
+    Osv,
+}
+
+/// Optional supply-chain security controls (ADR-0024). When enabled, publishes are gated at ingest:
+/// each artifact is scanned and denied when a finding exceeds `policies.max_vuln_severity`. Requires
+/// the corresponding scanner build feature (e.g. `scanner-osv`); disabled by default.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct SupplyChainConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    /// The scanner backend to use.
+    #[serde(default)]
+    pub scanner: ScannerKind,
+    /// Override the OSV endpoint base URL (defaults to the public `https://api.osv.dev`). Useful for
+    /// a self-hosted OSV mirror.
+    #[serde(default)]
+    pub osv_endpoint: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -543,6 +570,7 @@ impl Default for Config {
             encryption: EncryptionConfig::default(),
             signing: SigningConfig::default(),
             metadata: MetadataConfig::default(),
+            supply_chain: SupplyChainConfig::default(),
         }
     }
 }
@@ -1250,6 +1278,14 @@ certificate_file = "/etc/starmetal/trust/internal-ca.pem"
             metadata.apply_schema,
             "schema provisioning is on by default for turnkey deploys"
         );
+    }
+
+    #[test]
+    fn supply_chain_defaults_to_disabled_osv() {
+        let supply_chain = SupplyChainConfig::default();
+        assert!(!supply_chain.enabled);
+        assert_eq!(supply_chain.scanner, ScannerKind::Osv);
+        assert!(supply_chain.osv_endpoint.is_none());
     }
 
     #[test]

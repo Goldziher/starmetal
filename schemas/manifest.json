@@ -89,7 +89,7 @@
       "validated_by": "crates/starmetal-core/tests/schema_validation.rs; tests/conformance"
     },
     {
-      "blake3": "0ee09126a51cc29840b15798602dedcc29a8f7f67c0581b22513d7bbdbbd1a05",
+      "blake3": "7535c395edc3e63e9dbe1340e0e3c120db83377603a2f964dfc089f879aea7e3",
       "generated_by": "starmetal-schema-manager",
       "id": "starmetal-config",
       "path": "starmetal/config.schema.json",

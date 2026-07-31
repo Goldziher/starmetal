@@ -22,6 +22,7 @@ backend-gcs = ["starmetal-storage/backend-gcs"]
 pq = ["starmetal-core/pq"]
 signing-x509 = ["starmetal-core/signing-x509"]
 metadata = ["dep:starmetal-metadata"]
+scanner-osv = ["starmetal-adapters/scanner-osv"]
 update = [
   "dep:starmetal-update-core",
   "dep:starmetal-updater",
