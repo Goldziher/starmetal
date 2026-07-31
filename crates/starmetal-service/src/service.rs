@@ -19,6 +19,7 @@ use pkcs8::{
     spki::SubjectPublicKeyInfoOwned,
 };
 use sha2::Digest;
+use starmetal_core::content::{Asset, AssetRef, Blob, BlobDigest, Component, ComponentRef, ContentStore};
 use starmetal_core::error::{Result, StarmetalError};
 use starmetal_core::integrity;
 use starmetal_core::package::{
@@ -296,6 +297,12 @@ pub struct CachingPackageService {
     policy: PolicyConfig,
     signing: Option<Arc<SigningService>>,
     statistics: Mutex<StatisticsSnapshot>,
+    content_store: Option<Arc<dyn ContentStore>>,
+    /// Named per-coordinate locks serializing concurrent publishes of the same
+    /// `ecosystem/name/version`. Entries are not pruned yet: the map is bounded by the number of
+    /// distinct coordinates published in-process. A future improvement can prune an entry once its
+    /// last held guard drops.
+    publish_locks: Mutex<AHashMap<String, Arc<tokio::sync::Mutex<()>>>>,
 }
 
 struct StoredObjectSignatureCheck<'a> {
@@ -325,6 +332,8 @@ impl CachingPackageService {
             policy,
             signing: None,
             statistics: Mutex::new(StatisticsSnapshot::default()),
+            content_store: None,
+            publish_locks: Mutex::new(AHashMap::new()),
         }
     }
 
@@ -340,7 +349,89 @@ impl CachingPackageService {
             policy,
             signing: signing.map(Arc::new),
             statistics: Mutex::new(StatisticsSnapshot::default()),
+            content_store: None,
+            publish_locks: Mutex::new(AHashMap::new()),
         }
+    }
+
+    /// Attach a content-addressed metadata store; publishes then also record the ADR-0020 content
+    /// model (component -> asset -> blob) with cross-ecosystem blob dedup. Absent by default.
+    pub fn with_content_store(mut self, content_store: Arc<dyn ContentStore>) -> Self {
+        self.content_store = Some(content_store);
+        self
+    }
+
+    /// Acquire an owned lock scoped to a single `ecosystem/name/version` publish coordinate,
+    /// serializing concurrent publishes that target the same version.
+    async fn acquire_publish_lock(
+        &self,
+        ecosystem: Ecosystem,
+        name: &PackageName,
+        version: &str,
+    ) -> tokio::sync::OwnedMutexGuard<()> {
+        let key = format!("{ecosystem}/{}/{version}", name.as_str());
+        let lock = {
+            let mut locks = self.publish_locks.lock().expect("publish_locks mutex poisoned");
+            Arc::clone(
+                locks
+                    .entry(key)
+                    .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(()))),
+            )
+        };
+        lock.lock_owned().await
+    }
+
+    async fn store_content_model(
+        &self,
+        content_store: &dyn ContentStore,
+        request: &PublishRequest,
+        _metadata: &VersionMetadata,
+    ) -> Result<()> {
+        let component_ref = ComponentRef {
+            ecosystem: request.ecosystem,
+            namespace: None,
+            name: request.name.clone(),
+            version: request.version.clone(),
+        };
+        content_store
+            .upsert_component(&Component {
+                namespace: None,
+                name: request.name.clone(),
+                version: request.version.clone(),
+                ecosystem: request.ecosystem,
+                attributes: serde_json::json!({}),
+            })
+            .await?;
+        for artifact in &request.artifacts {
+            content_store
+                .upsert_asset(&Asset {
+                    path: artifact.filename.clone(),
+                    component_ref: component_ref.clone(),
+                    content_type: None,
+                    attributes: serde_json::json!({}),
+                })
+                .await?;
+            let blob = Blob {
+                digest: BlobDigest::new(integrity::blake3_hex(&artifact.data)),
+                size: artifact.data.len() as u64,
+                upstream_hashes: artifact.upstream_hashes.clone(),
+                content_type: None,
+            };
+            content_store.get_or_insert_blob(&blob, artifact.data.clone()).await?;
+            // If adding the reference below fails, the blob inserted just above is left
+            // unreferenced. No compensating delete is wired here: an unreferenced blob is simply a
+            // GC candidate, reclaimed by the Stage-2d GC sweep (self-healing).
+            content_store
+                .add_reference(
+                    &AssetRef {
+                        component_ref: component_ref.clone(),
+                        path: artifact.filename.clone(),
+                    },
+                    &blob.digest,
+                )
+                .await?;
+        }
+        Ok(())
     }
 
     fn upstream(&self, ecosystem: Ecosystem) -> Result<&Arc<dyn UpstreamClient>> {
@@ -848,6 +939,12 @@ impl PublishingService for CachingPackageService {
             ));
         }
 
+        // Serializes concurrent publishes targeting the same ecosystem/name/version coordinate;
+        // held for the remainder of this function.
+        let _publish_guard = self
+            .acquire_publish_lock(request.ecosystem, &request.name, &request.version)
+            .await;
+
         let metadata_key = Self::metadata_key(request.ecosystem, &request.name, &request.version)?;
         if !request.allow_overwrite && self.storage.exists(&metadata_key).await? {
             return Err(StarmetalError::Publish(format!(
@@ -1019,6 +1116,11 @@ impl PublishingService for CachingPackageService {
                 &mut staged_keys,
             )
             .await?;
+
+            if let Some(content_store) = self.content_store.clone() {
+                self.store_content_model(content_store.as_ref(), &request, &metadata)
+                    .await?;
+            }
 
             Ok(PublishResult {
                 ecosystem: request.ecosystem,
