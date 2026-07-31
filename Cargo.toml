@@ -6,6 +6,7 @@ members = [
   "crates/starmetal-core",
   "crates/starmetal-forge",
   "crates/starmetal-managers",
+  "crates/starmetal-metadata",
   "crates/starmetal-ops",
   "crates/starmetal-server",
   "crates/starmetal-service",
@@ -33,6 +34,9 @@ async-trait = "0.1"
 axum = { version = "0.8", features = ["multipart"] }
 
 base64 = "0.23"
+
+bb8 = "0.9"
+bb8-postgres = "0.9"
 
 blake3 = "1"
 
@@ -76,6 +80,7 @@ starmetal-adapters = { path = "crates/starmetal-adapters", default-features = fa
 starmetal-core = { path = "crates/starmetal-core" }
 starmetal-forge = { path = "crates/starmetal-forge", default-features = false }
 starmetal-managers = { path = "crates/starmetal-managers", default-features = false }
+starmetal-metadata = { path = "crates/starmetal-metadata" }
 starmetal-ops = { path = "crates/starmetal-ops", default-features = false }
 starmetal-server = { path = "crates/starmetal-server", default-features = false }
 starmetal-service = { path = "crates/starmetal-service" }
@@ -87,8 +92,11 @@ tar = "0.4.46"
 
 tempfile = "3"
 
+testcontainers = "0.27"
+testcontainers-modules = { version = "0.15", features = ["postgres"] }
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }
+tokio-postgres = { version = "0.7", features = ["with-chrono-0_4", "with-serde_json-1"] }
 toml = "1.1"
 tower = { version = "0.5", features = ["full"] }
 tower-http = { version = "0.7", features = ["cors", "compression-full", "limit", "trace"] }

@@ -10,6 +10,7 @@ trim_trailing_whitespace = true
 exclude = [
   "**/*.lock",
   "**/*.svg",
+  "**/*.sql",
   "**/Cargo.lock",
   "**/go.sum",
   "**/package-lock.json",
@@ -127,6 +128,7 @@ commit = { stages = ["commit-msg"] }
 file_safety = { exclude = [
   "**/*.lock",
   "**/*.svg",
+  "**/*.sql",
   "**/Cargo.lock",
   "**/go.sum",
   "**/package-lock.json",
@@ -148,6 +150,7 @@ cargo = true
 lint = { exclude = [
   "**/*.lock",
   "**/*.svg",
+  "**/*.sql",
   "**/Cargo.lock",
   "**/go.sum",
   "**/package-lock.json",
@@ -167,6 +170,7 @@ lint = { exclude = [
 fmt = { exclude = [
   "**/*.lock",
   "**/*.svg",
+  "**/*.sql",
   "**/Cargo.lock",
   "**/go.sum",
   "**/package-lock.json",

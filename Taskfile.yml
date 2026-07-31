@@ -206,6 +206,22 @@ tasks:
     cmds:
       - cargo test -p starmetal-core --test schema_validation
 
+  db:generate:
+    desc: Regenerate typed SQL access code from schema and queries (scythe)
+    cmds:
+      - scythe generate
+      - cargo fmt -p starmetal-metadata
+
+  db:check:
+    desc: Validate SQL queries against the schema and lint (scythe)
+    cmds:
+      - scythe check
+
+  test:metadata:
+    desc: Run Postgres-backed content-store tests (requires Docker)
+    cmds:
+      - cargo test -p starmetal-metadata -- --ignored --test-threads=1
+
   conformance:
     desc: Run fixture-based registry conformance tests
     cmds:

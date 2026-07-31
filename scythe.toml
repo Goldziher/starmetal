@@ -1,0 +1,22 @@
+# scythe SQL -> Rust code generation (https://github.com/Goldziher/scythe).
+# Write SQL in crates/*/sql, then `task db:generate` (or `scythe generate`) to
+# regenerate the committed `src/generated/queries.rs`. Generation is static — it
+# never connects to a database.
+
+[scythe]
+version = "1"
+
+[[sql]]
+name = "content"
+engine = "postgresql"
+schema = ["crates/starmetal-metadata/sql/schema.sql"]
+queries = ["crates/starmetal-metadata/sql/queries/*.sql"]
+output = "crates/starmetal-metadata/src/generated"
+
+[sql.gen.rust]
+target = "tokio-postgres"
+serde = true
+
+[lint.rules]
+# Domain-accurate query verbs (Insert/Upsert/Add/Mark) over the built-in prefix list.
+"SC-N03" = "off"

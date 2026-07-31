@@ -1,0 +1,23 @@
+[package]
+name = "starmetal-metadata"
+description = "Postgres-backed content model and reference-counted GC (ADR-0020) for Starmetal"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+bb8.workspace = true
+bb8-postgres.workspace = true
+bytes.workspace = true
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+starmetal-core.workspace = true
+tokio-postgres.workspace = true
+
+[dev-dependencies]
+starmetal-storage = { workspace = true, features = ["backend-memory"] }
+testcontainers.workspace = true
+testcontainers-modules.workspace = true
+tokio.workspace = true
