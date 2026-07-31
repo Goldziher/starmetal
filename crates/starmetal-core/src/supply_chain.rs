@@ -245,6 +245,29 @@ impl ScanReport {
     }
 }
 
+/// Evaluate a scan report against the maximum tolerated vulnerability severity, yielding the
+/// vulnerability-gate decision consulted at both ingest and serve (ADR-0024).
+///
+/// A finding strictly more severe than `max_allowed` denies with
+/// [`PolicyReason::VulnSeverityExceeded`]; anything at or below the threshold — including a clean
+/// report — allows. This is pure and framework-free so the same rule governs the publish path and
+/// the serve path. With the default `max_allowed` of [`VulnSeverity::Critical`] nothing exceeds the
+/// threshold, so an attached scanner never blocks until an operator lowers the bound — keeping the
+/// gate additive and non-breaking. Quarantine-instead-of-deny and incomplete-scan (`completed ==
+/// false`) handling are layered in by the caller; this function only ranks findings against the
+/// threshold.
+pub fn evaluate_scan_report(report: &ScanReport, max_allowed: VulnSeverity) -> PolicyDecision {
+    match report.highest_severity() {
+        Some(highest) if highest > max_allowed => PolicyDecision::deny(
+            PolicyReason::VulnSeverityExceeded,
+            format!(
+                "artifact carries a {highest:?} vulnerability, exceeding the maximum allowed severity {max_allowed:?}"
+            ),
+        ),
+        _ => PolicyDecision::allow(),
+    }
+}
+
 /// Capabilities a [`Scanner`] advertises so the pipeline can negotiate whether and how to use it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ScannerCapabilities {
@@ -531,6 +554,56 @@ mod tests {
             completed: true,
         };
         assert_eq!(clean.highest_severity(), None);
+    }
+
+    fn report_with(severity: VulnSeverity) -> ScanReport {
+        ScanReport {
+            scanner: "osv".to_string(),
+            subject_digest: "0".repeat(64),
+            vulnerabilities: vec![Vulnerability {
+                id: "CVE-1".to_string(),
+                severity,
+                package: None,
+                description: None,
+                fixed_version: None,
+            }],
+            completed: true,
+        }
+    }
+
+    #[test]
+    fn should_deny_when_a_finding_exceeds_the_max_allowed_severity() {
+        let decision = evaluate_scan_report(&report_with(VulnSeverity::Critical), VulnSeverity::High);
+        assert!(decision.blocks_serving());
+        assert_eq!(decision.reason_code(), Some(PolicyReason::VulnSeverityExceeded));
+    }
+
+    #[test]
+    fn should_allow_when_the_highest_finding_is_at_or_below_the_threshold() {
+        // Equal to the threshold is tolerated.
+        assert!(evaluate_scan_report(&report_with(VulnSeverity::High), VulnSeverity::High).is_allowed());
+        // Below the threshold is tolerated.
+        assert!(evaluate_scan_report(&report_with(VulnSeverity::Low), VulnSeverity::High).is_allowed());
+    }
+
+    #[test]
+    fn should_allow_the_default_critical_threshold_even_with_a_critical_finding() {
+        // The default `max_vuln_severity` (Critical) leaves the gate effectively off: nothing can
+        // exceed the top of the scale, so an attached scanner never blocks until the bound is lowered.
+        let decision = evaluate_scan_report(&report_with(VulnSeverity::Critical), VulnSeverity::Critical);
+        assert!(decision.is_allowed());
+        assert_eq!(decision.reason_code(), None);
+    }
+
+    #[test]
+    fn should_allow_a_clean_report() {
+        let clean = ScanReport {
+            scanner: "osv".to_string(),
+            subject_digest: "0".repeat(64),
+            vulnerabilities: vec![],
+            completed: true,
+        };
+        assert!(evaluate_scan_report(&clean, VulnSeverity::Low).is_allowed());
     }
 
     #[test]

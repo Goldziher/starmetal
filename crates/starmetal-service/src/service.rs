@@ -36,6 +36,7 @@ use starmetal_core::signing::{
     SigningConfig, SigningKeyStatus, SigningMode,
 };
 use starmetal_core::statistics::{EcosystemStatistics, StatisticsSnapshot};
+use starmetal_core::supply_chain::{ScanTarget, Scanner, evaluate_scan_report};
 use zeroize::Zeroizing;
 
 const DSSE_PAE_PREFIX: &str = "DSSEv1";
@@ -298,6 +299,9 @@ pub struct CachingPackageService {
     signing: Option<Arc<SigningService>>,
     statistics: Mutex<StatisticsSnapshot>,
     content_store: Option<Arc<dyn ContentStore>>,
+    /// Optional vulnerability scanner (ADR-0024). When present, publishes are gated at ingest:
+    /// each artifact is scanned and denied when a finding exceeds `policy.max_vuln_severity`.
+    scanner: Option<Arc<dyn Scanner>>,
     /// Named per-coordinate locks serializing concurrent publishes of the same
     /// `ecosystem/name/version`. Entries are not pruned yet: the map is bounded by the number of
     /// distinct coordinates published in-process. A future improvement can prune an entry once its
@@ -333,6 +337,7 @@ impl CachingPackageService {
             signing: None,
             statistics: Mutex::new(StatisticsSnapshot::default()),
             content_store: None,
+            scanner: None,
             publish_locks: Mutex::new(AHashMap::new()),
         }
     }
@@ -350,6 +355,7 @@ impl CachingPackageService {
             signing: signing.map(Arc::new),
             statistics: Mutex::new(StatisticsSnapshot::default()),
             content_store: None,
+            scanner: None,
             publish_locks: Mutex::new(AHashMap::new()),
         }
     }
@@ -358,6 +364,14 @@ impl CachingPackageService {
     /// model (component -> asset -> blob) with cross-ecosystem blob dedup. Absent by default.
     pub fn with_content_store(mut self, content_store: Arc<dyn ContentStore>) -> Self {
         self.content_store = Some(content_store);
+        self
+    }
+
+    /// Attach a vulnerability scanner (ADR-0024). Publishes are then gated at ingest: each artifact
+    /// is scanned and the publish is denied when a finding exceeds `policy.max_vuln_severity`.
+    /// Absent by default (the publish path performs no scanning).
+    pub fn with_scanner(mut self, scanner: Arc<dyn Scanner>) -> Self {
+        self.scanner = Some(scanner);
         self
     }
 
@@ -1002,6 +1016,31 @@ impl PublishingService for CachingPackageService {
             metadata = existing_metadata;
         }
         self.policy.check(&metadata)?;
+
+        // Vulnerability gate (ADR-0024): when a scanner is attached, scan each artifact and reject
+        // the publish before any bytes are written if a finding exceeds `policy.max_vuln_severity`.
+        // Runs before the transactional block so a denied artifact leaves no staged writes. A scan
+        // that cannot complete (transport failure) propagates as an error — the publish fails closed.
+        if let Some(scanner) = &self.scanner {
+            for artifact in &request.artifacts {
+                let artifact_id = ArtifactId {
+                    ecosystem: request.ecosystem,
+                    name: request.name.clone(),
+                    version: request.version.clone(),
+                    filename: artifact.filename.clone(),
+                };
+                let report = scanner.scan(ScanTarget::new(&artifact_id, &artifact.data)).await?;
+                let decision = evaluate_scan_report(&report, self.policy.max_vuln_severity);
+                if decision.blocks_serving() {
+                    return Err(StarmetalError::PolicyViolation(
+                        decision
+                            .reason()
+                            .unwrap_or("vulnerability policy violation")
+                            .to_string(),
+                    ));
+                }
+            }
+        }
 
         let result = async {
             for artifact in &request.artifacts {
@@ -1943,6 +1982,145 @@ mod tests {
         assert_eq!(record.source, PublishSource::Local);
         assert!(!record.yanked);
         assert!(record.listed);
+    }
+
+    /// A [`Scanner`] test double (a fake for our own port — not a mock of an external service):
+    /// it reports a single finding of the configured severity, or a clean report when `None`.
+    struct FakeScanner {
+        severity: Option<starmetal_core::policy::VulnSeverity>,
+    }
+
+    #[async_trait]
+    impl Scanner for FakeScanner {
+        async fn scan(&self, target: ScanTarget<'_>) -> Result<starmetal_core::supply_chain::ScanReport> {
+            let vulnerabilities = self
+                .severity
+                .map(|severity| {
+                    vec![starmetal_core::supply_chain::Vulnerability {
+                        id: "CVE-TEST-1".to_string(),
+                        severity,
+                        package: None,
+                        description: None,
+                        fixed_version: None,
+                    }]
+                })
+                .unwrap_or_default();
+            Ok(starmetal_core::supply_chain::ScanReport {
+                scanner: "fake".to_string(),
+                subject_digest: integrity::blake3_hex(target.content),
+                vulnerabilities,
+                completed: true,
+            })
+        }
+
+        fn capabilities(&self) -> starmetal_core::supply_chain::ScannerCapabilities {
+            starmetal_core::supply_chain::ScannerCapabilities {
+                name: "fake".to_string(),
+                version: "0".to_string(),
+                ecosystems: Vec::new(),
+                supports_vulnerabilities: true,
+                produces_sbom: false,
+                sbom_formats: Vec::new(),
+            }
+        }
+    }
+
+    /// A [`Scanner`] that always fails its scan, to prove the ingest gate fails closed.
+    struct UnavailableScanner;
+
+    #[async_trait]
+    impl Scanner for UnavailableScanner {
+        async fn scan(&self, _target: ScanTarget<'_>) -> Result<starmetal_core::supply_chain::ScanReport> {
+            Err(StarmetalError::Upstream("scanner unavailable".to_string()))
+        }
+
+        fn capabilities(&self) -> starmetal_core::supply_chain::ScannerCapabilities {
+            starmetal_core::supply_chain::ScannerCapabilities {
+                name: "unavailable".to_string(),
+                version: "0".to_string(),
+                ecosystems: Vec::new(),
+                supports_vulnerabilities: true,
+                produces_sbom: false,
+                sbom_formats: Vec::new(),
+            }
+        }
+    }
+
+    fn scan_gate_request() -> PublishRequest {
+        PublishRequest {
+            ecosystem: Ecosystem::PyPI,
+            name: PackageName::new("sample"),
+            version: "1.0.0".to_string(),
+            license: Some("MIT".to_string()),
+            yanked: false,
+            listed: true,
+            artifacts: vec![PublishedArtifact {
+                filename: "sample-1.0.0.tar.gz".to_string(),
+                data: Bytes::from_static(b"scanned artifact"),
+                upstream_hashes: AHashMap::new(),
+            }],
+            protocol_metadata: ProtocolMetadata::default_for(Ecosystem::PyPI),
+            allow_overwrite: false,
+            allow_shadowing: false,
+        }
+    }
+
+    #[tokio::test]
+    async fn publish_is_denied_and_writes_nothing_when_a_scan_exceeds_the_threshold() {
+        let storage = Arc::new(MockStorage::new());
+        let policy = PolicyConfig {
+            max_vuln_severity: starmetal_core::policy::VulnSeverity::High,
+            ..PolicyConfig::default()
+        };
+        let service =
+            CachingPackageService::new(storage.clone(), AHashMap::new(), policy).with_scanner(Arc::new(FakeScanner {
+                severity: Some(starmetal_core::policy::VulnSeverity::Critical),
+            }));
+
+        let error = service.publish_package(scan_gate_request()).await.unwrap_err();
+        assert!(
+            matches!(error, StarmetalError::PolicyViolation(_)),
+            "a scan over the threshold must be a policy violation, got: {error}"
+        );
+
+        // The gate runs before any staged write, so nothing was persisted.
+        let name = PackageName::new("sample");
+        assert!(
+            service
+                .get_version_metadata(Ecosystem::PyPI, &name, "1.0.0")
+                .await
+                .is_err(),
+            "a denied publish must leave no metadata behind"
+        );
+    }
+
+    #[tokio::test]
+    async fn publish_succeeds_when_a_scan_finding_is_within_the_threshold() {
+        let storage = Arc::new(MockStorage::new());
+        let policy = PolicyConfig {
+            max_vuln_severity: starmetal_core::policy::VulnSeverity::High,
+            ..PolicyConfig::default()
+        };
+        let service =
+            CachingPackageService::new(storage, AHashMap::new(), policy).with_scanner(Arc::new(FakeScanner {
+                severity: Some(starmetal_core::policy::VulnSeverity::Medium),
+            }));
+
+        let result = service.publish_package(scan_gate_request()).await.unwrap();
+        assert_eq!(result.version, "1.0.0");
+    }
+
+    #[tokio::test]
+    async fn publish_fails_closed_when_the_scanner_is_unavailable() {
+        let storage = Arc::new(MockStorage::new());
+        let service = CachingPackageService::new(storage, AHashMap::new(), PolicyConfig::default())
+            .with_scanner(Arc::new(UnavailableScanner));
+
+        let error = service.publish_package(scan_gate_request()).await.unwrap_err();
+        assert!(
+            matches!(error, StarmetalError::Upstream(_)),
+            "an unavailable scanner must fail the publish closed, got: {error}"
+        );
     }
 
     #[cfg(unix)]
