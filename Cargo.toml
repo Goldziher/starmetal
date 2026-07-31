@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
   "crates/starmetal-adapters",
+  "crates/starmetal-authz",
   "crates/starmetal-cli",
   "crates/starmetal-core",
   "crates/starmetal-forge",

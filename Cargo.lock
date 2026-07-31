@@ -3993,6 +3993,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "starmetal-authz"
+version = "0.3.0"
+dependencies = [
+ "async-trait",
+ "starmetal-core",
+ "tokio",
+ "toml",
+]
+
+[[package]]
 name = "starmetal-cli"
 version = "0.3.0"
 dependencies = [

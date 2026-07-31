@@ -1,0 +1,14 @@
+[package]
+name = "starmetal-authz"
+description = "Local grant-based Authorizer implementation migrating flat token config to the ADR-0022 access-control model"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+starmetal-core.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+toml.workspace = true
