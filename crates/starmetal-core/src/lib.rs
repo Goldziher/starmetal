@@ -12,3 +12,4 @@ pub mod registry;
 pub mod repository;
 pub mod signing;
 pub mod statistics;
+pub mod supply_chain;
