@@ -178,6 +178,45 @@
       },
       "type": "object"
     },
+    "RepositoryConfig": {
+      "description": "A declared repository (ADR-0019): a `(kind, ecosystem)` surface mounted under\nits own URL segment.\n\nWhen [`Config::repositories`] is empty, Starmetal derives one `proxy`\nrepository per enabled `[upstream]` ecosystem (see\n[`Config::resolved_repositories`]), preserving the historical proxy-only\nbehavior. Only `proxy` repositories are supported today; `hosted` and `group`\nare reserved for later stages and rejected by [`Config::validate_mvp`].",
+      "properties": {
+        "ecosystem": {
+          "$ref": "#/$defs/Ecosystem",
+          "description": "The ecosystem this repository serves."
+        },
+        "kind": {
+          "$ref": "#/$defs/RepositoryKind",
+          "description": "The repository kind: `proxy`, `hosted`, or `group`."
+        },
+        "name": {
+          "description": "URL mount segment and identity of the repository (e.g. `pypi`). Must be\nunique across repositories.",
+          "type": "string"
+        }
+      },
+      "required": ["name", "kind", "ecosystem"],
+      "type": "object"
+    },
+    "RepositoryKind": {
+      "description": "The kind of a repository, per ADR-0018/ADR-0019.\n\nThis is a typed distinction rather than a boolean: a repository is exactly one\nof proxy, hosted, or group. The value is config-facing and serializes as a\nlowercase string (`\"proxy\"`, `\"hosted\"`, `\"group\"`).",
+      "oneOf": [
+        {
+          "const": "proxy",
+          "description": "Caches an upstream registry (the pull-through behavior that exists today).",
+          "type": "string"
+        },
+        {
+          "const": "hosted",
+          "description": "Stores artifacts published directly to Starmetal.",
+          "type": "string"
+        },
+        {
+          "const": "group",
+          "description": "Virtual/aggregate repository presenting multiple members behind one URL.",
+          "type": "string"
+        }
+      ]
+    },
     "S3Config": {
       "properties": {
         "bucket": {
@@ -456,6 +495,13 @@
         "tokens": [],
         "upstream": {}
       }
+    },
+    "repositories": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/RepositoryConfig"
+      },
+      "type": "array"
     },
     "server": {
       "$ref": "#/$defs/ServerConfig",

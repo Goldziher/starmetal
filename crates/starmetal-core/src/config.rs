@@ -8,6 +8,7 @@ use crate::error::{Result, StarmetalError};
 use crate::package::{Ecosystem, PackageName};
 use crate::policy::PolicyConfig;
 use crate::publishing::{PublishMode, PublishTokenConfig, TokenScope};
+use crate::repository::RepositoryKind;
 use crate::signing::{SigningAlgorithm, SigningConfig, SigningKeyStatus, SigningMode};
 
 pub const DEFAULT_MAX_UPLOAD_BYTES: u64 = 512 * 1024 * 1024;
@@ -21,6 +22,8 @@ pub struct Config {
     pub storage: StorageConfig,
     #[serde(default = "default_upstreams")]
     pub upstream: HashMap<String, UpstreamConfig>,
+    #[serde(default)]
+    pub repositories: Vec<RepositoryConfig>,
     #[serde(default)]
     pub policies: PolicyConfig,
     #[serde(default)]
@@ -179,6 +182,25 @@ fn default_max_upstream_bytes() -> u64 {
     DEFAULT_MAX_UPSTREAM_BYTES
 }
 
+/// A declared repository (ADR-0019): a `(kind, ecosystem)` surface mounted under
+/// its own URL segment.
+///
+/// When [`Config::repositories`] is empty, Starmetal derives one `proxy`
+/// repository per enabled `[upstream]` ecosystem (see
+/// [`Config::resolved_repositories`]), preserving the historical proxy-only
+/// behavior. Only `proxy` repositories are supported today; `hosted` and `group`
+/// are reserved for later stages and rejected by [`Config::validate_mvp`].
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct RepositoryConfig {
+    /// URL mount segment and identity of the repository (e.g. `pypi`). Must be
+    /// unique across repositories.
+    pub name: String,
+    /// The repository kind: `proxy`, `hosted`, or `group`.
+    pub kind: RepositoryKind,
+    /// The ecosystem this repository serves.
+    pub ecosystem: Ecosystem,
+}
+
 #[derive(Clone, Default, Serialize, Deserialize, JsonSchema)]
 pub struct AuthConfig {
     #[serde(default)]
@@ -318,6 +340,25 @@ impl Config {
             }
         }
 
+        let mut repository_names = std::collections::HashSet::new();
+        for repository in &self.repositories {
+            if repository.name.trim().is_empty() {
+                return Err(StarmetalError::Config("repository name must not be empty".to_string()));
+            }
+            if !repository_names.insert(repository.name.as_str()) {
+                return Err(StarmetalError::Config(format!(
+                    "duplicate repository name: {}",
+                    repository.name
+                )));
+            }
+            if repository.kind != RepositoryKind::Proxy {
+                return Err(StarmetalError::Config(format!(
+                    "repository '{}' uses kind '{}'; only 'proxy' repositories are supported in this MVP",
+                    repository.name, repository.kind
+                )));
+            }
+        }
+
         validate_encryption_config(&self.encryption)?;
         validate_signing_config(&self.signing)?;
 
@@ -367,6 +408,33 @@ impl Config {
 
     pub fn upstream_enabled(&self, name: &str) -> bool {
         self.upstream.get(name).map(|config| config.enabled).unwrap_or(true)
+    }
+
+    /// The effective set of repositories to mount (ADR-0019).
+    ///
+    /// If [`Config::repositories`] is non-empty, it is returned verbatim
+    /// (sorted by name for deterministic mounting). Otherwise one `proxy`
+    /// repository is derived per **enabled** `[upstream]` ecosystem, mounted
+    /// under the ecosystem's own name — reproducing the historical proxy-only
+    /// behavior. Upstream keys that do not name a known ecosystem are skipped.
+    pub fn resolved_repositories(&self) -> Vec<RepositoryConfig> {
+        let mut repositories = if self.repositories.is_empty() {
+            self.upstream
+                .iter()
+                .filter(|(_, upstream)| upstream.enabled)
+                .filter_map(|(name, _)| {
+                    name.parse::<Ecosystem>().ok().map(|ecosystem| RepositoryConfig {
+                        name: name.clone(),
+                        kind: RepositoryKind::Proxy,
+                        ecosystem,
+                    })
+                })
+                .collect()
+        } else {
+            self.repositories.clone()
+        };
+        repositories.sort_by(|a, b| a.name.cmp(&b.name));
+        repositories
     }
 
     pub fn redacted_value(&self) -> toml::Value {
@@ -434,6 +502,7 @@ impl Default for Config {
             server: ServerConfig::default(),
             storage: StorageConfig::default(),
             upstream: default_upstreams(),
+            repositories: Vec::new(),
             policies: PolicyConfig::default(),
             auth: AuthConfig::default(),
             admin: AdminConfig::default(),
@@ -1208,6 +1277,87 @@ tokens = ["secret-token"]
 
         assert!(config.authorize_bearer_token("secret-token"));
         assert!(!config.authorize_bearer_token("secret"));
+    }
+
+    #[test]
+    fn resolved_repositories_derives_one_proxy_per_enabled_upstream() {
+        let config = Config::default();
+        let repositories = config.resolved_repositories();
+        assert_eq!(repositories.len(), 8, "one proxy per default upstream");
+        assert!(
+            repositories.iter().all(|repo| repo.kind == RepositoryKind::Proxy),
+            "derived repositories are all proxies"
+        );
+        // Deterministic ordering by name.
+        let names: Vec<&str> = repositories.iter().map(|repo| repo.name.as_str()).collect();
+        assert_eq!(
+            names,
+            ["cargo", "hex", "maven", "npm", "nuget", "pub", "pypi", "rubygems"]
+        );
+        let pypi = repositories.iter().find(|repo| repo.name == "pypi").unwrap();
+        assert_eq!(pypi.ecosystem, Ecosystem::PyPI);
+    }
+
+    #[test]
+    fn resolved_repositories_skips_disabled_upstreams() {
+        let mut config = Config::default();
+        config.upstream.get_mut("npm").unwrap().enabled = false;
+        let repositories = config.resolved_repositories();
+        assert_eq!(repositories.len(), 7);
+        assert!(repositories.iter().all(|repo| repo.name != "npm"));
+    }
+
+    #[test]
+    fn explicit_repositories_override_derivation() {
+        let config: Config = toml::from_str(
+            r#"
+[[repositories]]
+name = "python"
+kind = "proxy"
+ecosystem = "pypi"
+"#,
+        )
+        .unwrap();
+        let repositories = config.resolved_repositories();
+        assert_eq!(repositories.len(), 1);
+        assert_eq!(repositories[0].name, "python");
+        assert_eq!(repositories[0].ecosystem, Ecosystem::PyPI);
+        assert_eq!(repositories[0].kind, RepositoryKind::Proxy);
+    }
+
+    #[test]
+    fn startup_validation_rejects_non_proxy_repositories() {
+        let config: Config = toml::from_str(
+            r#"
+[[repositories]]
+name = "hosted-pypi"
+kind = "hosted"
+ecosystem = "pypi"
+"#,
+        )
+        .unwrap();
+        let err = config.validate_mvp().unwrap_err().to_string();
+        assert!(err.contains("only 'proxy' repositories are supported"), "got: {err}");
+    }
+
+    #[test]
+    fn startup_validation_rejects_duplicate_repository_names() {
+        let config: Config = toml::from_str(
+            r#"
+[[repositories]]
+name = "dup"
+kind = "proxy"
+ecosystem = "pypi"
+
+[[repositories]]
+name = "dup"
+kind = "proxy"
+ecosystem = "npm"
+"#,
+        )
+        .unwrap();
+        let err = config.validate_mvp().unwrap_err().to_string();
+        assert!(err.contains("duplicate repository name: dup"), "got: {err}");
     }
 
     #[test]

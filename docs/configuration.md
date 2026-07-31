@@ -219,6 +219,31 @@ allow_private_network = true
 max_response_bytes = 536870912
 ```
 
+## Repositories
+
+Repositories model the `(kind, ecosystem)` composition surface (ADR-0019). When
+`repositories` is omitted or empty, Starmetal derives one `proxy` repository per
+enabled `[upstream]` ecosystem, mounted under the ecosystem's own name — the
+historical proxy-only behavior. Declaring repositories explicitly overrides that
+derivation. Only `proxy` repositories are supported today; `hosted` and `group`
+kinds are reserved for later stages and rejected at startup.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `repositories` | Derived from `upstream` | List of declared repositories. Empty derives one proxy per enabled upstream. |
+| `repositories.*.name` | — | URL mount segment and unique identity of the repository (e.g. `pypi`). |
+| `repositories.*.kind` | — | Repository kind: `proxy` (only supported kind today), `hosted`, or `group`. |
+| `repositories.*.ecosystem` | — | Ecosystem served: `pypi`, `npm`, `cargo`, `hex`, `maven`, `rubygems`, `nuget`, or `pub`. |
+
+Example (mount a PyPI proxy under `/python`):
+
+```toml
+[[repositories]]
+name = "python"
+kind = "proxy"
+ecosystem = "pypi"
+```
+
 ## Policies
 
 | Option | Default | Description |
