@@ -266,15 +266,25 @@ impl Authorizer for LocalAuthorizer {
     /// # }
     /// ```
     async fn authorize(&self, principal: &Principal, action: Action, resource: &Resource) -> Result<Decision> {
+        Ok(self.authorize_sync(principal, action, resource))
+    }
+}
+
+impl LocalAuthorizer {
+    /// Synchronous grant evaluation, the substance behind the async [`Authorizer::authorize`] port.
+    ///
+    /// Local grant checks touch no I/O, so callers already inside a synchronous seam (e.g. a
+    /// protocol adapter's publish authorization) can decide without an `.await`. The async port
+    /// method simply wraps this in `Ok`; both are deny-by-default.
+    pub fn authorize_sync(&self, principal: &Principal, action: Action, resource: &Resource) -> Decision {
         let Some(grants) = self.grants.get(principal.id()) else {
-            return Ok(Decision::deny());
+            return Decision::deny();
         };
 
-        let decision = match action {
+        match action {
             Action::Admin => authorize_admin(grants, resource),
             _ => authorize_content(principal, grants, action, resource),
-        };
-        Ok(decision)
+        }
     }
 }
 
