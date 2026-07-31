@@ -64,6 +64,25 @@
       "required": ["bucket"],
       "type": "object"
     },
+    "MetadataConfig": {
+      "description": "Optional Postgres-backed content model (ADR-0020). When enabled, publishes dual-write the\ncomponent -> asset -> blob content model, giving cross-ecosystem blob dedup, content-address\nintegrity, and reference-counted garbage collection alongside the flat object store.",
+      "properties": {
+        "apply_schema": {
+          "default": true,
+          "description": "Apply the content-model schema on startup — convenient for turnkey deployments. Disable when\nmigrations are managed out of band.",
+          "type": "boolean"
+        },
+        "database_url": {
+          "description": "Postgres connection URL (`postgresql://user:password@host:port/database`). Required when\n`enabled` is true; redacted from the admin API's config view.",
+          "type": ["string", "null"]
+        },
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
     "PolicyConfig": {
       "properties": {
         "allowed_licenses": {
@@ -474,6 +493,14 @@
       "default": {
         "enabled": false,
         "key_file": null
+      }
+    },
+    "metadata": {
+      "$ref": "#/$defs/MetadataConfig",
+      "default": {
+        "apply_schema": true,
+        "database_url": null,
+        "enabled": false
       }
     },
     "policies": {

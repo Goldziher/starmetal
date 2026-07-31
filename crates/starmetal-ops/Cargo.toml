@@ -21,6 +21,7 @@ backend-s3 = ["starmetal-storage/backend-s3"]
 backend-gcs = ["starmetal-storage/backend-gcs"]
 pq = ["starmetal-core/pq"]
 signing-x509 = ["starmetal-core/signing-x509"]
+metadata = ["dep:starmetal-metadata"]
 update = [
   "dep:starmetal-update-core",
   "dep:starmetal-updater",
@@ -38,6 +39,7 @@ serde.workspace = true
 starmetal-adapters = { workspace = true, default-features = false }
 starmetal-core.workspace = true
 starmetal-managers = { workspace = true, optional = true }
+starmetal-metadata = { workspace = true, optional = true }
 starmetal-server = { workspace = true, default-features = false }
 starmetal-service.workspace = true
 starmetal-storage = { workspace = true, default-features = false }

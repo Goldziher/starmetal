@@ -36,6 +36,8 @@ pub struct Config {
     pub encryption: EncryptionConfig,
     #[serde(default)]
     pub signing: SigningConfig,
+    #[serde(default)]
+    pub metadata: MetadataConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -240,6 +242,32 @@ pub struct EncryptionConfig {
     #[serde(default)]
     pub enabled: bool,
     pub key_file: Option<PathBuf>,
+}
+
+/// Optional Postgres-backed content model (ADR-0020). When enabled, publishes dual-write the
+/// component -> asset -> blob content model, giving cross-ecosystem blob dedup, content-address
+/// integrity, and reference-counted garbage collection alongside the flat object store.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MetadataConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    /// Postgres connection URL (`postgresql://user:password@host:port/database`). Required when
+    /// `enabled` is true; redacted from the admin API's config view.
+    pub database_url: Option<String>,
+    /// Apply the content-model schema on startup — convenient for turnkey deployments. Disable when
+    /// migrations are managed out of band.
+    #[serde(default = "default_true")]
+    pub apply_schema: bool,
+}
+
+impl Default for MetadataConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            database_url: None,
+            apply_schema: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -464,6 +492,11 @@ impl Config {
                 }
             }
         }
+        if let Some(metadata) = value.get_mut("metadata").and_then(toml::Value::as_table_mut)
+            && let Some(database_url) = metadata.get_mut("database_url")
+        {
+            *database_url = toml::Value::String("<redacted>".to_string());
+        }
         redact_signing_config(&mut value);
         value
     }
@@ -509,6 +542,7 @@ impl Default for Config {
             publishing: PublishingConfig::default(),
             encryption: EncryptionConfig::default(),
             signing: SigningConfig::default(),
+            metadata: MetadataConfig::default(),
         }
     }
 }
@@ -1204,6 +1238,35 @@ certificate_file = "/etc/starmetal/trust/internal-ca.pem"
         assert!(!output.contains("/run/secrets"));
         assert!(!output.contains("STARMETAL_SIGNING_KEY_PASSWORD"));
         assert!(!output.contains("/etc/starmetal/trust"));
+        assert!(output.contains("<redacted>"));
+    }
+
+    #[test]
+    fn metadata_defaults_to_disabled_with_schema_provisioning() {
+        let metadata = MetadataConfig::default();
+        assert!(!metadata.enabled);
+        assert!(metadata.database_url.is_none());
+        assert!(
+            metadata.apply_schema,
+            "schema provisioning is on by default for turnkey deploys"
+        );
+    }
+
+    #[test]
+    fn redacted_value_hides_metadata_database_url() {
+        let config: Config = toml::from_str(
+            r#"
+[metadata]
+enabled = true
+database_url = "postgresql://starmetal:s3cr3t@db.internal:5432/starmetal"
+"#,
+        )
+        .unwrap();
+
+        assert!(config.metadata.enabled);
+        let output = toml::to_string_pretty(&config.redacted_value()).unwrap();
+        assert!(!output.contains("s3cr3t"));
+        assert!(!output.contains("db.internal"));
         assert!(output.contains("<redacted>"));
     }
 

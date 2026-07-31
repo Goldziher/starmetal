@@ -4139,6 +4139,7 @@ dependencies = [
  "starmetal-adapters",
  "starmetal-core",
  "starmetal-managers",
+ "starmetal-metadata",
  "starmetal-server",
  "starmetal-service",
  "starmetal-storage",

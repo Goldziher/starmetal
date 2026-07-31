@@ -81,6 +81,31 @@ pub struct StarmetalRuntime {
     pub upstreams: UpstreamClients,
 }
 
+/// Attach a Postgres-backed content store (ADR-0020) to the service when `metadata.enabled`, so
+/// publishes dual-write the content model against the same object store used for flat artifacts.
+/// A disabled or absent config leaves the service untouched (the `None` content-store path).
+#[cfg(feature = "metadata")]
+async fn attach_content_store(
+    service: CachingPackageService,
+    config: &Config,
+    storage: Arc<dyn StoragePort>,
+) -> Result<CachingPackageService> {
+    use starmetal_metadata::{PostgresContentStore, create_pool};
+
+    if !config.metadata.enabled {
+        return Ok(service);
+    }
+    let database_url = config.metadata.database_url.as_deref().ok_or_else(|| {
+        StarmetalError::Config("metadata.enabled requires metadata.database_url to be set".to_string())
+    })?;
+    let pool = create_pool(database_url).await?;
+    let content_store = PostgresContentStore::new(pool, storage);
+    if config.metadata.apply_schema {
+        content_store.apply_schema().await?;
+    }
+    Ok(service.with_content_store(Arc::new(content_store)))
+}
+
 impl StarmetalRuntime {
     pub async fn new(options: ConfigLoadOptions) -> Result<Self> {
         let config = load_config(options)?;
@@ -111,12 +136,11 @@ impl StarmetalRuntime {
         let pub_upstream = register_pub_upstream(&config, &mut clients);
 
         let signing = SigningService::from_config(&config.signing)?;
-        let service = Arc::new(CachingPackageService::new_with_signing(
-            storage.clone(),
-            clients,
-            config.policies.clone(),
-            signing,
-        ));
+        let service =
+            CachingPackageService::new_with_signing(storage.clone(), clients, config.policies.clone(), signing);
+        #[cfg(feature = "metadata")]
+        let service = attach_content_store(service, &config, storage.clone()).await?;
+        let service = Arc::new(service);
         let upstreams = UpstreamClients {
             #[cfg(feature = "pypi")]
             pypi_upstream,

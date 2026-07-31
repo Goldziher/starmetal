@@ -318,6 +318,27 @@ packages = []
 status = "verify-only"
 ```
 
+## Content Model (Metadata Store)
+
+Disabled by default. When enabled, Starmetal dual-writes an ADR-0020 content model
+(component → asset → blob) to Postgres on every publish, alongside the flat object store. Blobs are
+addressed by their blake3 digest, so identical bytes published across ecosystems share a single
+stored blob (dedup), integrity is verified against the digest-key, and unreferenced blobs become
+reclaimable by the reference-counted garbage collector. Requires the `metadata` build feature
+(included in `full`). With the store absent, the publish path is unchanged.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `metadata.enabled` | `false` | Enables the Postgres-backed content model on the publish path. |
+| `metadata.database_url` | `null` | Postgres URL (`postgresql://user:password@host:port/database`). Required when enabled; redacted from the admin config view. |
+| `metadata.apply_schema` | `true` | Applies the content-model schema on startup. Disable when migrations are managed out of band. |
+
+```toml
+[metadata]
+enabled = true
+database_url = "postgresql://starmetal:password@localhost:5432/starmetal"
+```
+
 ## PQ Readiness
 
 The `pq` feature flag reserves Starmetal-level ML-DSA/ML-KEM configuration and schema surface for
