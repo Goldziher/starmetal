@@ -99,7 +99,7 @@ pub async fn upsert_component(
             r#"INSERT INTO components (ecosystem, namespace, name, version, attributes)
 VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (ecosystem, namespace, name, version)
-DO UPDATE SET attributes = EXCLUDED.attributes
+DO UPDATE SET attributes = EXCLUDED.attributes, updated_at = now()
 RETURNING id"#,
             &[&ecosystem, &namespace, &name, &version, &attributes],
         )
@@ -134,6 +134,71 @@ WHERE ecosystem = $1 AND namespace = $2 AND name = $3 AND version = $4"#,
         )
         .await?;
     Ok(row.as_ref().map(GetComponentIdRow::from_row))
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ListComponentVersionsRow {
+    pub id: i64,
+    pub version: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub last_downloaded_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub download_count: i64,
+}
+
+impl ListComponentVersionsRow {
+    pub fn from_row(row: &tokio_postgres::Row) -> Self {
+        Self {
+            id: row.get("id"),
+            version: row.get("version"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+            last_downloaded_at: row.get("last_downloaded_at"),
+            download_count: row.get("download_count"),
+        }
+    }
+}
+
+pub async fn list_component_versions(
+    client: &(impl tokio_postgres::GenericClient + Sync),
+    ecosystem: &str,
+    namespace: &str,
+    name: &str,
+) -> Result<Vec<ListComponentVersionsRow>, tokio_postgres::Error> {
+    let rows = client
+        .query(
+            r#"SELECT id, version, created_at, updated_at, last_downloaded_at, download_count
+FROM components
+WHERE ecosystem = $1 AND namespace = $2 AND name = $3"#,
+            &[&ecosystem, &namespace, &name],
+        )
+        .await?;
+    Ok(rows.iter().map(ListComponentVersionsRow::from_row).collect())
+}
+
+pub async fn delete_component(
+    client: &(impl tokio_postgres::GenericClient + Sync),
+    id: i64,
+) -> Result<(), tokio_postgres::Error> {
+    client
+        .execute(r#"DELETE FROM components WHERE id = $1"#, &[&id])
+        .await?;
+    Ok(())
+}
+
+pub async fn record_download(
+    client: &(impl tokio_postgres::GenericClient + Sync),
+    id: i64,
+) -> Result<(), tokio_postgres::Error> {
+    client
+        .execute(
+            r#"UPDATE components
+SET last_downloaded_at = now(), download_count = download_count + 1
+WHERE id = $1"#,
+            &[&id],
+        )
+        .await?;
+    Ok(())
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -339,13 +404,14 @@ impl ListExpiredSoftDeletedRow {
 
 pub async fn list_expired_soft_deleted(
     client: &(impl tokio_postgres::GenericClient + Sync),
+    grace_expires_at: &chrono::DateTime<chrono::Utc>,
 ) -> Result<Vec<ListExpiredSoftDeletedRow>, tokio_postgres::Error> {
     let rows = client
         .query(
             r#"SELECT digest
 FROM blobs
-WHERE soft_deleted_at IS NOT NULL AND grace_expires_at < now()"#,
-            &[],
+WHERE soft_deleted_at IS NOT NULL AND grace_expires_at < $1"#,
+            &[&grace_expires_at],
         )
         .await?;
     Ok(rows.iter().map(ListExpiredSoftDeletedRow::from_row).collect())

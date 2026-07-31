@@ -4106,6 +4106,7 @@ dependencies = [
  "bb8-postgres",
  "bytes",
  "chrono",
+ "regex",
  "serde",
  "serde_json",
  "starmetal-core",

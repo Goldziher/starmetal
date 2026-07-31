@@ -20,7 +20,7 @@ use crate::pool::DbPool;
 /// The content-model schema, applied verbatim to provision a database.
 pub const SCHEMA_SQL: &str = include_str!("../sql/schema.sql");
 
-type Conn<'a> = PooledConnection<'a, PostgresConnectionManager<NoTls>>;
+pub(crate) type Conn<'a> = PooledConnection<'a, PostgresConnectionManager<NoTls>>;
 
 /// A [`ContentStore`] backed by Postgres (metadata + reference table) over a
 /// [`StoragePort`] (blob bytes).
@@ -50,7 +50,7 @@ impl PostgresContentStore {
         Ok(())
     }
 
-    async fn conn(&self) -> Result<Conn<'_>> {
+    pub(crate) async fn conn(&self) -> Result<Conn<'_>> {
         self.pool
             .get()
             .await
@@ -209,7 +209,13 @@ impl ContentStore for PostgresContentStore {
 
     async fn compact(&self) -> Result<Vec<BlobDigest>> {
         let conn = self.conn().await?;
-        let expired = queries::list_expired_soft_deleted(&*conn).await.map_err(db_error)?;
+        // Compare against the caller's clock (the same clock `soft_delete` stamped
+        // `grace_expires_at` with) so the grace decision never straddles a client/server
+        // clock skew — otherwise a zero-grace blob can be missed when the DB clock lags.
+        let now = chrono::Utc::now();
+        let expired = queries::list_expired_soft_deleted(&*conn, &now)
+            .await
+            .map_err(db_error)?;
         let mut reclaimed = Vec::with_capacity(expired.len());
         for row in expired {
             // Delete bytes before the row so a storage failure leaves the row for
@@ -238,6 +244,6 @@ fn namespace(namespace: &Option<String>) -> &str {
     namespace.as_deref().unwrap_or("")
 }
 
-fn db_error(error: tokio_postgres::Error) -> StarmetalError {
+pub(crate) fn db_error(error: tokio_postgres::Error) -> StarmetalError {
     StarmetalError::Storage(format!("database error: {error}"))
 }

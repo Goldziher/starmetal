@@ -7,9 +7,13 @@
 //! a [`starmetal_core::ports::StoragePort`] to implement
 //! [`starmetal_core::content::ContentStore`].
 
+pub mod gc;
 pub mod generated;
 mod pool;
+pub mod retention;
 mod store;
 
+pub use gc::{GcConfig, GcReport, run_gc_sweep};
 pub use pool::{DbPool, create_pool};
+pub use retention::RetentionOutcome;
 pub use store::{PostgresContentStore, SCHEMA_SQL};

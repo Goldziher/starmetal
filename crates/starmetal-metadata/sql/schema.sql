@@ -24,13 +24,21 @@ CREATE TABLE blobs (
 -- The coordinate level: an ecosystem-scoped package version. `namespace` stores
 -- the empty string (never NULL) when the ecosystem has no namespace concept, so
 -- the uniqueness constraint and ON CONFLICT upsert are straightforward.
+--
+-- Lifecycle and usage columns (`created_at`, `updated_at`, `last_downloaded_at`,
+-- `download_count`) back the retention engine (Stage 2c): each `RetentionRule`
+-- selects versions to delete by inspecting these columns.
 CREATE TABLE components (
-    id         BIGSERIAL PRIMARY KEY,
-    ecosystem  TEXT NOT NULL,
-    namespace  TEXT NOT NULL DEFAULT '',
-    name       TEXT NOT NULL,
-    version    TEXT NOT NULL,
-    attributes JSONB NOT NULL DEFAULT '{}',
+    id                 BIGSERIAL PRIMARY KEY,
+    ecosystem          TEXT NOT NULL,
+    namespace          TEXT NOT NULL DEFAULT '',
+    name               TEXT NOT NULL,
+    version            TEXT NOT NULL,
+    attributes         JSONB NOT NULL DEFAULT '{}',
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_downloaded_at TIMESTAMPTZ,
+    download_count     BIGINT NOT NULL DEFAULT 0,
     UNIQUE (ecosystem, namespace, name, version)
 );
 

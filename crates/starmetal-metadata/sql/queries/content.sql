@@ -21,7 +21,7 @@ WHERE digest = $1;
 INSERT INTO components (ecosystem, namespace, name, version, attributes)
 VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (ecosystem, namespace, name, version)
-DO UPDATE SET attributes = EXCLUDED.attributes
+DO UPDATE SET attributes = EXCLUDED.attributes, updated_at = now()
 RETURNING id;
 
 -- @name GetComponentId
@@ -29,6 +29,25 @@ RETURNING id;
 SELECT id
 FROM components
 WHERE ecosystem = $1 AND namespace = $2 AND name = $3 AND version = $4;
+
+-- @name ListComponentVersions
+-- @returns :many
+-- All versions of a (ecosystem, namespace, name) component, for the retention engine.
+SELECT id, version, created_at, updated_at, last_downloaded_at, download_count
+FROM components
+WHERE ecosystem = $1 AND namespace = $2 AND name = $3;
+
+-- @name DeleteComponent
+-- @returns :exec
+-- Cascades to assets + asset_blobs (ON DELETE CASCADE), dropping references so
+-- freed blobs become garbage-collection candidates.
+DELETE FROM components WHERE id = $1;
+
+-- @name RecordDownload
+-- @returns :exec
+UPDATE components
+SET last_downloaded_at = now(), download_count = download_count + 1
+WHERE id = $1;
 
 -- @name UpsertAsset
 -- @returns :one
@@ -87,9 +106,13 @@ WHERE digest = $1;
 
 -- @name ListExpiredSoftDeleted
 -- @returns :many
+-- $1 is the caller's "as of" instant. Comparing grace_expires_at (also set from
+-- the caller's clock in SoftDeleteBlob) against a caller-supplied timestamp keeps
+-- the whole grace decision on one authoritative clock, avoiding a client/server
+-- clock-skew race when grace is zero.
 SELECT digest
 FROM blobs
-WHERE soft_deleted_at IS NOT NULL AND grace_expires_at < now();
+WHERE soft_deleted_at IS NOT NULL AND grace_expires_at < $1;
 
 -- @name DeleteBlob
 -- @returns :exec

@@ -61,6 +61,7 @@ pem-rfc7468 = "1"
 pkcs8 = { version = "0.11", features = ["pem"] }
 prost = "0.14"
 rand_core = "0.10"
+regex = "1"
 
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "stream"] }
 
