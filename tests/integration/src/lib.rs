@@ -47,6 +47,14 @@ impl TestServer {
         Self::start_with_all_enabled_and_config(true, |_| {}).await
     }
 
+    /// Start a starmetal server applying `configure` to the default config.
+    ///
+    /// All upstream clients are registered and memory storage is used; the
+    /// closure customizes the config (e.g. `repositories`) before `build_app`.
+    pub async fn start_with_config(configure: impl FnOnce(&mut Config)) -> Self {
+        Self::start_with_all_enabled_and_config(false, configure).await
+    }
+
     /// Start a starmetal server with the admin API enabled.
     pub async fn start_with_admin() -> Self {
         Self::start_with_all_enabled_and_config(false, |config| {
