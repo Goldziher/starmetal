@@ -4170,6 +4170,7 @@ dependencies = [
  "axum",
  "serde",
  "starmetal-adapters",
+ "starmetal-authz",
  "starmetal-core",
  "starmetal-storage",
  "tokio",

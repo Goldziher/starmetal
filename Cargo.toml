@@ -78,6 +78,7 @@ serde_yaml = "0.9.34"
 sha1 = "0.11"
 sha2 = "0.11"
 starmetal-adapters = { path = "crates/starmetal-adapters", default-features = false }
+starmetal-authz = { path = "crates/starmetal-authz" }
 
 starmetal-core = { path = "crates/starmetal-core" }
 starmetal-forge = { path = "crates/starmetal-forge", default-features = false }

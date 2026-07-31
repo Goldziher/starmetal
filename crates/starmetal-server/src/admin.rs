@@ -7,6 +7,8 @@ use axum::routing::get;
 use serde::Serialize;
 
 use crate::state::AppState;
+use starmetal_authz::default_namespace;
+use starmetal_core::authz::{Action, Authorizer, Resource};
 use starmetal_core::package::{Ecosystem, PackageName};
 
 #[derive(Debug, Serialize)]
@@ -59,7 +61,7 @@ pub fn router() -> Router<AppState> {
 }
 
 async fn status(State(state): State<AppState>, headers: HeaderMap) -> Result<impl IntoResponse, (StatusCode, String)> {
-    authorize_admin(&state, &headers)?;
+    authorize_admin(&state, &headers).await?;
     Ok(Json(AdminStatus {
         version: env!("CARGO_PKG_VERSION"),
         storage_backend: state.config.storage.backend.clone(),
@@ -71,7 +73,7 @@ async fn status(State(state): State<AppState>, headers: HeaderMap) -> Result<imp
 }
 
 async fn config(State(state): State<AppState>, headers: HeaderMap) -> Result<impl IntoResponse, (StatusCode, String)> {
-    authorize_admin(&state, &headers)?;
+    authorize_admin(&state, &headers).await?;
     Ok(Json(state.config.redacted_value()))
 }
 
@@ -79,7 +81,7 @@ async fn registries(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    authorize_admin(&state, &headers)?;
+    authorize_admin(&state, &headers).await?;
     Ok(Json(registry_statuses(&state)))
 }
 
@@ -88,7 +90,7 @@ async fn packages(
     headers: HeaderMap,
     Query(query): Query<PackageQuery>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    authorize_admin(&state, &headers)?;
+    authorize_admin(&state, &headers).await?;
     let packages = state
         .package_service
         .list_packages(query.ecosystem)
@@ -107,7 +109,7 @@ async fn versions(
     headers: HeaderMap,
     Query(query): Query<VersionsQuery>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    authorize_admin(&state, &headers)?;
+    authorize_admin(&state, &headers).await?;
     let name = PackageName::new(query.name);
     let versions = state
         .package_service
@@ -122,7 +124,7 @@ async fn metadata(
     headers: HeaderMap,
     Query(query): Query<MetadataQuery>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    authorize_admin(&state, &headers)?;
+    authorize_admin(&state, &headers).await?;
     let name = PackageName::new(query.name);
     let metadata = state
         .package_service
@@ -133,11 +135,11 @@ async fn metadata(
 }
 
 async fn metrics(State(state): State<AppState>, headers: HeaderMap) -> Result<impl IntoResponse, (StatusCode, String)> {
-    authorize_admin(&state, &headers)?;
+    authorize_admin(&state, &headers).await?;
     Ok(Json(state.statistics_service.statistics()))
 }
 
-fn authorize_admin(state: &AppState, headers: &HeaderMap) -> Result<(), (StatusCode, String)> {
+async fn authorize_admin(state: &AppState, headers: &HeaderMap) -> Result<(), (StatusCode, String)> {
     if !state.config.admin.enabled {
         return Err((StatusCode::NOT_FOUND, "admin API is not enabled".to_string()));
     }
@@ -147,10 +149,24 @@ fn authorize_admin(state: &AppState, headers: &HeaderMap) -> Result<(), (StatusC
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.strip_prefix("Bearer "));
 
+    // Authenticate the bearer token to a principal, then require the config-plane `Admin` action
+    // via the injected Authorizer (ADR-0022). The current config is namespace-less, so the request
+    // targets the whole default namespace. Admin-migrated tokens carry a `RepositoryAdmin` grant;
+    // flat and publish tokens do not, so they are denied here exactly as before.
     if let Some(token) = token
-        && state.config.authorize_admin_token(token)
+        && let Some(principal) = state.authorizer.authenticate(token)
     {
-        return Ok(());
+        let resource = Resource {
+            namespace: default_namespace(),
+            ecosystem: None,
+            repository: None,
+            coordinate: None,
+        };
+        if let Ok(decision) = state.authorizer.authorize(&principal, Action::Admin, &resource).await
+            && decision.is_allowed()
+        {
+            return Ok(());
+        }
     }
 
     Err((

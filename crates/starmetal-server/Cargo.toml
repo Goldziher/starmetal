@@ -23,6 +23,7 @@ pub = ["starmetal-adapters/pub"]
 axum.workspace = true
 serde.workspace = true
 starmetal-adapters = { workspace = true, default-features = false }
+starmetal-authz.workspace = true
 starmetal-core.workspace = true
 starmetal-storage = { workspace = true, default-features = false }
 tokio.workspace = true

@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use starmetal_authz::LocalAuthorizer;
 use starmetal_core::config::Config;
 use starmetal_core::ports::{PackageService, PublishingService, StatisticsService};
 
@@ -10,6 +11,12 @@ pub struct AppState {
     pub package_service: Arc<dyn PackageService>,
     pub publishing_service: Arc<dyn PublishingService>,
     pub statistics_service: Arc<dyn StatisticsService>,
+    /// Access-control seam (ADR-0022). Migrated from the config's flat token sections; it both
+    /// authenticates bearer tokens to principals and implements the core `Authorizer` port. Stored
+    /// concretely because authentication is not part of the port and there is one local
+    /// implementation today; consulted at the admin API now and the publish/read paths as later
+    /// stages consume it.
+    pub authorizer: Arc<LocalAuthorizer>,
     pub upstreams: UpstreamClients,
 }
 
@@ -42,11 +49,14 @@ impl AppState {
         statistics_service: Arc<dyn StatisticsService>,
         upstreams: UpstreamClients,
     ) -> Self {
+        // Migrate the flat token config into the grant model once, at assembly time.
+        let authorizer = Arc::new(LocalAuthorizer::from_config(&config));
         Self {
             config: Arc::new(config),
             package_service,
             publishing_service,
             statistics_service,
+            authorizer,
             upstreams,
         }
     }
