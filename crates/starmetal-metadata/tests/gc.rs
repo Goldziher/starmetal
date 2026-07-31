@@ -71,9 +71,10 @@ fn asset_ref(ecosystem: Ecosystem, name: &str, version: &str, path: &str) -> Ass
     }
 }
 
-async fn insert_blob(fx: &Fixture, digest: &str, bytes: &[u8]) -> BlobDigest {
+async fn insert_blob(fx: &Fixture, bytes: &[u8]) -> BlobDigest {
+    let digest = BlobDigest::new(starmetal_core::integrity::blake3_hex(bytes));
     let blob = Blob {
-        digest: BlobDigest::new(digest),
+        digest: digest.clone(),
         size: bytes.len() as u64,
         upstream_hashes: Default::default(),
         content_type: None,
@@ -82,7 +83,7 @@ async fn insert_blob(fx: &Fixture, digest: &str, bytes: &[u8]) -> BlobDigest {
         .get_or_insert_blob(&blob, Bytes::copy_from_slice(bytes))
         .await
         .unwrap();
-    blob.digest
+    digest
 }
 
 /// Register a component + asset and link it to `digest`, so the blob has a live reference.
@@ -106,7 +107,7 @@ async fn reference_blob(fx: &Fixture, ecosystem: Ecosystem, name: &str, version:
 #[ignore = "requires docker"]
 async fn zero_grace_reclaims_an_unreferenced_blob_in_one_sweep() {
     let fx = setup().await;
-    let digest = insert_blob(&fx, &"a".repeat(64), b"unreferenced").await;
+    let digest = insert_blob(&fx, b"unreferenced").await;
 
     let config = GcConfig { grace: Duration::ZERO };
     let report = run_gc_sweep(&fx.store, &config).await.unwrap();
@@ -129,7 +130,7 @@ async fn zero_grace_reclaims_an_unreferenced_blob_in_one_sweep() {
 #[ignore = "requires docker"]
 async fn a_referenced_blob_is_never_touched() {
     let fx = setup().await;
-    let digest = insert_blob(&fx, &"b".repeat(64), b"referenced").await;
+    let digest = insert_blob(&fx, b"referenced").await;
     reference_blob(&fx, Ecosystem::PyPI, "pkg", "1.0.0", &digest).await;
 
     let config = GcConfig { grace: Duration::ZERO };
@@ -153,7 +154,7 @@ async fn a_referenced_blob_is_never_touched() {
 #[ignore = "requires docker"]
 async fn long_grace_soft_deletes_first_then_reclaims_nothing_on_either_sweep() {
     let fx = setup().await;
-    let digest = insert_blob(&fx, &"c".repeat(64), b"long-grace").await;
+    let digest = insert_blob(&fx, b"long-grace").await;
 
     let long_grace = GcConfig {
         grace: Duration::from_secs(3600),

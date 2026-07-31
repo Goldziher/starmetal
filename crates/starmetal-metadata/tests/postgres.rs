@@ -100,22 +100,33 @@ async fn link(fx: &Fixture, ecosystem: Ecosystem, name: &str, version: &str, pat
 #[ignore = "requires docker"]
 async fn get_or_insert_blob_dedups_and_never_overwrites_bytes() {
     let fx = setup().await;
-    let digest = "a".repeat(64);
+    let bytes = Bytes::from_static(b"first");
+    let digest = starmetal_core::integrity::blake3_hex(&bytes);
 
     fx.store
-        .get_or_insert_blob(&blob(&digest, 5), Bytes::from_static(b"first"))
+        .get_or_insert_blob(&blob(&digest, bytes.len() as u64), bytes.clone())
         .await
         .unwrap();
-    // Same digest, different bytes: must be a no-op on storage.
+
+    // Tamper with storage directly, bypassing the content store, to make a second dedup'd
+    // call observable: since the digest already has a row, `get_or_insert_blob` must skip the
+    // storage write entirely and leave the tampered bytes in place.
+    fx.storage.put(&digest, Bytes::from_static(b"TAMPERED")).await.unwrap();
+
+    // Same digest and matching bytes on a second call: the row already exists, so this dedups.
     let returned = fx
         .store
-        .get_or_insert_blob(&blob(&digest, 5), Bytes::from_static(b"SECOND"))
+        .get_or_insert_blob(&blob(&digest, bytes.len() as u64), bytes.clone())
         .await
         .unwrap();
 
     assert_eq!(returned.digest.as_str(), digest);
     let stored = fx.storage.get(&digest).await.unwrap().expect("bytes present");
-    assert_eq!(&stored[..], b"first", "dedup must not overwrite the original bytes");
+    assert_eq!(
+        &stored[..],
+        b"TAMPERED",
+        "dedup must not overwrite storage on a second insert of the same digest"
+    );
 
     let unreferenced = fx.store.list_unreferenced_blobs().await.unwrap();
     assert_eq!(unreferenced.len(), 1, "exactly one blob row exists");
@@ -126,9 +137,10 @@ async fn get_or_insert_blob_dedups_and_never_overwrites_bytes() {
 #[ignore = "requires docker"]
 async fn identical_bytes_across_ecosystems_share_one_blob() {
     let fx = setup().await;
-    let digest = BlobDigest::new("b".repeat(64));
+    let bytes = Bytes::from_static(b"abc");
+    let digest = BlobDigest::new(starmetal_core::integrity::blake3_hex(&bytes));
     fx.store
-        .get_or_insert_blob(&blob(digest.as_str(), 3), Bytes::from_static(b"abc"))
+        .get_or_insert_blob(&blob(digest.as_str(), bytes.len() as u64), bytes)
         .await
         .unwrap();
 
@@ -146,9 +158,10 @@ async fn identical_bytes_across_ecosystems_share_one_blob() {
 #[ignore = "requires docker"]
 async fn reference_counting_detects_the_last_reference() {
     let fx = setup().await;
-    let digest = BlobDigest::new("c".repeat(64));
+    let bytes = Bytes::from_static(b"x");
+    let digest = BlobDigest::new(starmetal_core::integrity::blake3_hex(&bytes));
     fx.store
-        .get_or_insert_blob(&blob(digest.as_str(), 1), Bytes::from_static(b"x"))
+        .get_or_insert_blob(&blob(digest.as_str(), bytes.len() as u64), bytes)
         .await
         .unwrap();
 
@@ -181,9 +194,10 @@ async fn reference_counting_detects_the_last_reference() {
 #[ignore = "requires docker"]
 async fn gc_honors_grace_window_then_compacts() {
     let fx = setup().await;
-    let digest = BlobDigest::new("d".repeat(64));
+    let bytes = Bytes::from_static(b"z");
+    let digest = BlobDigest::new(starmetal_core::integrity::blake3_hex(&bytes));
     fx.store
-        .get_or_insert_blob(&blob(digest.as_str(), 1), Bytes::from_static(b"z"))
+        .get_or_insert_blob(&blob(digest.as_str(), bytes.len() as u64), bytes)
         .await
         .unwrap();
 

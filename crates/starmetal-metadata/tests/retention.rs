@@ -71,10 +71,14 @@ fn asset_ref(ecosystem: Ecosystem, name: &str, version: &str, path: &str) -> Ass
 }
 
 /// Register a component + asset and link it to a fresh blob with unique bytes/digest.
-async fn seed_version(fx: &Fixture, ecosystem: Ecosystem, name: &str, version: &str, digest: &str) {
-    let bytes = Bytes::from(digest.to_string());
+///
+/// `seed` only needs to be unique per call (it becomes the blob's bytes); the digest is always
+/// the real Blake3 hash of those bytes, and is returned so callers can assert against it.
+async fn seed_version(fx: &Fixture, ecosystem: Ecosystem, name: &str, version: &str, seed: &str) -> BlobDigest {
+    let bytes = Bytes::from(seed.to_string());
+    let digest = BlobDigest::new(starmetal_core::integrity::blake3_hex(&bytes));
     let blob = Blob {
-        digest: BlobDigest::new(digest),
+        digest: digest.clone(),
         size: bytes.len() as u64,
         upstream_hashes: Default::default(),
         content_type: None,
@@ -91,9 +95,10 @@ async fn seed_version(fx: &Fixture, ecosystem: Ecosystem, name: &str, version: &
         .await
         .unwrap();
     fx.store
-        .add_reference(&asset_ref(ecosystem, name, version, &path), &blob.digest)
+        .add_reference(&asset_ref(ecosystem, name, version, &path), &digest)
         .await
         .unwrap();
+    digest
 }
 
 #[tokio::test]
@@ -163,9 +168,7 @@ async fn deleting_a_version_drops_its_reference_and_frees_the_blob() {
     let fx = setup().await;
     let ecosystem = Ecosystem::Npm;
     let name = "pkg";
-    let digest = "c".repeat(64);
-
-    seed_version(&fx, ecosystem, name, "2.0.0-beta.1", &digest).await;
+    let digest = seed_version(&fx, ecosystem, name, "2.0.0-beta.1", "c".repeat(64).as_str()).await;
 
     assert!(
         fx.store.list_unreferenced_blobs().await.unwrap().is_empty(),
@@ -185,7 +188,7 @@ async fn deleting_a_version_drops_its_reference_and_frees_the_blob() {
     let unreferenced = fx.store.list_unreferenced_blobs().await.unwrap();
     assert_eq!(
         unreferenced,
-        vec![BlobDigest::new(digest)],
+        vec![digest],
         "the blob only referenced by the deleted version is now a GC candidate"
     );
 }

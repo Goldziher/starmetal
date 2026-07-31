@@ -198,6 +198,14 @@ pub trait ContentStore: Send + Sync {
     /// Look up a blob by digest, returning `None` if it is not present.
     async fn get_blob(&self, digest: &BlobDigest) -> Result<Option<Blob>>;
 
+    /// Read a blob's bytes, verifying them against its Blake3 digest-key.
+    ///
+    /// Returns `None` when no blob with `digest` is known to the store. Otherwise the bytes are
+    /// fetched via the underlying [`crate::ports::StoragePort`] and re-hashed; because the storage
+    /// key *is* the Blake3 digest, a mismatch means on-disk corruption or tampering and yields
+    /// [`crate::error::StarmetalError::IntegrityError`].
+    async fn read_blob(&self, digest: &BlobDigest) -> Result<Option<Bytes>>;
+
     /// Insert or update a component by its coordinate.
     async fn upsert_component(&self, component: &Component) -> Result<()>;
 

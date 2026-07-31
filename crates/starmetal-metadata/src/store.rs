@@ -77,6 +77,12 @@ impl PostgresContentStore {
 #[async_trait]
 impl ContentStore for PostgresContentStore {
     async fn get_or_insert_blob(&self, blob: &Blob, data: Bytes) -> Result<Blob> {
+        // Enforce the content-address invariant at the write boundary: the storage key *is* the
+        // Blake3 digest, so a caller claiming a digest that doesn't match its bytes is rejected
+        // here, before any DB call and regardless of dedup (a lying caller is rejected even when
+        // the blob already exists).
+        starmetal_core::integrity::verify_or_err(&data, blob.digest.as_str())?;
+
         let conn = self.conn().await?;
         let upstream_hashes = serde_json::to_value(&blob.upstream_hashes)
             .map_err(|error| StarmetalError::Storage(format!("serialize upstream_hashes: {error}")))?;
@@ -104,6 +110,19 @@ impl ContentStore for PostgresContentStore {
         let conn = self.conn().await?;
         let row = queries::get_blob(&*conn, digest.as_str()).await.map_err(db_error)?;
         row.map(blob_from_row).transpose()
+    }
+
+    async fn read_blob(&self, digest: &BlobDigest) -> Result<Option<Bytes>> {
+        // A known blob row gates the read, so a stray/foreign object under this key is never
+        // served as a blob.
+        if self.get_blob(digest).await?.is_none() {
+            return Ok(None);
+        }
+        let Some(bytes) = self.storage.get(digest.as_str()).await? else {
+            return Ok(None);
+        };
+        starmetal_core::integrity::verify_or_err(&bytes, digest.as_str())?;
+        Ok(Some(bytes))
     }
 
     async fn upsert_component(&self, component: &Component) -> Result<()> {
