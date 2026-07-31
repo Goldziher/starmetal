@@ -27,8 +27,8 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use starmetal_core::authz::{
-    Action, ApiTokenScope, Authorizer, ContentSelector, Decision, EcosystemPattern, NamePattern, Namespace, Principal,
-    PrincipalId, PrincipalScope, RepositoryAdmin, RepositoryPattern, RepositoryView, Resource,
+    Action, ApiTokenScope, Authenticator, Authorizer, ContentSelector, Decision, EcosystemPattern, NamePattern,
+    Namespace, Principal, PrincipalId, PrincipalScope, RepositoryAdmin, RepositoryPattern, RepositoryView, Resource,
 };
 use starmetal_core::config::Config;
 use starmetal_core::error::Result;
@@ -220,6 +220,15 @@ impl LocalAuthorizer {
             .iter()
             .find(|entry| constant_time_eq(entry.token.as_bytes(), token.as_bytes()))
             .map(|entry| entry.principal.clone())
+    }
+}
+
+impl Authenticator for LocalAuthorizer {
+    /// Resolve a bearer token to its principal via the crate's constant-time
+    /// [`authenticate`](LocalAuthorizer::authenticate). Implements the core [`Authenticator`] port so
+    /// adapters can depend on the port rather than this concrete type.
+    fn authenticate_bearer(&self, credential: &str) -> Option<Principal> {
+        self.authenticate(credential)
     }
 }
 

@@ -659,6 +659,25 @@ pub trait Authorizer: Send + Sync {
     async fn authorize(&self, principal: &Principal, action: Action, resource: &Resource) -> Result<Decision>;
 }
 
+/// The injected authentication port: resolve a bearer credential to the [`Principal`] it acts as.
+///
+/// Kept separate from [`Authorizer`] because authentication (who is this?) and authorization (may
+/// they?) are distinct concerns with different backends: a request is first authenticated to a
+/// principal, then that principal is authorized against a resource. Implementations (local tokens,
+/// OIDC, forge-delegated) live outside the domain. The trait is object-safe so it can be held as
+/// `Arc<dyn Authenticator>` and swapped per deployment.
+///
+/// Synchronous because local token verification needs no I/O; a future remote backend that must do
+/// network introspection can wrap its own runtime or this port can gain an async sibling then
+/// (kept minimal today, per YAGNI).
+pub trait Authenticator: Send + Sync {
+    /// Resolve a bearer `credential` to the [`Principal`] it authenticates as.
+    ///
+    /// Returns [`None`] for an unrecognized credential; callers must treat an unauthenticated
+    /// request as denied. Implementations must compare secrets in constant time (secrets-handling).
+    fn authenticate_bearer(&self, credential: &str) -> Option<Principal>;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
