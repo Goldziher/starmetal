@@ -322,6 +322,13 @@ under [`schemas/`](schemas/):
 - [0015 - Statistics and Operational Metrics](docs/adr/0015-statistics-operational-metrics.md)
 - [0016 - Dependency Update Engine](docs/adr/0016-dependency-update-engine.md)
 - [0017 - Forge and Git Integration Port](docs/adr/0017-forge-git-port.md)
+- [0018 - Universal Artifact Repository Direction, proposed](docs/adr/0018-universal-artifact-repository-direction.md)
+- [0019 - Repository Kinds and the Recipe/Facet Model, proposed](docs/adr/0019-repository-kinds-recipe-facet-model.md)
+- [0020 - Universal Content Model and Garbage Collection, proposed](docs/adr/0020-content-model-and-garbage-collection.md)
+- [0021 - Native Hosted Publishing, proposed](docs/adr/0021-native-hosted-publishing.md)
+- [0022 - Access Control Model, proposed](docs/adr/0022-access-control-model.md)
+- [0023 - Git as a Dependency Source, proposed](docs/adr/0023-git-as-dependency-source.md)
+- [0024 - Supply-Chain Security Pipeline, proposed](docs/adr/0024-supply-chain-security-pipeline.md)
 
 ## License
 
