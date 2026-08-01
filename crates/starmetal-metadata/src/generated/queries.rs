@@ -176,6 +176,32 @@ WHERE ecosystem = $1 AND namespace = $2 AND name = $3"#,
     Ok(rows.iter().map(ListComponentVersionsRow::from_row).collect())
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ListComponentFamiliesRow {
+    pub ecosystem: String,
+    pub namespace: String,
+    pub name: String,
+}
+
+impl ListComponentFamiliesRow {
+    pub fn from_row(row: &tokio_postgres::Row) -> Self {
+        Self {
+            ecosystem: row.get("ecosystem"),
+            namespace: row.get("namespace"),
+            name: row.get("name"),
+        }
+    }
+}
+
+pub async fn list_component_families(
+    client: &(impl tokio_postgres::GenericClient + Sync),
+) -> Result<Vec<ListComponentFamiliesRow>, tokio_postgres::Error> {
+    let rows = client
+        .query(r#"SELECT DISTINCT ecosystem, namespace, name FROM components"#, &[])
+        .await?;
+    Ok(rows.iter().map(ListComponentFamiliesRow::from_row).collect())
+}
+
 pub async fn delete_component(
     client: &(impl tokio_postgres::GenericClient + Sync),
     id: i64,

@@ -4,6 +4,7 @@ use starmetal_adapters::PublishAuthorization;
 use starmetal_authz::{LocalAuthorizer, default_namespace};
 use starmetal_core::authz::{Action, Authenticator, Coordinate, Resource};
 use starmetal_core::config::Config;
+use starmetal_core::content::ContentMaintenance;
 use starmetal_core::package::{Ecosystem, PackageName};
 use starmetal_core::ports::{PackageService, PublishingService, StatisticsService};
 use starmetal_core::supply_chain::QuarantineReview;
@@ -25,6 +26,10 @@ pub struct AppState {
     /// Quarantine review workflow (ADR-0024), `Some` only when a scanner is attached. Backs the admin
     /// promote/reject/list endpoints; `None` leaves those endpoints reporting quarantine disabled.
     pub quarantine: Option<Arc<dyn QuarantineReview>>,
+    /// Scheduled metadata maintenance (ADR-0020 Stages 2c/2d), `Some` only when the content model
+    /// is attached (`metadata.enabled`). Backs the admin `/gc` and `/retention` trigger endpoints;
+    /// `None` leaves those endpoints reporting metadata maintenance disabled.
+    pub content_maintenance: Option<Arc<dyn ContentMaintenance>>,
 }
 
 /// Feature-gated upstream clients used by protocol adapters.
@@ -66,6 +71,7 @@ impl AppState {
             authorizer,
             upstreams,
             quarantine: None,
+            content_maintenance: None,
         }
     }
 
@@ -73,6 +79,14 @@ impl AppState {
     /// admin promote/reject/list endpoints report quarantine disabled unless a scanner is attached.
     pub fn with_quarantine(mut self, quarantine: Option<Arc<dyn QuarantineReview>>) -> Self {
         self.quarantine = quarantine;
+        self
+    }
+
+    /// Attach the metadata-maintenance handle (ADR-0020 Stages 2c/2d) built by the runtime. Absent
+    /// by default so the admin `/gc` and `/retention` endpoints report maintenance disabled unless
+    /// the content model is attached.
+    pub fn with_content_maintenance(mut self, content_maintenance: Option<Arc<dyn ContentMaintenance>>) -> Self {
+        self.content_maintenance = content_maintenance;
         self
     }
 }

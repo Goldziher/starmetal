@@ -147,6 +147,48 @@ async fn admin_quarantine_endpoints_enforce_auth_and_report_disabled_without_a_s
 }
 
 #[tokio::test]
+async fn admin_gc_and_retention_endpoints_enforce_auth_and_report_disabled_without_metadata() {
+    let server = TestServer::start_with_admin().await;
+    let client = reqwest::Client::new();
+    let base = server.base_url();
+
+    // Triggering requires the admin bearer token.
+    let response = client
+        .post(format!("{base}/admin/api/v1/gc"))
+        .send()
+        .await
+        .expect("request failed");
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    let response = client
+        .post(format!("{base}/admin/api/v1/retention"))
+        .send()
+        .await
+        .expect("request failed");
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    // With no content model attached (metadata disabled) there is nothing to sweep, so both
+    // trigger endpoints report the workflow disabled (404) rather than a server error.
+    let response = client
+        .post(format!("{base}/admin/api/v1/gc"))
+        .bearer_auth("admin-token")
+        .send()
+        .await
+        .expect("request failed");
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+    let response = client
+        .post(format!("{base}/admin/api/v1/retention"))
+        .bearer_auth("admin-token")
+        .send()
+        .await
+        .expect("request failed");
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+    server.shutdown();
+}
+
+#[tokio::test]
 async fn admin_quarantine_promote_rejects_a_path_traversal_shaped_digest() {
     let server = TestServer::start_with_admin().await;
     let client = reqwest::Client::new();

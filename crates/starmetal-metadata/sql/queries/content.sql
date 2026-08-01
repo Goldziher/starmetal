@@ -37,6 +37,11 @@ SELECT id, version, created_at, updated_at, last_downloaded_at, download_count
 FROM components
 WHERE ecosystem = $1 AND namespace = $2 AND name = $3;
 
+-- @name ListComponentFamilies
+-- @returns :many
+-- Distinct (ecosystem, namespace, name) component families, for the retention sweep.
+SELECT DISTINCT ecosystem, namespace, name FROM components;
+
 -- @name DeleteComponent
 -- @returns :exec
 -- Cascades to assets + asset_blobs (ON DELETE CASCADE), dropping references so

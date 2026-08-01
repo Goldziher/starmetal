@@ -16,6 +16,7 @@ serde.workspace = true
 serde_json.workspace = true
 starmetal-core.workspace = true
 tokio-postgres.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 starmetal-storage = { workspace = true, features = ["backend-memory"] }

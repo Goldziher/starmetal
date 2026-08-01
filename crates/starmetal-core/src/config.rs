@@ -260,6 +260,22 @@ pub struct MetadataConfig {
     /// migrations are managed out of band.
     #[serde(default = "default_true")]
     pub apply_schema: bool,
+    /// Interval in seconds between scheduled garbage-collection sweeps (ADR-0020 Stage 2d). `0`
+    /// (the default) disables the scheduler. Only effective when `enabled`.
+    #[serde(default)]
+    pub gc_interval_secs: u64,
+    /// Grace window in seconds applied to every blob newly soft-deleted by a GC sweep before a
+    /// later sweep's compact step may hard-delete it.
+    #[serde(default = "default_gc_grace_secs")]
+    pub gc_grace_secs: u64,
+    /// Interval in seconds between scheduled retention sweeps (ADR-0020 Stage 2c). `0` (the
+    /// default) disables the scheduler. Only effective when `enabled`.
+    #[serde(default)]
+    pub retention_interval_secs: u64,
+    /// The retention policy applied by the scheduled retention sweep. An empty policy (the
+    /// default) is a no-op.
+    #[serde(default)]
+    pub retention: crate::content::RetentionPolicy,
 }
 
 impl Default for MetadataConfig {
@@ -268,8 +284,17 @@ impl Default for MetadataConfig {
             enabled: false,
             database_url: None,
             apply_schema: true,
+            gc_interval_secs: 0,
+            gc_grace_secs: default_gc_grace_secs(),
+            retention_interval_secs: 0,
+            retention: crate::content::RetentionPolicy::default(),
         }
     }
+}
+
+/// Default GC grace window: 24 hours, in seconds.
+fn default_gc_grace_secs() -> u64 {
+    24 * 60 * 60
 }
 
 /// Which artifact scanner backs the supply-chain vulnerability gate (ADR-0024).
@@ -1293,6 +1318,16 @@ certificate_file = "/etc/starmetal/trust/internal-ca.pem"
         assert!(
             metadata.apply_schema,
             "schema provisioning is on by default for turnkey deploys"
+        );
+        assert_eq!(metadata.gc_interval_secs, 0, "GC scheduler is disabled by default");
+        assert_eq!(metadata.gc_grace_secs, 24 * 60 * 60, "default GC grace is 24 hours");
+        assert_eq!(
+            metadata.retention_interval_secs, 0,
+            "retention scheduler is disabled by default"
+        );
+        assert!(
+            metadata.retention.rules.is_empty(),
+            "default retention policy is a no-op"
         );
     }
 

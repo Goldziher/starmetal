@@ -79,6 +79,34 @@
         "enabled": {
           "default": false,
           "type": "boolean"
+        },
+        "gc_grace_secs": {
+          "default": 86400,
+          "description": "Grace window in seconds applied to every blob newly soft-deleted by a GC sweep before a\nlater sweep's compact step may hard-delete it.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "gc_interval_secs": {
+          "default": 0,
+          "description": "Interval in seconds between scheduled garbage-collection sweeps (ADR-0020 Stage 2d). `0`\n(the default) disables the scheduler. Only effective when `enabled`.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "retention": {
+          "$ref": "#/$defs/RetentionPolicy",
+          "default": {
+            "rules": []
+          },
+          "description": "The retention policy applied by the scheduled retention sweep. An empty policy (the\ndefault) is a no-op."
+        },
+        "retention_interval_secs": {
+          "default": 0,
+          "description": "Interval in seconds between scheduled retention sweeps (ADR-0020 Stage 2c). `0` (the\ndefault) disables the scheduler. Only effective when `enabled`.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
         }
       },
       "type": "object"
@@ -233,6 +261,106 @@
           "const": "group",
           "description": "Virtual/aggregate repository presenting multiple members behind one URL.",
           "type": "string"
+        }
+      ]
+    },
+    "RetentionPolicy": {
+      "description": "An ordered set of [`RetentionRule`]s applied together as a retention policy.\n\nThis is a plain configuration container; it holds no evaluation logic.",
+      "properties": {
+        "rules": {
+          "default": [],
+          "description": "Rules that make up this policy, evaluated by a later stage.",
+          "items": {
+            "$ref": "#/$defs/RetentionRule"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "RetentionRule": {
+      "description": "A single logical retention rule (ADR-0020).\n\nRetention is decoupled from garbage collection: these rules decide which component and asset\nrows to *delete*, after which reference-counted GC physically reclaims any blobs that become\nunreferenced. This enum is the typed, config-facing description of a rule only — it carries no\nevaluation engine.\n\nThe serde representation is internally tagged on a `strategy` field, for example:\n\n```json\n{ \"strategy\": \"keep-latest\", \"count\": 10 }\n```",
+      "oneOf": [
+        {
+          "description": "Keep only the N most recent versions of a component.",
+          "properties": {
+            "count": {
+              "description": "Number of latest versions to retain.",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "strategy": {
+              "const": "keep-latest",
+              "type": "string"
+            }
+          },
+          "required": ["strategy", "count"],
+          "type": "object"
+        },
+        {
+          "description": "Retain versions downloaded within the trailing window; delete the rest.",
+          "properties": {
+            "strategy": {
+              "const": "last-downloaded",
+              "type": "string"
+            },
+            "within_days": {
+              "description": "Retention window, in days, measured from the last download.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": ["strategy", "within_days"],
+          "type": "object"
+        },
+        {
+          "description": "Retain versions updated within the trailing window; delete the rest.",
+          "properties": {
+            "strategy": {
+              "const": "last-updated",
+              "type": "string"
+            },
+            "within_days": {
+              "description": "Retention window, in days, measured from the last update.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": ["strategy", "within_days"],
+          "type": "object"
+        },
+        {
+          "description": "Retain versions whose version string matches the given regular expression.",
+          "properties": {
+            "pattern": {
+              "description": "Regular expression evaluated against the version string.",
+              "type": "string"
+            },
+            "strategy": {
+              "const": "regex",
+              "type": "string"
+            }
+          },
+          "required": ["strategy", "pattern"],
+          "type": "object"
+        },
+        {
+          "description": "Select versions by their prerelease status.",
+          "properties": {
+            "prerelease": {
+              "description": "When `true`, the rule targets prerelease versions; when `false`, stable versions.",
+              "type": "boolean"
+            },
+            "strategy": {
+              "const": "is-prerelease",
+              "type": "string"
+            }
+          },
+          "required": ["strategy", "prerelease"],
+          "type": "object"
         }
       ]
     },
@@ -547,7 +675,13 @@
       "default": {
         "apply_schema": true,
         "database_url": null,
-        "enabled": false
+        "enabled": false,
+        "gc_grace_secs": 86400,
+        "gc_interval_secs": 0,
+        "retention": {
+          "rules": []
+        },
+        "retention_interval_secs": 0
       }
     },
     "policies": {

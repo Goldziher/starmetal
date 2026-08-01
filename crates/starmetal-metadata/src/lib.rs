@@ -9,11 +9,13 @@
 
 pub mod gc;
 pub mod generated;
+pub mod maintenance;
 mod pool;
 pub mod retention;
 mod store;
 
-pub use gc::{GcConfig, GcReport, run_gc_sweep};
+pub use gc::{GcConfig, run_gc_sweep};
+pub use maintenance::MetadataMaintenance;
 pub use pool::{DbPool, create_pool};
-pub use retention::RetentionOutcome;
+pub use starmetal_core::content::{GcReport, RetentionOutcome};
 pub use store::{PostgresContentStore, SCHEMA_SQL};

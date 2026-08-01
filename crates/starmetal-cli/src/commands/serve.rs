@@ -6,6 +6,10 @@ pub async fn run(runtime: StarmetalRuntime) -> starmetal_core::error::Result<()>
     // Drive scheduled supply-chain re-correlation alongside the server; the sweep runs until the
     // process exits. A no-op unless a scanner is attached and an interval is configured.
     let _recorrelation = runtime.spawn_recorrelation_scheduler();
+    // Drive scheduled metadata maintenance (ADR-0020 Stages 2c/2d) alongside the server. Each is a
+    // no-op unless the content model is attached and its interval is configured.
+    let _gc = runtime.spawn_gc_scheduler();
+    let _retention = runtime.spawn_retention_scheduler();
     let app = build_app(runtime.app_state());
     let listener = tokio::net::TcpListener::bind(&bind)
         .await

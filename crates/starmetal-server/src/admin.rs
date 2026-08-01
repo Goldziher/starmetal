@@ -9,6 +9,7 @@ use serde::Serialize;
 use crate::state::AppState;
 use starmetal_authz::default_namespace;
 use starmetal_core::authz::{Action, Authorizer, Resource};
+use starmetal_core::content::ContentMaintenance;
 use starmetal_core::package::{Ecosystem, PackageName};
 use starmetal_core::supply_chain::QuarantineReview;
 
@@ -62,6 +63,8 @@ pub fn router() -> Router<AppState> {
         .route("/quarantine", get(quarantine_list))
         .route("/quarantine/{digest}/promote", post(quarantine_promote))
         .route("/quarantine/{digest}/reject", post(quarantine_reject))
+        .route("/gc", post(trigger_gc))
+        .route("/retention", post(trigger_retention))
 }
 
 async fn status(State(state): State<AppState>, headers: HeaderMap) -> Result<impl IntoResponse, (StatusCode, String)> {
@@ -178,6 +181,37 @@ async fn quarantine_reject(
     let quarantine = quarantine_handle(&state)?;
     let record = quarantine.reject_quarantine(&digest).await.map_err(map_admin_error)?;
     Ok(Json(record))
+}
+
+async fn trigger_gc(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    authorize_admin(&state, &headers).await?;
+    let maintenance = content_maintenance_handle(&state)?;
+    let report = maintenance.gc_sweep().await.map_err(map_admin_error)?;
+    Ok(Json(report))
+}
+
+async fn trigger_retention(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    authorize_admin(&state, &headers).await?;
+    let maintenance = content_maintenance_handle(&state)?;
+    let report = maintenance.retention_sweep().await.map_err(map_admin_error)?;
+    Ok(Json(report))
+}
+
+/// The metadata-maintenance handle, or a 404 when `metadata.enabled` is unset (the content model
+/// is not attached and there is nothing to sweep).
+fn content_maintenance_handle(
+    state: &AppState,
+) -> Result<&std::sync::Arc<dyn ContentMaintenance>, (StatusCode, String)> {
+    state
+        .content_maintenance
+        .as_ref()
+        .ok_or((StatusCode::NOT_FOUND, "metadata maintenance is not enabled".to_string()))
 }
 
 /// Reject a digest path parameter that is not a well-formed blake3 hex digest.

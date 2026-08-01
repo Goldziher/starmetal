@@ -19,7 +19,7 @@
 
 use std::time::Duration;
 
-use starmetal_core::content::{BlobDigest, ContentStore};
+use starmetal_core::content::{ContentStore, GcReport};
 use starmetal_core::error::Result;
 
 /// Hours in the default grace window.
@@ -43,20 +43,6 @@ impl Default for GcConfig {
     fn default() -> Self {
         Self { grace: DEFAULT_GRACE }
     }
-}
-
-/// The outcome of one [`run_gc_sweep`] call.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GcReport {
-    /// Number of blobs marked as garbage-collection candidates this sweep.
-    pub marked: usize,
-    /// Number of blobs soft-deleted this sweep (equal to `marked`; kept as a separate field so
-    /// the report reads as a lifecycle trace rather than a single count).
-    pub soft_deleted: usize,
-    /// Digests hard-deleted (bytes and metadata reclaimed) by this sweep's [`ContentStore::compact`]
-    /// call. See the module docs: this is typically empty unless a *previous* sweep's grace
-    /// window has since elapsed, or `grace` is zero.
-    pub reclaimed: Vec<BlobDigest>,
 }
 
 /// Run one garbage-collection sweep over `store`.

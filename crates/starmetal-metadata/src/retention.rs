@@ -31,7 +31,7 @@ use std::collections::HashSet;
 
 use chrono::{DateTime, Utc};
 use regex::Regex;
-use starmetal_core::content::{RetentionPolicy, RetentionRule};
+use starmetal_core::content::{RetentionOutcome, RetentionPolicy, RetentionRule};
 use starmetal_core::error::{Result, StarmetalError};
 use starmetal_core::package::{Ecosystem, PackageName};
 
@@ -41,13 +41,6 @@ use crate::store::{PostgresContentStore, db_error};
 /// The character that separates a version core from its pre-release identifier, per the semver
 /// convention this crate's prerelease heuristic relies on (see the module docs).
 const PRERELEASE_SEPARATOR: char = '-';
-
-/// The outcome of applying a [`RetentionPolicy`]: the versions it deleted.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RetentionOutcome {
-    /// Version strings that were deleted, in no particular order.
-    pub deleted: Vec<String>,
-}
 
 /// One component-version row loaded for retention evaluation.
 struct VersionRow {

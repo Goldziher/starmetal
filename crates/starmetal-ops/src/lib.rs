@@ -6,6 +6,7 @@ use bytes::Bytes;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use starmetal_core::config::{Config, DEFAULT_MAX_UPSTREAM_BYTES, UpstreamConfig};
+use starmetal_core::content::ContentMaintenance;
 use starmetal_core::error::{Result, StarmetalError};
 use starmetal_core::package::{ArtifactId, Ecosystem, PackageName, VersionMetadata};
 use starmetal_core::ports::{PackageService, PublishingService, StatisticsService, StoragePort, UpstreamClient};
@@ -88,31 +89,48 @@ pub struct StarmetalRuntime {
     /// scanner to the service — so this is `Some` iff a scanner is actually attached. Backs the admin
     /// promote/reject/list endpoints.
     pub quarantine: Option<Arc<dyn QuarantineReview>>,
+    /// Handle for scheduled metadata maintenance (ADR-0020 Stages 2c/2d): the retention and
+    /// garbage-collection sweeps. `Some` only when the content model is attached (`metadata.enabled`
+    /// under the `metadata` feature); drives the background sweeps and backs the admin
+    /// `/gc` and `/retention` endpoints.
+    pub content_maintenance: Option<Arc<dyn ContentMaintenance>>,
 }
 
 /// Attach a Postgres-backed content store (ADR-0020) to the service when `metadata.enabled`, so
 /// publishes dual-write the content model against the same object store used for flat artifacts.
-/// A disabled or absent config leaves the service untouched (the `None` content-store path).
+/// A disabled or absent config leaves the service untouched (the `None` content-store path) and
+/// yields no maintenance handle.
+///
+/// Returns the (possibly wrapped) service alongside a maintenance handle over the *same* store, so
+/// the scheduled GC (Stage 2d) and retention (Stage 2c) sweeps operate on the store publishes
+/// actually write to.
 #[cfg(feature = "metadata")]
 async fn attach_content_store(
     service: CachingPackageService,
     config: &Config,
     storage: Arc<dyn StoragePort>,
-) -> Result<CachingPackageService> {
-    use starmetal_metadata::{PostgresContentStore, create_pool};
+) -> Result<(CachingPackageService, Option<Arc<dyn ContentMaintenance>>)> {
+    use starmetal_core::content::ContentStore;
+    use starmetal_metadata::{MetadataMaintenance, PostgresContentStore, create_pool};
 
     if !config.metadata.enabled {
-        return Ok(service);
+        return Ok((service, None));
     }
     let database_url = config.metadata.database_url.as_deref().ok_or_else(|| {
         StarmetalError::Config("metadata.enabled requires metadata.database_url to be set".to_string())
     })?;
     let pool = create_pool(database_url).await?;
-    let content_store = PostgresContentStore::new(pool, storage);
+    let content_store = Arc::new(PostgresContentStore::new(pool, storage));
     if config.metadata.apply_schema {
         content_store.apply_schema().await?;
     }
-    Ok(service.with_content_store(Arc::new(content_store)))
+    let maintenance = Arc::new(MetadataMaintenance::new(
+        content_store.clone(),
+        std::time::Duration::from_secs(config.metadata.gc_grace_secs),
+        config.metadata.retention.clone(),
+    )) as Arc<dyn ContentMaintenance>;
+    let service = service.with_content_store(content_store as Arc<dyn ContentStore>);
+    Ok((service, Some(maintenance)))
 }
 
 /// Attach a vulnerability scanner (ADR-0024) to the service when `supply_chain.enabled`, so publishes
@@ -170,7 +188,9 @@ impl StarmetalRuntime {
         let service =
             CachingPackageService::new_with_signing(storage.clone(), clients, config.policies.clone(), signing);
         #[cfg(feature = "metadata")]
-        let service = attach_content_store(service, &config, storage.clone()).await?;
+        let (service, content_maintenance) = attach_content_store(service, &config, storage.clone()).await?;
+        #[cfg(not(feature = "metadata"))]
+        let content_maintenance: Option<Arc<dyn ContentMaintenance>> = None;
         #[cfg(feature = "scanner-osv")]
         let service = attach_scanner(service, &config);
         let service = Arc::new(service);
@@ -221,6 +241,7 @@ impl StarmetalRuntime {
             upstreams,
             maintenance,
             quarantine,
+            content_maintenance,
         })
     }
 
@@ -259,6 +280,65 @@ impl StarmetalRuntime {
         }))
     }
 
+    /// Spawn the scheduled garbage-collection sweep (ADR-0020 Stage 2d) when configured.
+    ///
+    /// Returns `None` unless the content model is attached (`metadata.enabled` under the
+    /// `metadata` feature) and `metadata.gc_interval_secs` is non-zero. Mirrors
+    /// [`Self::spawn_recorrelation_scheduler`]: the first sweep runs one interval after start.
+    pub fn spawn_gc_scheduler(&self) -> Option<tokio::task::JoinHandle<()>> {
+        let interval_secs = self.config.metadata.gc_interval_secs;
+        if interval_secs == 0 {
+            return None;
+        }
+        let maintenance = self.content_maintenance.clone()?;
+        let period = std::time::Duration::from_secs(interval_secs);
+        Some(tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(period);
+            ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            // The first tick fires immediately; consume it so the first real sweep waits one period.
+            ticker.tick().await;
+            loop {
+                ticker.tick().await;
+                match maintenance.gc_sweep().await {
+                    Ok(report) => tracing::info!(
+                        marked = report.marked,
+                        soft_deleted = report.soft_deleted,
+                        reclaimed = report.reclaimed.len(),
+                        "garbage-collection sweep complete"
+                    ),
+                    Err(error) => tracing::warn!(%error, "garbage-collection sweep failed"),
+                }
+            }
+        }))
+    }
+
+    /// Spawn the scheduled retention sweep (ADR-0020 Stage 2c) when configured.
+    ///
+    /// Returns `None` unless the content model is attached (`metadata.enabled` under the
+    /// `metadata` feature) and `metadata.retention_interval_secs` is non-zero. Mirrors
+    /// [`Self::spawn_recorrelation_scheduler`]: the first sweep runs one interval after start.
+    pub fn spawn_retention_scheduler(&self) -> Option<tokio::task::JoinHandle<()>> {
+        let interval_secs = self.config.metadata.retention_interval_secs;
+        if interval_secs == 0 {
+            return None;
+        }
+        let maintenance = self.content_maintenance.clone()?;
+        let period = std::time::Duration::from_secs(interval_secs);
+        Some(tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(period);
+            ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            // The first tick fires immediately; consume it so the first real sweep waits one period.
+            ticker.tick().await;
+            loop {
+                ticker.tick().await;
+                match maintenance.retention_sweep().await {
+                    Ok(report) => tracing::info!(deleted = report.deleted.len(), "retention sweep complete"),
+                    Err(error) => tracing::warn!(%error, "retention sweep failed"),
+                }
+            }
+        }))
+    }
+
     pub fn app_state(&self) -> AppState {
         AppState::new(
             self.config.clone(),
@@ -268,6 +348,7 @@ impl StarmetalRuntime {
             self.upstreams.clone(),
         )
         .with_quarantine(self.quarantine.clone())
+        .with_content_maintenance(self.content_maintenance.clone())
     }
 
     pub fn status(&self) -> RuntimeStatus {
@@ -721,5 +802,60 @@ mod tests {
             .await
             .expect("metadata should load");
         assert_eq!(metadata.artifacts[0].filename, "sample-1.0.0.tgz");
+    }
+
+    #[tokio::test]
+    async fn gc_and_retention_schedulers_are_none_without_a_content_maintenance_handle() {
+        // The default config disables the content model (`metadata.enabled = false`), so no
+        // maintenance handle is attached regardless of the interval fields, and both schedulers
+        // must report `None` rather than spawning a task with nothing to drive.
+        let mut config = Config::default();
+        config.storage.backend = "memory".to_string();
+        for upstream in config.upstream.values_mut() {
+            upstream.enabled = false;
+        }
+        config.metadata.gc_interval_secs = 60;
+        config.metadata.retention_interval_secs = 60;
+        let runtime = StarmetalRuntime::from_config(config)
+            .await
+            .expect("runtime should build");
+
+        assert!(
+            runtime.content_maintenance.is_none(),
+            "no content-store handle without metadata.enabled"
+        );
+        assert!(
+            runtime.spawn_gc_scheduler().is_none(),
+            "GC scheduler must not spawn without a maintenance handle"
+        );
+        assert!(
+            runtime.spawn_retention_scheduler().is_none(),
+            "retention scheduler must not spawn without a maintenance handle"
+        );
+    }
+
+    #[tokio::test]
+    async fn gc_and_retention_schedulers_are_none_when_interval_is_zero() {
+        // Even with `metadata.enabled` (and thus a maintenance handle) reachable in principle, a
+        // zero interval must disable each scheduler independently of the handle's presence.
+        let mut config = Config::default();
+        config.storage.backend = "memory".to_string();
+        for upstream in config.upstream.values_mut() {
+            upstream.enabled = false;
+        }
+        config.metadata.gc_interval_secs = 0;
+        config.metadata.retention_interval_secs = 0;
+        let runtime = StarmetalRuntime::from_config(config)
+            .await
+            .expect("runtime should build");
+
+        assert!(
+            runtime.spawn_gc_scheduler().is_none(),
+            "zero GC interval disables the scheduler"
+        );
+        assert!(
+            runtime.spawn_retention_scheduler().is_none(),
+            "zero retention interval disables the scheduler"
+        );
     }
 }

@@ -338,11 +338,27 @@ reclaimable by the reference-counted garbage collector. Requires the `metadata` 
 | `metadata.enabled` | `false` | Enables the Postgres-backed content model on the publish path. |
 | `metadata.database_url` | `null` | Postgres URL (`postgresql://user:password@host:port/database`). Required when enabled; redacted from the admin config view. |
 | `metadata.apply_schema` | `true` | Applies the content-model schema on startup. Disable when migrations are managed out of band. |
+| `metadata.gc_interval_secs` | `0` | Interval between scheduled garbage-collection sweeps (ADR-0020 Stage 2d). `0` disables the scheduler; admin `POST /gc` still triggers a sweep on demand. |
+| `metadata.gc_grace_secs` | `86400` | Grace window applied to every blob a GC sweep soft-deletes before a later sweep may hard-delete it. A blob soft-deleted this sweep is reclaimed only by a sweep run after its grace elapses. |
+| `metadata.retention_interval_secs` | `0` | Interval between scheduled retention sweeps (ADR-0020 Stage 2c). `0` disables the scheduler; admin `POST /retention` still triggers a sweep on demand. |
+| `metadata.retention` | `{}` | Retention policy applied to every component family by the retention sweep. An empty policy is a no-op. `metadata.retention.rules` is a list of rules (`keep-latest`, `is-prerelease`, `matches-regex`, `last-updated`, `last-downloaded`); a version is deleted when **any** rule selects it. Deleting component rows leaves blobs unreferenced, which the GC sweep then reclaims. |
+
+Garbage collection and retention run only when their interval is non-zero (and `metadata.enabled`);
+both are also exposed as admin triggers (`POST /admin/api/v1/gc`, `POST /admin/api/v1/retention`).
+A single `metadata.retention` policy currently applies to every family; per-repository policies are
+a planned follow-up.
 
 ```toml
 [metadata]
 enabled = true
 database_url = "postgresql://starmetal:password@localhost:5432/starmetal"
+gc_interval_secs = 3600        # hourly GC sweep; 0 disables
+gc_grace_secs = 86400          # 24h grace before a soft-deleted blob is reclaimed
+retention_interval_secs = 0    # scheduled retention off; trigger via admin API
+
+[[metadata.retention.rules]]
+strategy = "keep-latest"
+count = 10
 ```
 
 ## Supply Chain (Vulnerability Scanning)

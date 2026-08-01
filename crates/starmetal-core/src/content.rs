@@ -253,6 +253,32 @@ pub trait ContentStore: Send + Sync {
     async fn compact(&self) -> Result<Vec<BlobDigest>>;
 }
 
+/// The outcome of one garbage-collection sweep (ADR-0020 Stage 2d).
+///
+/// Produced by `starmetal_metadata::gc::run_gc_sweep` and returned by
+/// [`ContentMaintenance::gc_sweep`]. See that function's documentation for the two-phase
+/// mark/soft-delete-then-compact semantics.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GcReport {
+    /// Number of blobs marked as garbage-collection candidates this sweep.
+    pub marked: usize,
+    /// Number of blobs soft-deleted this sweep (equal to `marked`; kept as a separate field so the
+    /// report reads as a lifecycle trace rather than a single count).
+    pub soft_deleted: usize,
+    /// Digests hard-deleted (bytes and metadata reclaimed) by this sweep's compact step.
+    pub reclaimed: Vec<BlobDigest>,
+}
+
+/// The outcome of applying a [`RetentionPolicy`] (ADR-0020 Stage 2c): the versions it deleted.
+///
+/// Produced by `PostgresContentStore::apply_retention` (one component family) and aggregated
+/// across every family by [`ContentMaintenance::retention_sweep`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RetentionOutcome {
+    /// Version strings that were deleted, in no particular order.
+    pub deleted: Vec<String>,
+}
+
 // ---------------------------------------------------------------------------
 // Retention policy value types
 // ---------------------------------------------------------------------------
@@ -308,6 +334,37 @@ pub struct RetentionPolicy {
     /// Rules that make up this policy, evaluated by a later stage.
     #[serde(default)]
     pub rules: Vec<RetentionRule>,
+}
+
+// ---------------------------------------------------------------------------
+// Content maintenance port
+// ---------------------------------------------------------------------------
+
+/// Scheduled metadata maintenance over a [`ContentStore`] (ADR-0020 Stages 2c/2d): the
+/// retention-then-garbage-collection lifecycle, driven by a runtime scheduler rather than a
+/// request path.
+///
+/// Kept separate from [`ContentStore`] itself (which is the low-level metadata/lifecycle port)
+/// so a runtime can hold a single `Arc<dyn ContentMaintenance>` handle for its background sweeps
+/// without needing the full `ContentStore` surface. The trait is object-safe.
+#[async_trait]
+pub trait ContentMaintenance: Send + Sync {
+    /// Run one garbage-collection sweep: mark and soft-delete every unreferenced blob, then
+    /// compact (hard-delete) whatever has already passed its grace window.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the underlying [`ContentStore`] sweep fails.
+    async fn gc_sweep(&self) -> Result<GcReport>;
+
+    /// Apply the configured retention policy across every known component family, deleting the
+    /// union of what each family's rule evaluation selects.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error only on a systemic failure (e.g. the store is unreadable); a single
+    /// family that cannot be evaluated should be skipped rather than aborting the whole sweep.
+    async fn retention_sweep(&self) -> Result<RetentionOutcome>;
 }
 
 #[cfg(test)]
@@ -386,5 +443,65 @@ mod tests {
         let digest = BlobDigest::new("abc123");
         assert_eq!(digest.as_str(), "abc123");
         assert_eq!(digest.to_string(), "abc123");
+    }
+
+    #[test]
+    fn gc_report_serializes_with_expected_fields() {
+        let report = GcReport {
+            marked: 2,
+            soft_deleted: 2,
+            reclaimed: vec![BlobDigest::new("a".repeat(64))],
+        };
+        let json = serde_json::to_value(&report).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "marked": 2,
+                "soft_deleted": 2,
+                "reclaimed": ["a".repeat(64)],
+            })
+        );
+        let roundtripped: GcReport = serde_json::from_value(json).unwrap();
+        assert_eq!(roundtripped, report);
+    }
+
+    #[test]
+    fn retention_outcome_serializes_with_expected_fields() {
+        let outcome = RetentionOutcome {
+            deleted: vec!["1.0.0".to_string(), "1.0.1".to_string()],
+        };
+        let json = serde_json::to_value(&outcome).unwrap();
+        assert_eq!(json, serde_json::json!({ "deleted": ["1.0.0", "1.0.1"] }));
+        let roundtripped: RetentionOutcome = serde_json::from_value(json).unwrap();
+        assert_eq!(roundtripped, outcome);
+    }
+
+    /// A trivial in-memory [`ContentMaintenance`] impl, asserting the trait is object-safe and
+    /// usable behind `Arc<dyn ContentMaintenance>` the way a runtime holds it.
+    struct StubMaintenance;
+
+    #[async_trait]
+    impl ContentMaintenance for StubMaintenance {
+        async fn gc_sweep(&self) -> Result<GcReport> {
+            Ok(GcReport {
+                marked: 0,
+                soft_deleted: 0,
+                reclaimed: Vec::new(),
+            })
+        }
+
+        async fn retention_sweep(&self) -> Result<RetentionOutcome> {
+            Ok(RetentionOutcome { deleted: Vec::new() })
+        }
+    }
+
+    #[test]
+    fn content_maintenance_is_object_safe() {
+        // Core carries no async runtime dependency, so this only proves the trait compiles behind
+        // a trait object (the property a runtime relies on to hold `Arc<dyn ContentMaintenance>`)
+        // rather than driving the futures to completion.
+        let maintenance: std::sync::Arc<dyn ContentMaintenance> = std::sync::Arc::new(StubMaintenance);
+        let _gc_future = maintenance.gc_sweep();
+        let _retention_future = maintenance.retention_sweep();
     }
 }
