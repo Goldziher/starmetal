@@ -416,6 +416,18 @@ vendored. Point `osv_endpoint` at a self-hosted OSV mirror to avoid the public A
 | `supply_chain.enforce_on_serve` | `false` | Also gate at serve time, scanning cached artifacts on demand. |
 | `supply_chain.recorrelation_interval_secs` | `0` | Interval for the background re-scan sweep; `0` disables it. |
 | `supply_chain.quarantine` | `false` | Hold a serve-time block as a recoverable quarantine record instead of a hard deny. |
+| `supply_chain.sbom` | — | SBOM generation controls (independent of the scanner). |
+| `supply_chain.sbom.enabled` | `false` | Generate and store an SBOM per artifact on publish. |
+| `supply_chain.sbom.formats` | `["cyclonedx", "spdx"]` | Formats to emit for each artifact. |
+
+When `supply_chain.sbom.enabled` is set, each published artifact gets one SBOM document per configured
+format (CycloneDX and/or SPDX), generated from the publish request and stored as a sidecar keyed by the
+artifact's coordinate. SBOM generation is independent of the scanner — it needs no scanner backend.
+Setting `enabled = true` with an explicit empty `formats = []` generates nothing (there is no format to
+emit). Retrieve stored documents via the admin API by coordinate:
+`GET /admin/api/v1/sbom?ecosystem=&name=&version=&filename=` lists the formats present for an artifact,
+and `GET /admin/api/v1/sbom/document?ecosystem=&name=&version=&filename=&format=` returns the document
+(`cyclonedx` or `spdx`).
 
 ```toml
 [supply_chain]
@@ -423,6 +435,10 @@ enabled = true
 scanner = "osv"
 enforce_on_serve = true  # gate reads as well as publishes
 recorrelation_interval_secs = 3600  # re-scan stored reports hourly against refreshed advisories
+
+[supply_chain.sbom]
+enabled = true
+formats = ["cyclonedx", "spdx"]
 
 [policies]
 max_vuln_severity = "high"  # deny a critical-severity advisory at both ingest and serve

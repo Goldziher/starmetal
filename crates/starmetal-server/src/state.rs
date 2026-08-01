@@ -7,7 +7,7 @@ use starmetal_core::config::Config;
 use starmetal_core::content::{ContentBrowse, ContentMaintenance};
 use starmetal_core::package::{Ecosystem, PackageName};
 use starmetal_core::ports::{PackageService, PublishingService, StatisticsService};
-use starmetal_core::supply_chain::QuarantineReview;
+use starmetal_core::supply_chain::{QuarantineReview, SbomIndex};
 
 /// Shared application state, passed to all handlers via axum's State extractor.
 #[derive(Clone)]
@@ -35,6 +35,9 @@ pub struct AppState {
     /// which pushes an authorizer predicate into the store; `None` makes that endpoint report
     /// content browse disabled.
     pub content_browse: Option<Arc<dyn ContentBrowse>>,
+    /// SBOM retrieval handle (ADR-0024), `Some` when `supply_chain.sbom.enabled`. Backs the admin
+    /// SBOM list/fetch endpoints; `None` makes them report SBOM generation disabled.
+    pub sbom: Option<Arc<dyn SbomIndex>>,
 }
 
 /// Feature-gated upstream clients used by protocol adapters.
@@ -78,6 +81,7 @@ impl AppState {
             quarantine: None,
             content_maintenance: None,
             content_browse: None,
+            sbom: None,
         }
     }
 
@@ -101,6 +105,13 @@ impl AppState {
     /// is attached.
     pub fn with_content_browse(mut self, content_browse: Option<Arc<dyn ContentBrowse>>) -> Self {
         self.content_browse = content_browse;
+        self
+    }
+
+    /// Attach the SBOM retrieval handle (ADR-0024) built by the runtime. Absent by default so the
+    /// admin SBOM endpoints report SBOM generation disabled unless it is enabled in config.
+    pub fn with_sbom(mut self, sbom: Option<Arc<dyn SbomIndex>>) -> Self {
+        self.sbom = sbom;
         self
     }
 }

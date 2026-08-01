@@ -379,6 +379,40 @@
       "required": ["bucket", "region"],
       "type": "object"
     },
+    "SbomConfig": {
+      "description": "SBOM generation controls (ADR-0024). Independent of the scanner: SBOMs are generated from the\npublish request, so this needs no scanner feature or backend.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Generate and store SBOM documents on publish. Off by default.",
+          "type": "boolean"
+        },
+        "formats": {
+          "default": ["cyclonedx", "spdx"],
+          "description": "Formats to generate for each artifact. Defaults to both CycloneDX and SPDX.",
+          "items": {
+            "$ref": "#/$defs/SbomFormat"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "SbomFormat": {
+      "description": "Standard SBOM document formats Starmetal generates and stores.",
+      "oneOf": [
+        {
+          "const": "cyclonedx",
+          "description": "CycloneDX (<https://cyclonedx.org>).",
+          "type": "string"
+        },
+        {
+          "const": "spdx",
+          "description": "SPDX (<https://spdx.dev>).",
+          "type": "string"
+        }
+      ]
+    },
     "ScannerKind": {
       "description": "Which artifact scanner backs the supply-chain vulnerability gate (ADR-0024).",
       "oneOf": [
@@ -597,6 +631,14 @@
           "minimum": 0,
           "type": "integer"
         },
+        "sbom": {
+          "$ref": "#/$defs/SbomConfig",
+          "default": {
+            "enabled": false,
+            "formats": ["cyclonedx", "spdx"]
+          },
+          "description": "SBOM generation controls. When enabled, each published artifact gets an SBOM document per\nconfigured format, stored digest-keyed and retrievable via the admin API."
+        },
         "scanner": {
           "$ref": "#/$defs/ScannerKind",
           "default": "osv",
@@ -749,6 +791,10 @@
         "osv_endpoint": null,
         "quarantine": false,
         "recorrelation_interval_secs": 0,
+        "sbom": {
+          "enabled": false,
+          "formats": ["cyclonedx", "spdx"]
+        },
         "scanner": "osv"
       }
     },

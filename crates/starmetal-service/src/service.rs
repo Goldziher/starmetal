@@ -12,6 +12,7 @@ use async_trait::async_trait;
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
 use bytes::Bytes;
+use chrono::{SecondsFormat, Utc};
 use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey};
 use futures::stream::{self, StreamExt};
 use pkcs8::{
@@ -30,16 +31,18 @@ use starmetal_core::package::{
 use starmetal_core::policy::PolicyConfig;
 use starmetal_core::ports::{PackageService, PublishingService, StatisticsService, StoragePort, UpstreamClient};
 use starmetal_core::publishing::{
-    ProtocolMetadata, PublishMode, PublishRecord, PublishRequest, PublishResult, PublishSource, YankRequest,
+    ProtocolMetadata, PublishMode, PublishRecord, PublishRequest, PublishResult, PublishSource, PublishedArtifact,
+    YankRequest,
 };
+use starmetal_core::sbom::{self, SbomHash, SbomSubject};
 use starmetal_core::signing::{
     DsseEnvelope, DsseSignature, STARMETAL_DSSE_PAYLOAD_TYPE, SignatureSource, SignatureStatement, SigningAlgorithm,
     SigningConfig, SigningKeyStatus, SigningMode,
 };
 use starmetal_core::statistics::{EcosystemStatistics, StatisticsSnapshot};
 use starmetal_core::supply_chain::{
-    QuarantineRecord, QuarantineReview, QuarantineState, RecorrelationReport, ScanReport, ScanTarget, Scanner,
-    SupplyChainMaintenance, evaluate_scan_report,
+    QuarantineRecord, QuarantineReview, QuarantineState, RecorrelationReport, Sbom, SbomFormat, SbomIndex, ScanReport,
+    ScanTarget, Scanner, SupplyChainMaintenance, evaluate_scan_report,
 };
 use zeroize::Zeroizing;
 
@@ -313,6 +316,10 @@ pub struct CachingPackageService {
     /// When true, a serve-time gate block records a digest-keyed quarantine hold (recoverable via
     /// operator promote/reject) instead of a terminal deny. Off by default (blocks are hard denials).
     quarantine: bool,
+    /// SBOM formats generated for each artifact on publish (ADR-0024). Empty (the default) disables
+    /// SBOM generation; otherwise each published artifact gets one digest-keyed SBOM sidecar per
+    /// format. Independent of the scanner — SBOMs are generated from the publish request.
+    sbom_formats: Vec<SbomFormat>,
     /// Named per-coordinate locks serializing concurrent publishes of the same
     /// `ecosystem/name/version`. `publish_package` prunes an entry once its guard drops and no other
     /// publish still holds a clone of the lock (see `prune_publish_lock`), so the map only grows with
@@ -342,6 +349,12 @@ const SCAN_REPORT_PREFIX: &str = "_starmetal/scans/";
 /// Storage key prefix under which digest-keyed quarantine records are persisted. The quarantine
 /// review API enumerates this prefix to list held artifacts.
 const QUARANTINE_PREFIX: &str = "_starmetal/quarantine/";
+
+/// Storage key prefix under which SBOM documents are persisted, keyed by the artifact's validated
+/// coordinate (ecosystem/name/version/filename) plus format — *not* its content digest, since an
+/// SBOM embeds coordinate identity and license and must not collide between two coordinates that
+/// share bytes (see `sbom_key`).
+const SBOM_PREFIX: &str = "_starmetal/sbom/";
 
 /// Bounded fan-out for the `recorrelate` re-scan sweep. Caps how many OSV lookups run concurrently
 /// so scheduled maintenance overlaps network-bound scans without unbounded fan-out to the upstream
@@ -416,6 +429,7 @@ impl CachingPackageService {
             scanner: None,
             enforce_on_serve: false,
             quarantine: false,
+            sbom_formats: Vec::new(),
             publish_locks: Mutex::new(AHashMap::new()),
         }
     }
@@ -436,6 +450,7 @@ impl CachingPackageService {
             scanner: None,
             enforce_on_serve: false,
             quarantine: false,
+            sbom_formats: Vec::new(),
             publish_locks: Mutex::new(AHashMap::new()),
         }
     }
@@ -472,6 +487,13 @@ impl CachingPackageService {
         self
     }
 
+    /// Enable SBOM generation for the given formats (ADR-0024). Each published artifact then gets one
+    /// digest-keyed SBOM sidecar per format. An empty list (the default) disables generation.
+    pub fn with_sbom_formats(mut self, formats: Vec<SbomFormat>) -> Self {
+        self.sbom_formats = formats;
+        self
+    }
+
     /// Storage key for an artifact's quarantine record, addressed by its blake3 digest.
     fn quarantine_record_key(blake3: &str) -> String {
         format!("{QUARANTINE_PREFIX}{blake3}.json")
@@ -481,6 +503,71 @@ impl CachingPackageService {
     /// identical bytes (across ecosystems/coordinates) share a single report ("scan once").
     fn scan_report_key(blake3: &str) -> String {
         format!("{SCAN_REPORT_PREFIX}{blake3}.json")
+    }
+
+    /// Storage key for an artifact's SBOM document in `format`, addressed by the artifact's validated
+    /// coordinate storage key (ecosystem/name/version/filename) — *not* its content digest. An SBOM
+    /// embeds coordinate identity and license, so two coordinates sharing bytes must not collide on
+    /// one document; coordinate-keying also inherits the artifact key's traversal validation.
+    fn sbom_key(artifact_key: &str, format: SbomFormat) -> String {
+        format!("{SBOM_PREFIX}{artifact_key}.{format}.json")
+    }
+
+    /// Build the SBOM subject for one published artifact: the package coordinate, its declared
+    /// license, and its content hashes (blake3 plus any upstream hashes, sorted for determinism).
+    fn sbom_subject(request: &PublishRequest, artifact: &PublishedArtifact, blake3: &str) -> SbomSubject {
+        let mut hashes = vec![SbomHash {
+            algorithm: "BLAKE3".to_string(),
+            value: blake3.to_string(),
+        }];
+        let mut upstream: Vec<SbomHash> = artifact
+            .upstream_hashes
+            .iter()
+            .filter_map(|(algorithm, value)| {
+                cyclonedx_hash_algorithm(algorithm).map(|label| SbomHash {
+                    algorithm: label.to_string(),
+                    value: value.clone(),
+                })
+            })
+            .collect();
+        upstream.sort_by(|left, right| left.algorithm.cmp(&right.algorithm));
+        hashes.extend(upstream);
+
+        SbomSubject {
+            ecosystem: request.ecosystem,
+            name: request.name.as_str().to_string(),
+            version: request.version.clone(),
+            license: request.license.clone(),
+            hashes,
+            // Per-ecosystem dependency enumeration from protocol metadata is a separate concern; the
+            // generator is dependency-ready and this list stays empty until a caller supplies one.
+            dependencies: Vec::new(),
+        }
+    }
+
+    /// Generate and stage one SBOM sidecar per configured format for a published artifact. A no-op
+    /// when SBOM generation is disabled (`sbom_formats` empty). Staged via `put_and_track` so a
+    /// publish rollback removes the documents.
+    async fn store_sbom_documents(
+        &self,
+        request: &PublishRequest,
+        artifact: &PublishedArtifact,
+        blake3: &str,
+        artifact_key: &str,
+        created_at: &str,
+        staged_writes: &mut Vec<StagedWrite>,
+    ) -> Result<()> {
+        if self.sbom_formats.is_empty() {
+            return Ok(());
+        }
+        let subject = Self::sbom_subject(request, artifact, blake3);
+        for format in &self.sbom_formats {
+            let document = sbom::generate(&subject, *format, created_at);
+            let bytes = Bytes::from(serde_json::to_vec(&document)?);
+            self.put_and_track(&Self::sbom_key(artifact_key, *format), bytes, staged_writes)
+                .await?;
+        }
+        Ok(())
     }
 
     /// Enforce the serve-time vulnerability gate for one artifact's bytes. A no-op unless a scanner is
@@ -1375,6 +1462,13 @@ impl PublishingService for CachingPackageService {
         // stored (digest-keyed) so the serve-time gate finds them without re-scanning.
         let scan_reports = self.scan_artifacts_for_publish(&request, &blake3_digests).await?;
 
+        // One creation timestamp for every SBOM this publish emits (empty when SBOM is disabled).
+        let sbom_created_at = if self.sbom_formats.is_empty() {
+            String::new()
+        } else {
+            Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
+        };
+
         let result = async {
             for (blake3, persisted) in &scan_reports {
                 self.put_and_track(
@@ -1425,6 +1519,9 @@ impl PublishingService for CachingPackageService {
                     self.sign_and_store_statement(statement, &sidecar_key, &bundle_key, &mut staged_keys)
                         .await?;
                 }
+
+                self.store_sbom_documents(&request, artifact, blake3, &key, &sbom_created_at, &mut staged_keys)
+                    .await?;
             }
 
             let metadata_bytes = Bytes::from(serde_json::to_vec(&metadata)?);
@@ -1729,6 +1826,47 @@ impl CachingPackageService {
 /// summaries and logs (not a storage key).
 fn coordinate_label(artifact: &ArtifactId) -> String {
     format!("{}/{}/{}", artifact.ecosystem, artifact.name.as_str(), artifact.version)
+}
+
+#[async_trait]
+impl SbomIndex for CachingPackageService {
+    async fn list_sboms(&self, artifact: &ArtifactId) -> Result<Vec<Sbom>> {
+        let artifact_key = artifact.validated_storage_key()?.into_string();
+        // The artifact's blake3 (its SBOM subject digest) is the sidecar written beside the bytes.
+        let subject_digest = match self.storage.get(&format!("{artifact_key}.blake3")).await? {
+            Some(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
+            None => String::new(),
+        };
+        let mut sboms = Vec::new();
+        for format in [SbomFormat::CycloneDx, SbomFormat::Spdx] {
+            if let Some(bytes) = self.storage.get(&Self::sbom_key(&artifact_key, format)).await? {
+                sboms.push(Sbom {
+                    format,
+                    subject_digest: subject_digest.clone(),
+                    document_digest: integrity::blake3_hex(&bytes),
+                    media_type: sbom::media_type(format).to_string(),
+                });
+            }
+        }
+        Ok(sboms)
+    }
+
+    async fn get_sbom_document(&self, artifact: &ArtifactId, format: SbomFormat) -> Result<Option<Bytes>> {
+        let artifact_key = artifact.validated_storage_key()?.into_string();
+        self.storage.get(&Self::sbom_key(&artifact_key, format)).await
+    }
+}
+
+/// Map an upstream hash algorithm label (as advertised by a registry, e.g. `sha256`) to the
+/// CycloneDX spelling, or `None` for an algorithm the SBOM formats do not define.
+fn cyclonedx_hash_algorithm(upstream_algorithm: &str) -> Option<&'static str> {
+    match upstream_algorithm.to_ascii_lowercase().as_str() {
+        "sha256" | "sha-256" => Some("SHA-256"),
+        "sha512" | "sha-512" => Some("SHA-512"),
+        "sha1" | "sha-1" => Some("SHA-1"),
+        "md5" => Some("MD5"),
+        _ => None,
+    }
 }
 
 fn unix_now() -> u64 {
@@ -2420,6 +2558,179 @@ mod tests {
         assert_eq!(record.source, PublishSource::Local);
         assert!(!record.yanked);
         assert!(record.listed);
+    }
+
+    #[tokio::test]
+    async fn publish_generates_and_stores_sbom_documents_when_enabled() {
+        let storage = Arc::new(MockStorage::new());
+        let service = CachingPackageService::new(storage.clone(), AHashMap::new(), PolicyConfig::default())
+            .with_sbom_formats(vec![SbomFormat::CycloneDx, SbomFormat::Spdx]);
+        let artifact_data = Bytes::from_static(b"published artifact for sbom");
+        let blake3 = integrity::blake3_hex(&artifact_data);
+        let request = PublishRequest {
+            ecosystem: Ecosystem::Npm,
+            name: PackageName::new("left-pad"),
+            version: "1.3.0".to_string(),
+            license: Some("MIT".to_string()),
+            yanked: false,
+            listed: true,
+            artifacts: vec![PublishedArtifact {
+                filename: "left-pad-1.3.0.tgz".to_string(),
+                data: artifact_data.clone(),
+                upstream_hashes: AHashMap::new(),
+            }],
+            protocol_metadata: ProtocolMetadata::default_for(Ecosystem::Npm),
+            allow_overwrite: false,
+            allow_shadowing: false,
+        };
+        service.publish_package(request).await.unwrap();
+
+        let artifact_id = ArtifactId {
+            ecosystem: Ecosystem::Npm,
+            name: PackageName::new("left-pad"),
+            version: "1.3.0".to_string(),
+            filename: "left-pad-1.3.0.tgz".to_string(),
+        };
+        let artifact_key = artifact_id.validated_storage_key().unwrap().into_string();
+
+        // Both SBOM sidecars are stored, coordinate-keyed, and the CycloneDX document is well-formed.
+        let cyclonedx = storage
+            .get(&format!("_starmetal/sbom/{artifact_key}.cyclonedx.json"))
+            .await
+            .unwrap()
+            .expect("cyclonedx sbom stored");
+        let document: serde_json::Value = serde_json::from_slice(&cyclonedx).unwrap();
+        assert_eq!(document["bomFormat"], "CycloneDX");
+        assert_eq!(document["metadata"]["component"]["purl"], "pkg:npm/left-pad@1.3.0");
+        assert_eq!(document["metadata"]["component"]["hashes"][0]["alg"], "BLAKE3");
+        assert_eq!(document["metadata"]["component"]["hashes"][0]["content"], blake3);
+        assert!(
+            storage
+                .get(&format!("_starmetal/sbom/{artifact_key}.spdx.json"))
+                .await
+                .unwrap()
+                .is_some(),
+            "spdx sbom stored"
+        );
+
+        // The SbomIndex port lists both formats for the coordinate and fetches the stored bytes.
+        let records = service.list_sboms(&artifact_id).await.unwrap();
+        assert_eq!(records.len(), 2, "one record per configured format");
+        assert_eq!(
+            records[0].subject_digest, blake3,
+            "record carries the artifact's blake3 subject"
+        );
+        let fetched = service
+            .get_sbom_document(&artifact_id, SbomFormat::CycloneDx)
+            .await
+            .unwrap();
+        assert_eq!(fetched, Some(cyclonedx));
+    }
+
+    #[tokio::test]
+    async fn publish_stores_no_sbom_when_disabled() {
+        let storage = Arc::new(MockStorage::new());
+        let service = CachingPackageService::new(storage, AHashMap::new(), PolicyConfig::default());
+        let artifact_data = Bytes::from_static(b"no sbom please");
+        let request = PublishRequest {
+            ecosystem: Ecosystem::PyPI,
+            name: PackageName::new("sample"),
+            version: "1.0.0".to_string(),
+            license: None,
+            yanked: false,
+            listed: true,
+            artifacts: vec![PublishedArtifact {
+                filename: "sample-1.0.0.tar.gz".to_string(),
+                data: artifact_data,
+                upstream_hashes: AHashMap::new(),
+            }],
+            protocol_metadata: ProtocolMetadata::default_for(Ecosystem::PyPI),
+            allow_overwrite: false,
+            allow_shadowing: false,
+        };
+        service.publish_package(request).await.unwrap();
+        let artifact_id = ArtifactId {
+            ecosystem: Ecosystem::PyPI,
+            name: PackageName::new("sample"),
+            version: "1.0.0".to_string(),
+            filename: "sample-1.0.0.tar.gz".to_string(),
+        };
+        assert!(
+            service.list_sboms(&artifact_id).await.unwrap().is_empty(),
+            "no sbom generated when disabled"
+        );
+    }
+
+    #[tokio::test]
+    async fn identical_bytes_under_two_coordinates_keep_distinct_sboms() {
+        let storage = Arc::new(MockStorage::new());
+        let service = CachingPackageService::new(storage, AHashMap::new(), PolicyConfig::default())
+            .with_sbom_formats(vec![SbomFormat::CycloneDx]);
+        let shared_bytes = Bytes::from_static(b"identical bytes across two coordinates");
+
+        let publish = |name: &str, version: &str, filename: &str, license: &str| PublishRequest {
+            ecosystem: Ecosystem::Npm,
+            name: PackageName::new(name),
+            version: version.to_string(),
+            license: Some(license.to_string()),
+            yanked: false,
+            listed: true,
+            artifacts: vec![PublishedArtifact {
+                filename: filename.to_string(),
+                data: shared_bytes.clone(),
+                upstream_hashes: AHashMap::new(),
+            }],
+            protocol_metadata: ProtocolMetadata::default_for(Ecosystem::Npm),
+            allow_overwrite: false,
+            allow_shadowing: false,
+        };
+
+        // Two distinct coordinates publish byte-identical artifacts with different licenses; the
+        // second must not overwrite the first's SBOM (the digest-keying bug the audit caught).
+        service
+            .publish_package(publish("real-lib", "1.0.0", "real-lib-1.0.0.tgz", "MIT"))
+            .await
+            .unwrap();
+        service
+            .publish_package(publish("impostor", "9.9.9", "impostor-9.9.9.tgz", "GPL-3.0"))
+            .await
+            .unwrap();
+
+        let real = ArtifactId {
+            ecosystem: Ecosystem::Npm,
+            name: PackageName::new("real-lib"),
+            version: "1.0.0".to_string(),
+            filename: "real-lib-1.0.0.tgz".to_string(),
+        };
+        let impostor = ArtifactId {
+            ecosystem: Ecosystem::Npm,
+            name: PackageName::new("impostor"),
+            version: "9.9.9".to_string(),
+            filename: "impostor-9.9.9.tgz".to_string(),
+        };
+
+        let real_doc = service
+            .get_sbom_document(&real, SbomFormat::CycloneDx)
+            .await
+            .unwrap()
+            .expect("real sbom present");
+        let impostor_doc = service
+            .get_sbom_document(&impostor, SbomFormat::CycloneDx)
+            .await
+            .unwrap()
+            .expect("impostor sbom present");
+        assert_ne!(real_doc, impostor_doc, "each coordinate keeps its own SBOM");
+
+        let real_json: serde_json::Value = serde_json::from_slice(&real_doc).unwrap();
+        assert_eq!(
+            real_json["metadata"]["component"]["licenses"][0]["license"]["name"], "MIT",
+            "the original SBOM still declares MIT, not the impostor's license"
+        );
+        let impostor_json: serde_json::Value = serde_json::from_slice(&impostor_doc).unwrap();
+        assert_eq!(
+            impostor_json["metadata"]["component"]["licenses"][0]["license"]["name"],
+            "GPL-3.0"
+        );
     }
 
     #[tokio::test]

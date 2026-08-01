@@ -336,6 +336,38 @@ pub struct SupplyChainConfig {
     /// denials. Only effective with `enforce_on_serve` and a scanner attached.
     #[serde(default)]
     pub quarantine: bool,
+    /// SBOM generation controls. When enabled, each published artifact gets an SBOM document per
+    /// configured format, stored digest-keyed and retrievable via the admin API.
+    #[serde(default)]
+    pub sbom: SbomConfig,
+}
+
+/// SBOM generation controls (ADR-0024). Independent of the scanner: SBOMs are generated from the
+/// publish request, so this needs no scanner feature or backend.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct SbomConfig {
+    /// Generate and store SBOM documents on publish. Off by default.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Formats to generate for each artifact. Defaults to both CycloneDX and SPDX.
+    #[serde(default = "default_sbom_formats")]
+    pub formats: Vec<crate::supply_chain::SbomFormat>,
+}
+
+impl Default for SbomConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            formats: default_sbom_formats(),
+        }
+    }
+}
+
+fn default_sbom_formats() -> Vec<crate::supply_chain::SbomFormat> {
+    vec![
+        crate::supply_chain::SbomFormat::CycloneDx,
+        crate::supply_chain::SbomFormat::Spdx,
+    ]
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

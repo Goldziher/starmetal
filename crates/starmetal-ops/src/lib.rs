@@ -11,7 +11,7 @@ use starmetal_core::error::{Result, StarmetalError};
 use starmetal_core::package::{ArtifactId, Ecosystem, PackageName, VersionMetadata};
 use starmetal_core::ports::{PackageService, PublishingService, StatisticsService, StoragePort, UpstreamClient};
 use starmetal_core::publishing::{ProtocolMetadata, PublishRequest, PublishedArtifact, YankRequest};
-use starmetal_core::supply_chain::{QuarantineReview, SupplyChainMaintenance};
+use starmetal_core::supply_chain::{QuarantineReview, SbomIndex, SupplyChainMaintenance};
 use starmetal_server::state::{AppState, UpstreamClients};
 use starmetal_service::{CachingPackageService, SigningService};
 use starmetal_storage::OpenDalStorage;
@@ -98,6 +98,9 @@ pub struct StarmetalRuntime {
     /// condition as [`content_maintenance`] (the content model is attached); backs the
     /// `/api/v1/components` listing endpoint, which pushes an authorizer predicate into the store.
     pub content_browse: Option<Arc<dyn ContentBrowse>>,
+    /// SBOM retrieval handle (ADR-0024). `Some` when `supply_chain.sbom.enabled`; backs the admin
+    /// SBOM list/fetch endpoints. Independent of the scanner.
+    pub sbom: Option<Arc<dyn SbomIndex>>,
 }
 
 /// Attach a Postgres-backed content store (ADR-0020) to the service when `metadata.enabled`, so
@@ -205,6 +208,13 @@ impl StarmetalRuntime {
         let content_browse: Option<Arc<dyn ContentBrowse>> = None;
         #[cfg(feature = "scanner-osv")]
         let service = attach_scanner(service, &config);
+        // SBOM generation is independent of the scanner (pure generation from the publish request),
+        // so it attaches unconditionally when enabled — no scanner feature required.
+        let service = if config.supply_chain.sbom.enabled {
+            service.with_sbom_formats(config.supply_chain.sbom.formats.clone())
+        } else {
+            service
+        };
         let service = Arc::new(service);
 
         // Expose the supply-chain handles (re-correlation + quarantine review) only when a scanner is
@@ -224,6 +234,13 @@ impl StarmetalRuntime {
         let maintenance: Option<Arc<dyn SupplyChainMaintenance>> = None;
         #[cfg(not(feature = "scanner-osv"))]
         let quarantine: Option<Arc<dyn QuarantineReview>> = None;
+
+        // SBOM retrieval is exposed whenever SBOM generation is enabled — independent of the scanner.
+        let sbom: Option<Arc<dyn SbomIndex>> = config
+            .supply_chain
+            .sbom
+            .enabled
+            .then(|| service.clone() as Arc<dyn SbomIndex>);
 
         let upstreams = UpstreamClients {
             #[cfg(feature = "pypi")]
@@ -255,6 +272,7 @@ impl StarmetalRuntime {
             quarantine,
             content_maintenance,
             content_browse,
+            sbom,
         })
     }
 
@@ -363,6 +381,7 @@ impl StarmetalRuntime {
         .with_quarantine(self.quarantine.clone())
         .with_content_maintenance(self.content_maintenance.clone())
         .with_content_browse(self.content_browse.clone())
+        .with_sbom(self.sbom.clone())
     }
 
     pub fn status(&self) -> RuntimeStatus {

@@ -407,6 +407,22 @@ pub struct Sbom {
     pub media_type: String,
 }
 
+/// Read-only access to stored SBOM documents (ADR-0024).
+///
+/// SBOMs are generated on publish and persisted as sidecars keyed by the artifact's **coordinate**
+/// (ecosystem/name/version/filename) via the object store — not by content digest, because an SBOM
+/// embeds the coordinate's identity and license, which differ between two coordinates that happen to
+/// share bytes. This port lets the admin API enumerate and fetch them without exposing the byte
+/// store directly. Held behind `Arc<dyn SbomIndex>`, so it is object-safe.
+#[async_trait]
+pub trait SbomIndex: Send + Sync {
+    /// List the SBOM records stored for one artifact coordinate (one per format present).
+    async fn list_sboms(&self, artifact: &ArtifactId) -> Result<Vec<Sbom>>;
+
+    /// Fetch a stored SBOM document's bytes for `(artifact, format)`, or `None` if absent.
+    async fn get_sbom_document(&self, artifact: &ArtifactId, format: SbomFormat) -> Result<Option<Bytes>>;
+}
+
 /// The kind of accessory artifact a [`Referrer`] links to its subject.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]

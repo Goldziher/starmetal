@@ -189,6 +189,53 @@ async fn admin_gc_and_retention_endpoints_enforce_auth_and_report_disabled_witho
 }
 
 #[tokio::test]
+async fn admin_sbom_endpoints_enforce_auth_and_report_disabled_without_generation() {
+    let server = TestServer::start_with_admin().await;
+    let client = reqwest::Client::new();
+    let base = server.base_url();
+    let coordinate = "ecosystem=npm&name=left-pad&version=1.3.0&filename=left-pad-1.3.0.tgz";
+
+    // Listing requires the admin bearer token.
+    let response = client
+        .get(format!("{base}/admin/api/v1/sbom?{coordinate}"))
+        .send()
+        .await
+        .expect("request failed");
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    // With SBOM generation disabled (no [supply_chain].sbom), the endpoint reports it disabled (404).
+    let response = client
+        .get(format!("{base}/admin/api/v1/sbom?{coordinate}"))
+        .bearer_auth("admin-token")
+        .send()
+        .await
+        .expect("request failed");
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+    // A traversal-shaped filename is rejected as a malformed coordinate (400) before the handle check.
+    let response = client
+        .get(format!(
+            "{base}/admin/api/v1/sbom?ecosystem=npm&name=left-pad&version=1.3.0&filename=..%2f..%2fconfig"
+        ))
+        .bearer_auth("admin-token")
+        .send()
+        .await
+        .expect("request failed");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    // The document endpoint rejects an unknown format (serde-deserialized enum) as a bad request.
+    let response = client
+        .get(format!("{base}/admin/api/v1/sbom/document?{coordinate}&format=tar"))
+        .bearer_auth("admin-token")
+        .send()
+        .await
+        .expect("request failed");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    server.shutdown();
+}
+
+#[tokio::test]
 async fn admin_quarantine_promote_rejects_a_path_traversal_shaped_digest() {
     let server = TestServer::start_with_admin().await;
     let client = reqwest::Client::new();

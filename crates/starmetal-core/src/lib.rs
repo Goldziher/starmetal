@@ -10,6 +10,7 @@ pub mod ports;
 pub mod publishing;
 pub mod registry;
 pub mod repository;
+pub mod sbom;
 pub mod signing;
 pub mod statistics;
 pub mod supply_chain;

@@ -10,8 +10,8 @@ use crate::state::AppState;
 use starmetal_authz::default_namespace;
 use starmetal_core::authz::{Action, Authorizer, Resource};
 use starmetal_core::content::ContentMaintenance;
-use starmetal_core::package::{Ecosystem, PackageName};
-use starmetal_core::supply_chain::QuarantineReview;
+use starmetal_core::package::{ArtifactId, Ecosystem, PackageName};
+use starmetal_core::supply_chain::{QuarantineReview, SbomFormat, SbomIndex};
 
 #[derive(Debug, Serialize)]
 struct AdminStatus {
@@ -51,6 +51,23 @@ struct MetadataQuery {
     version: String,
 }
 
+#[derive(Debug, serde::Deserialize)]
+struct SbomQuery {
+    ecosystem: Ecosystem,
+    name: String,
+    version: String,
+    filename: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct SbomDocumentQuery {
+    ecosystem: Ecosystem,
+    name: String,
+    version: String,
+    filename: String,
+    format: SbomFormat,
+}
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/status", get(status))
@@ -65,6 +82,8 @@ pub fn router() -> Router<AppState> {
         .route("/quarantine/{digest}/reject", post(quarantine_reject))
         .route("/gc", post(trigger_gc))
         .route("/retention", post(trigger_retention))
+        .route("/sbom", get(sbom_list))
+        .route("/sbom/document", get(sbom_document))
 }
 
 async fn status(State(state): State<AppState>, headers: HeaderMap) -> Result<impl IntoResponse, (StatusCode, String)> {
@@ -201,6 +220,69 @@ async fn trigger_retention(
     let maintenance = content_maintenance_handle(&state)?;
     let report = maintenance.retention_sweep().await.map_err(map_admin_error)?;
     Ok(Json(report))
+}
+
+async fn sbom_list(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<SbomQuery>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    authorize_admin(&state, &headers).await?;
+    let artifact = validated_artifact(query.ecosystem, query.name, query.version, query.filename)?;
+    let sbom = sbom_handle(&state)?;
+    let records = sbom.list_sboms(&artifact).await.map_err(map_admin_error)?;
+    Ok(Json(records))
+}
+
+async fn sbom_document(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<SbomDocumentQuery>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    authorize_admin(&state, &headers).await?;
+    let artifact = validated_artifact(query.ecosystem, query.name, query.version, query.filename)?;
+    let sbom = sbom_handle(&state)?;
+    let document = sbom
+        .get_sbom_document(&artifact, query.format)
+        .await
+        .map_err(map_admin_error)?
+        .ok_or((
+            StatusCode::NOT_FOUND,
+            "no SBOM document for this artifact and format".to_string(),
+        ))?;
+    Ok((
+        [(header::CONTENT_TYPE, starmetal_core::sbom::media_type(query.format))],
+        document,
+    ))
+}
+
+/// The SBOM retrieval handle, or a 404 when SBOM generation is disabled (`supply_chain.sbom.enabled`
+/// unset), mirroring the other optional-handle accessors.
+fn sbom_handle(state: &AppState) -> Result<&std::sync::Arc<dyn SbomIndex>, (StatusCode, String)> {
+    state
+        .sbom
+        .as_ref()
+        .ok_or((StatusCode::NOT_FOUND, "SBOM generation is not enabled".to_string()))
+}
+
+/// Build an [`ArtifactId`] from query parameters and validate its coordinate, rejecting a malformed
+/// coordinate (e.g. a path-traversal name/version/filename) as a 400 before any storage-key use.
+fn validated_artifact(
+    ecosystem: Ecosystem,
+    name: String,
+    version: String,
+    filename: String,
+) -> Result<ArtifactId, (StatusCode, String)> {
+    let artifact = ArtifactId {
+        ecosystem,
+        name: PackageName::new(name),
+        version,
+        filename,
+    };
+    artifact
+        .validated_storage_key()
+        .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))?;
+    Ok(artifact)
 }
 
 /// The metadata-maintenance handle, or a 404 when `metadata.enabled` is unset (the content model
