@@ -1,6 +1,8 @@
-//! Migration-equivalence tests (ADR-0022 Stage 3A): the `LocalAuthorizer` decisions must match the
-//! legacy `Config::authorize_*` predicates they replace, so wiring the authorizer into the
-//! enforcement seams preserves the behavior of existing flat/admin/publish tokens.
+//! Config-migration behavior tests (ADR-0022 Stage 3A + N1): the `LocalAuthorizer` built by
+//! `from_config` must grant exactly the access the legacy flat/admin/publish token sections did.
+//! These originally cross-checked the `Config::authorize_*` predicates; those predicates were
+//! removed once the read, publish, and admin paths all migrated onto the `Authorizer` port, so the
+//! authorizer's decisions are now the sole specification and these tests lock them.
 
 use starmetal_authz::{LocalAuthorizer, default_namespace};
 use starmetal_core::authz::{Action, Authorizer, Coordinate, Resource};
@@ -59,34 +61,26 @@ async fn allows(authorizer: &LocalAuthorizer, token: &str, action: Action, resou
 }
 
 #[tokio::test]
-async fn admin_token_authorizes_admin_exactly_where_the_legacy_predicate_did() {
-    let config = config();
-    let authorizer = LocalAuthorizer::from_config(&config);
+async fn admin_token_authorizes_only_the_admin_principal() {
+    let authorizer = LocalAuthorizer::from_config(&config());
     let resource = namespace_resource();
 
-    // The admin token clears the admin gate under both the legacy predicate and the authorizer.
-    assert!(config.authorize_admin_token("adm"));
+    // The admin token clears the admin gate; flat and publish tokens never had admin-API access.
     assert!(allows(&authorizer, "adm", Action::Admin, &resource).await);
-
-    // Flat and publish tokens never had admin-API access, and still do not.
-    assert!(!config.authorize_admin_token("flat"));
     assert!(!allows(&authorizer, "flat", Action::Admin, &resource).await);
-    assert!(!config.authorize_admin_token("pub"));
     assert!(!allows(&authorizer, "pub", Action::Admin, &resource).await);
 
-    // An unknown token is denied by both.
-    assert!(!config.authorize_admin_token("nope"));
+    // An unknown token authenticates to no principal and is denied.
     assert!(!allows(&authorizer, "nope", Action::Admin, &resource).await);
 }
 
 #[tokio::test]
-async fn flat_bearer_token_still_reads_and_browses() {
-    let config = config();
-    let authorizer = LocalAuthorizer::from_config(&config);
+async fn flat_bearer_token_reads_and_browses_but_never_writes() {
+    let authorizer = LocalAuthorizer::from_config(&config());
     let resource = namespace_resource();
 
-    // Legacy: the flat token was a valid read/proxy bearer token.
-    assert!(config.authorize_bearer_token("flat"));
+    // The read middleware (N1) requires the read action on the namespace resource; the flat token
+    // must clear both read and browse, exactly as the legacy bearer gate allowed.
     assert!(allows(&authorizer, "flat", Action::Read, &resource).await);
     assert!(allows(&authorizer, "flat", Action::Browse, &resource).await);
 
@@ -97,15 +91,20 @@ async fn flat_bearer_token_still_reads_and_browses() {
 }
 
 #[tokio::test]
-async fn publish_token_authorizes_add_exactly_where_the_legacy_predicate_did() {
-    let config = config();
-    let authorizer = LocalAuthorizer::from_config(&config);
+async fn admin_token_also_clears_the_read_gate() {
+    // The legacy read gate was `bearer || admin`; the admin principal must therefore still read.
+    let authorizer = LocalAuthorizer::from_config(&config());
+    assert!(allows(&authorizer, "adm", Action::Read, &namespace_resource()).await);
 
-    let left_pad = PackageName::new("left-pad");
-    let other = PackageName::new("other");
+    // A publish-only token was in neither the bearer nor admin section, so it is denied read.
+    assert!(!allows(&authorizer, "pub", Action::Read, &namespace_resource()).await);
+}
+
+#[tokio::test]
+async fn publish_token_authorizes_add_only_within_scope() {
+    let authorizer = LocalAuthorizer::from_config(&config());
 
     // In scope: publish (Add) of the exact ecosystem+package the token names.
-    assert!(config.authorize_publish_token("pub", TokenScope::Publish, Ecosystem::Npm, &left_pad));
     assert!(
         allows(
             &authorizer,
@@ -117,7 +116,6 @@ async fn publish_token_authorizes_add_exactly_where_the_legacy_predicate_did() {
     );
 
     // Out of scope: a different package, a different ecosystem, or a non-granted action.
-    assert!(!config.authorize_publish_token("pub", TokenScope::Publish, Ecosystem::Npm, &other));
     assert!(
         !allows(
             &authorizer,
@@ -127,7 +125,6 @@ async fn publish_token_authorizes_add_exactly_where_the_legacy_predicate_did() {
         )
         .await
     );
-    assert!(!config.authorize_publish_token("pub", TokenScope::Publish, Ecosystem::PyPI, &left_pad));
     assert!(
         !allows(
             &authorizer,
@@ -149,14 +146,9 @@ async fn publish_token_authorizes_add_exactly_where_the_legacy_predicate_did() {
 }
 
 #[tokio::test]
-async fn disabled_sections_deny_everything() {
-    // A default config enables nothing: no token authenticates, mirroring the legacy predicates.
-    let config = Config::default();
-    let authorizer = LocalAuthorizer::from_config(&config);
-    let resource = namespace_resource();
-
-    assert!(!config.authorize_admin_token("adm"));
-    assert!(!config.authorize_bearer_token("flat"));
+async fn a_default_config_denies_everything() {
+    // A default config enables no token section: nothing authenticates, so every gate denies.
+    let authorizer = LocalAuthorizer::from_config(&Config::default());
     assert!(authorizer.authenticate("adm").is_none());
-    assert!(!allows(&authorizer, "flat", Action::Read, &resource).await);
+    assert!(!allows(&authorizer, "flat", Action::Read, &namespace_resource()).await);
 }

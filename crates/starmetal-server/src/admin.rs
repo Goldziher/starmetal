@@ -264,8 +264,13 @@ async fn authorize_admin(state: &AppState, headers: &HeaderMap) -> Result<(), (S
         if let Ok(decision) = state.authorizer.authorize(&principal, Action::Admin, &resource).await
             && decision.is_allowed()
         {
+            // Audit every admin action (OWASP A09): rare and high-value, so logged at info. ~keep
+            tracing::info!(target: "starmetal::audit", principal = %principal.id(), action = "admin", decision = "allow", "admin action authorized");
             return Ok(());
         }
+        tracing::warn!(target: "starmetal::audit", principal = %principal.id(), action = "admin", decision = "deny", "admin action denied by authorizer");
+    } else {
+        tracing::warn!(target: "starmetal::audit", action = "admin", decision = "deny", "unauthenticated admin request");
     }
 
     Err((

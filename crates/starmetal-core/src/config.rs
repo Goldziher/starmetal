@@ -5,7 +5,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Result, StarmetalError};
-use crate::package::{Ecosystem, PackageName};
+use crate::package::Ecosystem;
 use crate::policy::PolicyConfig;
 use crate::publishing::{PublishMode, PublishTokenConfig, TokenScope};
 use crate::repository::RepositoryKind;
@@ -568,33 +568,6 @@ impl Config {
         redact_signing_config(&mut value);
         value
     }
-
-    pub fn authorize_bearer_token(&self, token: &str) -> bool {
-        self.auth
-            .tokens
-            .iter()
-            .any(|allowed| constant_time_eq(allowed.as_bytes(), token.as_bytes()))
-    }
-
-    pub fn authorize_admin_token(&self, token: &str) -> bool {
-        self.admin
-            .tokens
-            .iter()
-            .any(|allowed| constant_time_eq(allowed.as_bytes(), token.as_bytes()))
-    }
-
-    pub fn authorize_publish_token(
-        &self,
-        token: &str,
-        scope: TokenScope,
-        ecosystem: Ecosystem,
-        package: &PackageName,
-    ) -> bool {
-        self.publishing.tokens.iter().any(|candidate| {
-            constant_time_eq(candidate.token.as_bytes(), token.as_bytes())
-                && candidate.allows(scope, ecosystem, package)
-        })
-    }
 }
 
 impl Default for Config {
@@ -886,17 +859,6 @@ fn redact_signing_config(value: &mut toml::Value) {
             }
         }
     }
-}
-
-fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
-    let max_len = left.len().max(right.len());
-    let mut diff = left.len() ^ right.len();
-    for index in 0..max_len {
-        let left_byte = left.get(index).copied().unwrap_or(0);
-        let right_byte = right.get(index).copied().unwrap_or(0);
-        diff |= usize::from(left_byte ^ right_byte);
-    }
-    diff == 0
 }
 
 #[cfg(test)]
@@ -1210,42 +1172,6 @@ token_env = "NPM_TOKEN"
     }
 
     #[test]
-    fn scoped_publish_token_authorizes_matching_package() {
-        let config: Config = toml::from_str(
-            r#"
-[publishing]
-enabled = true
-
-[[publishing.tokens]]
-token = "publish-secret"
-scopes = ["publish"]
-ecosystems = ["pypi"]
-packages = ["sample"]
-"#,
-        )
-        .unwrap();
-
-        assert!(config.authorize_publish_token(
-            "publish-secret",
-            TokenScope::Publish,
-            Ecosystem::PyPI,
-            &PackageName::new("sample"),
-        ));
-        assert!(!config.authorize_publish_token(
-            "publish-secret",
-            TokenScope::Yank,
-            Ecosystem::PyPI,
-            &PackageName::new("sample"),
-        ));
-        assert!(!config.authorize_publish_token(
-            "publish-secret",
-            TokenScope::Publish,
-            Ecosystem::Npm,
-            &PackageName::new("sample"),
-        ));
-    }
-
-    #[test]
     fn redacted_value_hides_publishing_tokens() {
         let config: Config = toml::from_str(
             r#"
@@ -1421,21 +1347,6 @@ max_upload_bytes = 0
     }
 
     #[test]
-    fn bearer_token_authorization_uses_exact_match() {
-        let config: Config = toml::from_str(
-            r#"
-[auth]
-enabled = true
-tokens = ["secret-token"]
-"#,
-        )
-        .unwrap();
-
-        assert!(config.authorize_bearer_token("secret-token"));
-        assert!(!config.authorize_bearer_token("secret"));
-    }
-
-    #[test]
     fn resolved_repositories_derives_one_proxy_per_enabled_upstream() {
         let config = Config::default();
         let repositories = config.resolved_repositories();
@@ -1514,20 +1425,5 @@ ecosystem = "npm"
         .unwrap();
         let err = config.validate_mvp().unwrap_err().to_string();
         assert!(err.contains("duplicate repository name: dup"), "got: {err}");
-    }
-
-    #[test]
-    fn admin_token_authorization_uses_exact_match() {
-        let config: Config = toml::from_str(
-            r#"
-[admin]
-enabled = true
-tokens = ["admin-token"]
-"#,
-        )
-        .unwrap();
-
-        assert!(config.authorize_admin_token("admin-token"));
-        assert!(!config.authorize_admin_token("admin"));
     }
 }
