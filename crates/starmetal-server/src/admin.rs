@@ -215,6 +215,7 @@ async fn authorize_admin(state: &AppState, headers: &HeaderMap) -> Result<(), (S
 
     // Authenticate the bearer token to a principal, then require the config-plane `Admin` action
     // via the injected Authorizer (ADR-0022). The current config is namespace-less, so the request
+    // targets the whole default namespace. Admin-migrated tokens carry a `RepositoryAdmin` grant;
     // flat and publish tokens do not, so they are denied here exactly as before.
     if let Some(token) = token
         && let Some(principal) = state.authorizer.authenticate(token)

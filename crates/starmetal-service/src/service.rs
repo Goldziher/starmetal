@@ -1117,6 +1117,7 @@ impl PublishingService for CachingPackageService {
             ));
         }
 
+        // Serializes concurrent publishes targeting the same ecosystem/name/version coordinate;
         // held for the remainder of this function.
         let _publish_guard = self
             .acquire_publish_lock(request.ecosystem, &request.name, &request.version)
