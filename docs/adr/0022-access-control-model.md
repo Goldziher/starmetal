@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted
 
 ## Context
 
@@ -41,14 +41,18 @@ services but implemented outside the domain.
 
 ## Implemented
 
-- Flat scoped publish/yank/admin tokens (ADR-0011) are the starting point and become one `Authorizer`
-  implementation.
+- `LocalAuthorizer` implements the core `Authorizer` port (with a separate `Authenticator` port for
+  identity), deny-by-default, migrating the flat `auth`/`admin`/`publishing` tokens (ADR-0011) into the
+  grant model. It is wired into the publish path across all eight adapters and into the admin API.
 
 ## Deferred
 
+- Migrating the read-path middleware (`require_bearer_token`) off the legacy `Config::authorize_*`
+  path onto the `Authorizer` port — read-gating still uses the old scheme.
 - OIDC/SAML/LDAP delegated identity backends (design the port for them now; implement later).
 - Forge-delegated identity integration (the standalone-vs-embedded swap) — enabled by this port, not
   built here.
+- Content-selector expressions compiled to a pushed-down query predicate (ADR-0020).
 - Full audit logging (OWASP logging) beyond security-event emission.
 - A management UI for roles/permissions; TOML/admin-API configuration first.
 

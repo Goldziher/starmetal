@@ -56,7 +56,8 @@ Future browser UI direction:
 - Token management through the admin API.
 - Destructive cache operations through the admin UI.
 - Remote audit log browsing.
-- Multi-user identity, RBAC, sessions, and organizations.
+- Multi-user identity, sessions, and organizations. RBAC is superseded by ADR-0022: the admin surface
+  now authenticates and authorizes through the injected `Authorizer` port (`LocalAuthorizer`).
 
 ## Consequences
 

@@ -46,10 +46,16 @@ shared code.
 
 ## Implemented
 
-- Nothing yet; this ADR defines the target model.
+- `RepositoryKind` (`Proxy`/`Hosted`/`Group` enum) and `Config::resolved_repositories`, which derives
+  one proxy repository per enabled upstream, are live; registry-driven mounting wires these into
+  `build_app`. `RepositoryKind::Proxy` is the only kind yielded today.
 
 ## Deferred
 
+- The `ProxyFacet`/`HostedFacet`/`GroupFacet` traits and the recipe registry remain inert scaffolding —
+  no facet composition or recipe-keyed construction exists yet.
+- Extracting the existing `CachingPackageService` pull-through pipeline into the `ProxyFacet` engine.
+- The `Hosted` and `Group` repository kinds and their facets.
 - Federated/replicated multi-site repositories (Artifactory "federated" equivalent).
 - Per-member routing rules beyond ordered first-match/merge-all.
 - UI for repository composition; configuration is TOML-first initially.

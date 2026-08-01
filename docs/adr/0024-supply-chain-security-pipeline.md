@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted (partial)
 
 ## Context
 
@@ -55,11 +55,25 @@ enforced by ordered middleware on both push and pull paths, with pluggable scann
 - Blake3 integrity (ADR-0004) and the block-by-package/license/severity policy engine are the starting
   point this generalizes.
 - Experimental Ed25519 DSSE sidecars (ADR-0011) are the signing starting point.
+- The `Scanner` port and the `OsvScanner` adapter; `evaluate_scan_report`, `PolicyDecision`, and
+  `PolicyReason` drive gate decisions from scan results.
+- A vulnerability gate at both ingest (publish/cache-fill) and serve time.
+- Scan reports persisted as blake3-digest-keyed JSON sidecars (`_starmetal/scans/<digest>.json`) via
+  the `StoragePort`, re-correlated on a schedule (`SupplyChainMaintenance`).
+- Serve-time quarantine and promotion (`_starmetal/quarantine/<digest>.json`), with admin endpoints to
+  inspect and promote quarantined artifacts.
 
 ## Deferred
 
-- Bundling a specific scanner; the port ships first, with an initial adapter (Trivy or OSV) behind a
-  feature flag. Keep scanners external and swappable (no vendored CVE database in core).
+- The ordered Tower-layer pipeline assembly described in this ADR's Decision. Enforcement today is
+  **imperative in-service gating** inside `CachingPackageService`, not a composed Tower layer stack —
+  ADR-0025 records the as-built enforcement architecture and the reasoning for this divergence.
+- Ingest-time quarantine: ingest currently hard-denies failing artifacts rather than holding them for
+  approval.
+- SBOM generation (CycloneDX/SPDX types exist; no generator).
+- The signature/provenance gate (Referrer/Attestation types exist; unconsumed).
+- Bundling a specific scanner beyond OSV; keep scanners external and swappable (no vendored CVE
+  database in core).
 - Keyless Sigstore (Fulcio/Rekor) verification and Starmetal-published transparency for re-hosted
   artifacts — verify supplied signatures first.
 - Protocol-native and post-quantum signing claims remain gated by ADR-0011 until clients verify them

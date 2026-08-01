@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted
 
 ## Context
 
@@ -49,14 +49,22 @@ Adopt a three-level universal content model with content-addressed storage and r
 
 ## Implemented
 
-- Nothing yet; ADR-0004 (Blake3 sidecars) is the current integrity mechanism this evolves.
+- `starmetal-metadata`'s `PostgresContentStore` implements the `Component → Asset → Blob` model with
+  Blake3 content-addressed dedup and publish-path dual-write; reads verify integrity against the
+  stored digest.
+- Reference-counted GC (`run_gc_sweep`: mark unreferenced blobs → soft-delete with a grace window →
+  compact) and retention (`apply_retention`, union-of-rules across the configured policies) are wired
+  to scheduled tasks (`metadata.gc_interval_secs`, `metadata.retention_interval_secs`) and to admin
+  `POST /gc` and `POST /retention` triggers.
 
 ## Deferred
 
+- Per-repository or per-ecosystem retention policies — one global `metadata.retention` policy applies
+  today.
 - Physical per-ecosystem table partitioning (Nexus's `${format}_*` optimization) — start with a single
   set of tables discriminated by ecosystem; partition only if scale requires.
-- A relational metadata store choice (embedded vs external) is scoped by a follow-up; the model is
-  store-agnostic. Prefer an embedded default (per Zot's lean posture) over a mandatory external DB.
+- An embedded-database option; Postgres is the only backing store today. Prefer an embedded default
+  (per Zot's lean posture) over a mandatory external DB.
 - Cross-repository (global) dedup versus per-repository dedup boundary.
 
 ## Consequences

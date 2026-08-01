@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted
 
 ## Context
 
@@ -42,6 +42,17 @@ Explicitly out of scope: pull requests, issue tracking, CI/CD, code review, and 
 hosting UI. Where deep forge integration is valuable (e.g. build-to-artifact provenance), Starmetal
 integrates behind an existing forge through the narrow identity/permission/storage contract rather
 than reimplementing a forge. This preserves the framework-free core boundary (ADR-0001).
+
+## Implemented
+
+- The first increments of ADR-0019 through ADR-0024 have landed, each behind experimental config and
+  feature flags: `RepositoryKind::Proxy` and registry-driven repository mounting (ADR-0019); metadata
+  content-store dedup, publish dual-write, and reference-counted GC/retention (ADR-0020); the publish
+  authorization seam and content-addressed dual-write (ADR-0021); the `Authorizer`/`Authenticator`
+  ports wired into publish and admin (ADR-0022); the OSV scanner, ingest/serve vulnerability gates, and
+  serve-time quarantine (ADR-0024).
+- Each capability stays experimental until it meets the promotion gates in its own ADR; landing an
+  increment does not change the support matrix (ADR-0011).
 
 ## Consequences
 

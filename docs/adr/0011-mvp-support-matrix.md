@@ -31,6 +31,10 @@ Planned registry work includes OCI/distribution, Go modules, Composer, Conda, De
 RPM/YUM. Planned registries must not be described as implemented until adapters, upstream clients,
 fixtures, and route coverage exist.
 
+Supply-chain vulnerability scanning (ADR-0024), access control (ADR-0022), and the metadata content
+model (ADR-0020) are experimental cross-cutting capabilities gated by feature flags and config, not
+per-ecosystem read/publish promotions in this matrix.
+
 Deterministic Docker proxy E2E is required evidence for the experimental read/proxy matrix. It uses
 local fixture upstreams and disposable client containers to prove route behavior, Docker
 configuration, OpenDAL filesystem storage, cache persistence, and restart behavior without public

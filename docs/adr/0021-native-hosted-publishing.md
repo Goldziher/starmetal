@@ -47,10 +47,17 @@ Promote hosted publishing to a first-class, per-ecosystem-gated capability built
 
 - Experimental local-publish substrate for all eight ecosystems (ADR-0009) is the starting point; this
   ADR restructures it onto the shared SPI and content model.
+- The publish authorization seam is consulted on the publish path across all eight adapters
+  (ADR-0022); publish writes are content-addressed dual-writes into the Stage-2 content store
+  (ADR-0020); a named lock keyed on `(ecosystem, name, version)` serializes concurrent publishes per
+  coordinate.
 
 ## Deferred
 
-- Native support claims per ecosystem until each meets ADR-0009/ADR-0011 promotion gates.
+- `HostedFacet` formalization (ADR-0019) — publishing is not yet expressed as a repository facet.
+- Two-phase (reserve-then-reconcile) quota enforcement.
+- Native support claims per ecosystem until each meets ADR-0009/ADR-0011 promotion gates, including
+  full native publish-then-install/restore E2E coverage.
 - Staging/promotion pipelines between repositories (build-promotion workflows).
 - Upstream publish forwarding.
 - Full owner/organization/audit surfaces beyond the access-control model in ADR-0022.
