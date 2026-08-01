@@ -27,6 +27,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::authz::QueryPredicate;
 use crate::error::Result;
 use crate::package::{Ecosystem, PackageName};
 
@@ -251,6 +252,55 @@ pub trait ContentStore: Send + Sync {
     /// This is the final, irreversible GC stage. It returns the digests that were reclaimed so the
     /// caller can reconcile downstream state.
     async fn compact(&self) -> Result<Vec<BlobDigest>>;
+}
+
+/// A page request for a browse query: at most `limit` rows starting at `offset`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BrowsePage {
+    /// Maximum number of components to return.
+    pub limit: u32,
+    /// Number of leading components to skip.
+    pub offset: u32,
+}
+
+impl BrowsePage {
+    /// The default page size, used when a caller does not specify one.
+    pub const DEFAULT_LIMIT: u32 = 100;
+    /// The largest page a caller may request; larger requests are clamped to it.
+    pub const MAX_LIMIT: u32 = 1000;
+
+    /// A page clamped into `1..=MAX_LIMIT` rows at `offset`.
+    pub fn new(limit: u32, offset: u32) -> Self {
+        Self {
+            limit: limit.clamp(1, Self::MAX_LIMIT),
+            offset,
+        }
+    }
+}
+
+impl Default for BrowsePage {
+    fn default() -> Self {
+        Self {
+            limit: Self::DEFAULT_LIMIT,
+            offset: 0,
+        }
+    }
+}
+
+/// Read-only listing port over the content model (ADR-0022 selector push-down).
+///
+/// Separate from [`ContentStore`] by design (least privilege): a browse/search consumer needs only
+/// to list components, never to mutate blobs or drive garbage collection. Held behind
+/// `Arc<dyn ContentBrowse>`, so it is object-safe.
+#[async_trait]
+pub trait ContentBrowse: Send + Sync {
+    /// List components matching `predicate`, ordered deterministically, paginated by `page`.
+    ///
+    /// `predicate` is the pushed-down filter carried by an [`Authorizer`](crate::authz::Authorizer)
+    /// decision: the store compiles it into a parameterized `WHERE` so authorization filters
+    /// listings *in-query* rather than post-filtering per row. [`QueryPredicate::Always`] lists
+    /// every component; [`QueryPredicate::Never`] lists none.
+    async fn browse_components(&self, predicate: &QueryPredicate, page: BrowsePage) -> Result<Vec<Component>>;
 }
 
 /// The outcome of one garbage-collection sweep (ADR-0020 Stage 2d).

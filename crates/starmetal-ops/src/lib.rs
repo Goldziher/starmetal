@@ -6,7 +6,7 @@ use bytes::Bytes;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use starmetal_core::config::{Config, DEFAULT_MAX_UPSTREAM_BYTES, UpstreamConfig};
-use starmetal_core::content::ContentMaintenance;
+use starmetal_core::content::{ContentBrowse, ContentMaintenance};
 use starmetal_core::error::{Result, StarmetalError};
 use starmetal_core::package::{ArtifactId, Ecosystem, PackageName, VersionMetadata};
 use starmetal_core::ports::{PackageService, PublishingService, StatisticsService, StoragePort, UpstreamClient};
@@ -94,6 +94,10 @@ pub struct StarmetalRuntime {
     /// under the `metadata` feature); drives the background sweeps and backs the admin
     /// `/gc` and `/retention` endpoints.
     pub content_maintenance: Option<Arc<dyn ContentMaintenance>>,
+    /// Read-only content browse handle (ADR-0022 selector push-down). `Some` under the same
+    /// condition as [`content_maintenance`] (the content model is attached); backs the
+    /// `/api/v1/components` listing endpoint, which pushes an authorizer predicate into the store.
+    pub content_browse: Option<Arc<dyn ContentBrowse>>,
 }
 
 /// Attach a Postgres-backed content store (ADR-0020) to the service when `metadata.enabled`, so
@@ -109,12 +113,16 @@ async fn attach_content_store(
     service: CachingPackageService,
     config: &Config,
     storage: Arc<dyn StoragePort>,
-) -> Result<(CachingPackageService, Option<Arc<dyn ContentMaintenance>>)> {
+) -> Result<(
+    CachingPackageService,
+    Option<Arc<dyn ContentMaintenance>>,
+    Option<Arc<dyn ContentBrowse>>,
+)> {
     use starmetal_core::content::ContentStore;
     use starmetal_metadata::{MetadataMaintenance, PostgresContentStore, create_pool};
 
     if !config.metadata.enabled {
-        return Ok((service, None));
+        return Ok((service, None, None));
     }
     let database_url = config.metadata.database_url.as_deref().ok_or_else(|| {
         StarmetalError::Config("metadata.enabled requires metadata.database_url to be set".to_string())
@@ -129,8 +137,9 @@ async fn attach_content_store(
         std::time::Duration::from_secs(config.metadata.gc_grace_secs),
         config.metadata.retention.clone(),
     )) as Arc<dyn ContentMaintenance>;
+    let browse = content_store.clone() as Arc<dyn ContentBrowse>;
     let service = service.with_content_store(content_store as Arc<dyn ContentStore>);
-    Ok((service, Some(maintenance)))
+    Ok((service, Some(maintenance), Some(browse)))
 }
 
 /// Attach a vulnerability scanner (ADR-0024) to the service when `supply_chain.enabled`, so publishes
@@ -188,9 +197,12 @@ impl StarmetalRuntime {
         let service =
             CachingPackageService::new_with_signing(storage.clone(), clients, config.policies.clone(), signing);
         #[cfg(feature = "metadata")]
-        let (service, content_maintenance) = attach_content_store(service, &config, storage.clone()).await?;
+        let (service, content_maintenance, content_browse) =
+            attach_content_store(service, &config, storage.clone()).await?;
         #[cfg(not(feature = "metadata"))]
         let content_maintenance: Option<Arc<dyn ContentMaintenance>> = None;
+        #[cfg(not(feature = "metadata"))]
+        let content_browse: Option<Arc<dyn ContentBrowse>> = None;
         #[cfg(feature = "scanner-osv")]
         let service = attach_scanner(service, &config);
         let service = Arc::new(service);
@@ -242,6 +254,7 @@ impl StarmetalRuntime {
             maintenance,
             quarantine,
             content_maintenance,
+            content_browse,
         })
     }
 
@@ -349,6 +362,7 @@ impl StarmetalRuntime {
         )
         .with_quarantine(self.quarantine.clone())
         .with_content_maintenance(self.content_maintenance.clone())
+        .with_content_browse(self.content_browse.clone())
     }
 
     pub fn status(&self) -> RuntimeStatus {

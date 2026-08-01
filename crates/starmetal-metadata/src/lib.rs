@@ -7,10 +7,12 @@
 //! a [`starmetal_core::ports::StoragePort`] to implement
 //! [`starmetal_core::content::ContentStore`].
 
+mod browse;
 pub mod gc;
 pub mod generated;
 pub mod maintenance;
 mod pool;
+pub mod predicate_sql;
 pub mod retention;
 mod store;
 

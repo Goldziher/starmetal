@@ -4,7 +4,7 @@ use starmetal_adapters::PublishAuthorization;
 use starmetal_authz::{LocalAuthorizer, default_namespace};
 use starmetal_core::authz::{Action, Authenticator, Coordinate, Resource};
 use starmetal_core::config::Config;
-use starmetal_core::content::ContentMaintenance;
+use starmetal_core::content::{ContentBrowse, ContentMaintenance};
 use starmetal_core::package::{Ecosystem, PackageName};
 use starmetal_core::ports::{PackageService, PublishingService, StatisticsService};
 use starmetal_core::supply_chain::QuarantineReview;
@@ -30,6 +30,11 @@ pub struct AppState {
     /// is attached (`metadata.enabled`). Backs the admin `/gc` and `/retention` trigger endpoints;
     /// `None` leaves those endpoints reporting metadata maintenance disabled.
     pub content_maintenance: Option<Arc<dyn ContentMaintenance>>,
+    /// Read-only content browse handle (ADR-0022 selector push-down), `Some` only when the content
+    /// model is attached (`metadata.enabled`). Backs the `/api/v1/components` listing endpoint,
+    /// which pushes an authorizer predicate into the store; `None` makes that endpoint report
+    /// content browse disabled.
+    pub content_browse: Option<Arc<dyn ContentBrowse>>,
 }
 
 /// Feature-gated upstream clients used by protocol adapters.
@@ -72,6 +77,7 @@ impl AppState {
             upstreams,
             quarantine: None,
             content_maintenance: None,
+            content_browse: None,
         }
     }
 
@@ -87,6 +93,14 @@ impl AppState {
     /// the content model is attached.
     pub fn with_content_maintenance(mut self, content_maintenance: Option<Arc<dyn ContentMaintenance>>) -> Self {
         self.content_maintenance = content_maintenance;
+        self
+    }
+
+    /// Attach the read-only content browse handle (ADR-0022) built by the runtime. Absent by default
+    /// so the `/api/v1/components` endpoint reports content browse disabled unless the content model
+    /// is attached.
+    pub fn with_content_browse(mut self, content_browse: Option<Arc<dyn ContentBrowse>>) -> Self {
+        self.content_browse = content_browse;
         self
     }
 }

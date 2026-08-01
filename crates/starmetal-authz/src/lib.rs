@@ -28,7 +28,8 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use starmetal_core::authz::{
     Action, ApiTokenScope, Authenticator, Authorizer, ContentSelector, Decision, EcosystemPattern, NamePattern,
-    Namespace, Principal, PrincipalId, PrincipalScope, RepositoryAdmin, RepositoryPattern, RepositoryView, Resource,
+    Namespace, Principal, PrincipalId, PrincipalScope, QueryPredicate, RepositoryAdmin, RepositoryPattern,
+    RepositoryView, Resource,
 };
 use starmetal_core::config::Config;
 use starmetal_core::error::Result;
@@ -459,20 +460,99 @@ fn authorize_admin(grants: &Grants, resource: &Resource) -> Decision {
 }
 
 fn authorize_content(principal: &Principal, grants: &Grants, action: Action, resource: &Resource) -> Decision {
-    // Admin authority implies full content authority (config plane subsumes content plane).
+    // Admin authority implies full content authority (config plane subsumes content plane),
+    // unconditionally — an admin lists everything with no pushed-down filter.
     if admin_covers(grants, resource) {
         return Decision::allow();
     }
 
-    if view_allows(grants, action, resource) {
-        return Decision::allow();
+    match resource_repository(resource) {
+        // Concrete resource (a single coordinate): a bare allow/deny gate, unchanged.
+        Some(_) => {
+            if view_allows(grants, action, resource) || token_scope_allows(principal, grants, action, resource) {
+                Decision::allow()
+            } else {
+                Decision::deny()
+            }
+        }
+        // Namespace-level resource (a listing): compile the repositories the principal may see into
+        // a pushed-down predicate (ADR-0022 selector push-down).
+        None => authorize_listing(principal, grants, action, resource),
+    }
+}
+
+/// Build a listing decision for a namespace-level resource: the union of repositories the principal
+/// may list, compiled into a [`QueryPredicate`] the store pushes down into its `WHERE`.
+///
+/// `Browse` is the discovery action, so *any* content grant on a repository confers browse
+/// visibility of it; the stronger actions (`Read`/`Edit`/`Add`/`Delete`) confer listing only where
+/// that exact action is granted, matching the per-asset gate. An unrestricted grant collapses the
+/// whole decision to [`QueryPredicate::Always`]; no matching grant denies (deny-by-default).
+fn authorize_listing(principal: &Principal, grants: &Grants, action: Action, resource: &Resource) -> Decision {
+    let namespace = &resource.namespace;
+    let mut clauses: Vec<QueryPredicate> = Vec::new();
+    let mut unrestricted = false;
+
+    for view in &grants.views {
+        if &view.namespace != namespace {
+            continue;
+        }
+        let confers = if action == Action::Browse {
+            !view.actions.is_empty()
+        } else {
+            view.actions.contains(&action)
+        };
+        if !confers {
+            continue;
+        }
+        match pattern_to_predicate(&view.repository) {
+            QueryPredicate::Always => unrestricted = true,
+            other => clauses.push(other),
+        }
     }
 
-    if token_scope_allows(principal, grants, action, resource) {
-        return Decision::allow();
+    if principal.scope().covers(namespace) {
+        for scope in &grants.token_scopes {
+            let confers = action == Action::Browse || scope.action == Action::Admin || scope.action == action;
+            if !confers {
+                continue;
+            }
+            match pattern_to_predicate(&scope.repository) {
+                QueryPredicate::Always => unrestricted = true,
+                other => clauses.push(other),
+            }
+        }
     }
 
-    Decision::deny()
+    if unrestricted {
+        return Decision::allow_where(QueryPredicate::Always);
+    }
+    if clauses.is_empty() {
+        Decision::deny()
+    } else if clauses.len() == 1 {
+        Decision::allow_where(clauses.remove(0))
+    } else {
+        Decision::allow_where(QueryPredicate::Any(clauses))
+    }
+}
+
+/// Compile a [`RepositoryPattern`] into the [`QueryPredicate`] selecting the components it covers.
+/// A fully-wildcard pattern compiles to [`QueryPredicate::Always`].
+fn pattern_to_predicate(pattern: &RepositoryPattern) -> QueryPredicate {
+    let mut clauses: Vec<QueryPredicate> = Vec::new();
+    if let EcosystemPattern::Exact(ecosystem) = pattern.ecosystem {
+        clauses.push(QueryPredicate::Ecosystem(ecosystem));
+    }
+    if !matches!(pattern.name, NamePattern::Any) {
+        clauses.push(QueryPredicate::CoordinateName(pattern.name.clone()));
+    }
+    if clauses.is_empty() {
+        QueryPredicate::Always
+    } else if clauses.len() == 1 {
+        clauses.remove(0)
+    } else {
+        QueryPredicate::All(clauses)
+    }
 }
 
 fn view_allows(grants: &Grants, action: Action, resource: &Resource) -> bool {
@@ -818,5 +898,79 @@ tokens = ["flat-secret"]
             authorize(&authorizer, &principal, Action::Read, &target).await,
             Decision::allow()
         );
+    }
+
+    #[tokio::test]
+    async fn flat_bearer_browse_listing_is_unrestricted() {
+        let config: Config = toml::from_str("[auth]\nenabled = true\ntokens = [\"flat-secret\"]\n").unwrap();
+        let authorizer = LocalAuthorizer::from_config(&config);
+        let principal = authorizer.authenticate("flat-secret").expect("token authenticates");
+
+        // A namespace-level Browse is a listing: the flat grant covers every repository, so the
+        // decision allows with an unconditional `Always` predicate.
+        let decision = authorize(&authorizer, &principal, Action::Browse, &resource(DEFAULT_NAMESPACE)).await;
+        assert_eq!(decision, Decision::allow_where(QueryPredicate::Always));
+    }
+
+    #[tokio::test]
+    async fn admin_browse_listing_is_unconditional_without_a_predicate() {
+        let config: Config = toml::from_str("[admin]\nenabled = true\ntokens = [\"admin-secret\"]\n").unwrap();
+        let authorizer = LocalAuthorizer::from_config(&config);
+        let principal = authorizer.authenticate("admin-secret").expect("token authenticates");
+
+        // Admin authority lists everything with no filter at all (a bare allow).
+        let decision = authorize(&authorizer, &principal, Action::Browse, &resource(DEFAULT_NAMESPACE)).await;
+        assert_eq!(decision, Decision::allow());
+    }
+
+    #[tokio::test]
+    async fn scoped_publish_token_browse_listing_is_scoped_to_its_repository() {
+        let config: Config = toml::from_str(
+            r#"
+[publishing]
+enabled = true
+
+[[publishing.tokens]]
+token = "publish-secret"
+scopes = ["publish"]
+ecosystems = ["npm"]
+packages = ["left-pad"]
+"#,
+        )
+        .unwrap();
+        let authorizer = LocalAuthorizer::from_config(&config);
+        let principal = authorizer.authenticate("publish-secret").expect("token authenticates");
+
+        // Browse is the discovery action, so holding a publish (Add) scope confers browse of that
+        // repository — the decision carries a predicate scoping the listing to ecosystem + name.
+        let decision = authorize(&authorizer, &principal, Action::Browse, &resource(DEFAULT_NAMESPACE)).await;
+        let expected = QueryPredicate::All(vec![
+            QueryPredicate::Ecosystem(Ecosystem::Npm),
+            QueryPredicate::CoordinateName(NamePattern::Exact("left-pad".to_string())),
+        ]);
+        assert_eq!(decision, Decision::allow_where(expected));
+    }
+
+    #[tokio::test]
+    async fn scoped_publish_token_read_listing_is_denied() {
+        let config: Config = toml::from_str(
+            r#"
+[publishing]
+enabled = true
+
+[[publishing.tokens]]
+token = "publish-secret"
+scopes = ["publish"]
+ecosystems = ["npm"]
+packages = ["left-pad"]
+"#,
+        )
+        .unwrap();
+        let authorizer = LocalAuthorizer::from_config(&config);
+        let principal = authorizer.authenticate("publish-secret").expect("token authenticates");
+
+        // A publish-only scope confers browse but not read, so a Read listing is denied.
+        let decision = authorize(&authorizer, &principal, Action::Read, &resource(DEFAULT_NAMESPACE)).await;
+        assert_eq!(decision, Decision::deny());
     }
 }

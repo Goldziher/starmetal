@@ -32,6 +32,10 @@ pub fn build_app(state: AppState) -> Router {
         app = app.nest("/admin/api/v1", crate::admin::router());
     }
 
+    // Content listing with authorization push-down (ADR-0022), mounted outside the admin API since
+    // it authorizes Browse rather than Admin. Reports 404 when the content model is not attached.
+    app = app.nest("/api/v1", crate::browse::router());
+
     app.layer(CompressionLayer::new())
         .layer(middleware::from_fn_with_state(
             state.clone(),
