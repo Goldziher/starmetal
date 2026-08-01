@@ -42,9 +42,7 @@ impl OpenDalStorage {
     pub fn filesystem(root: &std::path::Path) -> Result<Self> {
         std::fs::create_dir_all(root)?;
         let builder = opendal::services::Fs::default().root(&root.to_string_lossy());
-        let operator = Operator::new(builder)
-            .map_err(|e| StarmetalError::Storage(e.to_string()))?
-            .finish();
+        let operator = Operator::new(builder).map_err(|e| StarmetalError::Storage(e.to_string()))?;
         Ok(Self::new(operator))
     }
 
@@ -52,9 +50,7 @@ impl OpenDalStorage {
     #[cfg(feature = "backend-memory")]
     pub fn memory() -> Result<Self> {
         let builder = opendal::services::Memory::default();
-        let operator = Operator::new(builder)
-            .map_err(|e| StarmetalError::Storage(e.to_string()))?
-            .finish();
+        let operator = Operator::new(builder).map_err(|e| StarmetalError::Storage(e.to_string()))?;
         Ok(Self::new(operator))
     }
 }

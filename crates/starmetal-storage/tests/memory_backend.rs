@@ -1,3 +1,4 @@
+//! Integration coverage for the in-memory OpenDAL storage backend.
 #![cfg(feature = "backend-memory")]
 
 use bytes::Bytes;
@@ -7,7 +8,7 @@ use starmetal_storage::OpenDalStorage;
 
 fn create_memory_storage() -> OpenDalStorage {
     let builder = opendal::services::Memory::default();
-    let operator = opendal::Operator::new(builder).expect("build memory operator").finish();
+    let operator = opendal::Operator::new(builder).expect("build memory operator");
     OpenDalStorage::new(operator)
 }
 
