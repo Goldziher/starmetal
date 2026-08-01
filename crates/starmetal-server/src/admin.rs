@@ -1,15 +1,16 @@
 use axum::Json;
 use axum::Router;
-use axum::extract::{Query, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::IntoResponse;
-use axum::routing::get;
+use axum::routing::{get, post};
 use serde::Serialize;
 
 use crate::state::AppState;
 use starmetal_authz::default_namespace;
 use starmetal_core::authz::{Action, Authorizer, Resource};
 use starmetal_core::package::{Ecosystem, PackageName};
+use starmetal_core::supply_chain::QuarantineReview;
 
 #[derive(Debug, Serialize)]
 struct AdminStatus {
@@ -58,6 +59,9 @@ pub fn router() -> Router<AppState> {
         .route("/versions", get(versions))
         .route("/metadata", get(metadata))
         .route("/metrics", get(metrics))
+        .route("/quarantine", get(quarantine_list))
+        .route("/quarantine/{digest}/promote", post(quarantine_promote))
+        .route("/quarantine/{digest}/reject", post(quarantine_reject))
 }
 
 async fn status(State(state): State<AppState>, headers: HeaderMap) -> Result<impl IntoResponse, (StatusCode, String)> {
@@ -137,6 +141,49 @@ async fn metadata(
 async fn metrics(State(state): State<AppState>, headers: HeaderMap) -> Result<impl IntoResponse, (StatusCode, String)> {
     authorize_admin(&state, &headers).await?;
     Ok(Json(state.statistics_service.statistics()))
+}
+
+async fn quarantine_list(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    authorize_admin(&state, &headers).await?;
+    // Absent handle (no scanner attached) means nothing can be quarantined: an empty list, not 404.
+    let records = match &state.quarantine {
+        Some(quarantine) => quarantine.list_quarantine().await.map_err(map_admin_error)?,
+        None => Vec::new(),
+    };
+    Ok(Json(records))
+}
+
+async fn quarantine_promote(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(digest): Path<String>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    authorize_admin(&state, &headers).await?;
+    let quarantine = quarantine_handle(&state)?;
+    let record = quarantine.promote_quarantine(&digest).await.map_err(map_admin_error)?;
+    Ok(Json(record))
+}
+
+async fn quarantine_reject(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(digest): Path<String>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    authorize_admin(&state, &headers).await?;
+    let quarantine = quarantine_handle(&state)?;
+    let record = quarantine.reject_quarantine(&digest).await.map_err(map_admin_error)?;
+    Ok(Json(record))
+}
+
+/// The quarantine review handle, or a 404 when no scanner is attached (the workflow is inactive).
+fn quarantine_handle(state: &AppState) -> Result<&std::sync::Arc<dyn QuarantineReview>, (StatusCode, String)> {
+    state.quarantine.as_ref().ok_or((
+        StatusCode::NOT_FOUND,
+        "supply-chain quarantine is not enabled".to_string(),
+    ))
 }
 
 async fn authorize_admin(state: &AppState, headers: &HeaderMap) -> Result<(), (StatusCode, String)> {

@@ -106,3 +106,42 @@ async fn admin_api_returns_config_packages_and_metrics_json() {
 
     server.shutdown();
 }
+
+#[tokio::test]
+async fn admin_quarantine_endpoints_enforce_auth_and_report_disabled_without_a_scanner() {
+    let server = TestServer::start_with_admin().await;
+    let client = reqwest::Client::new();
+    let base = server.base_url();
+    let digest = "0".repeat(64);
+
+    // Listing requires the admin bearer token.
+    let response = client
+        .get(format!("{base}/admin/api/v1/quarantine"))
+        .send()
+        .await
+        .expect("request failed");
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    // With no scanner attached nothing can be held, so the list is empty rather than a 404.
+    let held: Value = client
+        .get(format!("{base}/admin/api/v1/quarantine"))
+        .bearer_auth("admin-token")
+        .send()
+        .await
+        .expect("request failed")
+        .json()
+        .await
+        .expect("quarantine list should be JSON");
+    assert_eq!(held.as_array().expect("quarantine array").len(), 0);
+
+    // Promote/reject report the workflow disabled (404) when no scanner is attached.
+    let response = client
+        .post(format!("{base}/admin/api/v1/quarantine/{digest}/promote"))
+        .bearer_auth("admin-token")
+        .send()
+        .await
+        .expect("request failed");
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+    server.shutdown();
+}

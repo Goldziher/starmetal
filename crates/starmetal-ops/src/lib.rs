@@ -265,6 +265,7 @@ impl StarmetalRuntime {
             self.statistics_service.clone(),
             self.upstreams.clone(),
         )
+        .with_quarantine(self.quarantine.clone())
     }
 
     pub fn status(&self) -> RuntimeStatus {

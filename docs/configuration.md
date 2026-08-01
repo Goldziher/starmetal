@@ -154,6 +154,12 @@ Admin endpoints:
 | `GET /admin/api/v1/versions?ecosystem=npm&name=sample-npm` | Cached versions for one package. |
 | `GET /admin/api/v1/metadata?ecosystem=npm&name=sample-npm&version=1.0.0` | Cached version metadata. |
 | `GET /admin/api/v1/metrics` | In-memory statistics snapshot. |
+| `GET /admin/api/v1/quarantine` | List artifacts held by the supply-chain quarantine workflow. |
+| `POST /admin/api/v1/quarantine/{digest}/promote` | Release a held artifact (by blake3 digest) for serving. |
+| `POST /admin/api/v1/quarantine/{digest}/reject` | Permanently withhold a held artifact (by blake3 digest). |
+
+The quarantine endpoints require `supply_chain.quarantine` and an attached scanner; when no scanner is
+attached the list is empty and promote/reject return `404`. See [Supply Chain](#supply-chain-vulnerability-scanning).
 
 ## Publishing
 

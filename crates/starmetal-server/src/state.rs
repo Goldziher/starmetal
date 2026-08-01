@@ -6,6 +6,7 @@ use starmetal_core::authz::{Action, Authenticator, Coordinate, Resource};
 use starmetal_core::config::Config;
 use starmetal_core::package::{Ecosystem, PackageName};
 use starmetal_core::ports::{PackageService, PublishingService, StatisticsService};
+use starmetal_core::supply_chain::QuarantineReview;
 
 /// Shared application state, passed to all handlers via axum's State extractor.
 #[derive(Clone)]
@@ -21,6 +22,9 @@ pub struct AppState {
     /// stages consume it.
     pub authorizer: Arc<LocalAuthorizer>,
     pub upstreams: UpstreamClients,
+    /// Quarantine review workflow (ADR-0024), `Some` only when a scanner is attached. Backs the admin
+    /// promote/reject/list endpoints; `None` leaves those endpoints reporting quarantine disabled.
+    pub quarantine: Option<Arc<dyn QuarantineReview>>,
 }
 
 /// Feature-gated upstream clients used by protocol adapters.
@@ -61,7 +65,15 @@ impl AppState {
             statistics_service,
             authorizer,
             upstreams,
+            quarantine: None,
         }
+    }
+
+    /// Attach the quarantine review handle (ADR-0024) built by the runtime. Absent by default so the
+    /// admin promote/reject/list endpoints report quarantine disabled unless a scanner is attached.
+    pub fn with_quarantine(mut self, quarantine: Option<Arc<dyn QuarantineReview>>) -> Self {
+        self.quarantine = quarantine;
+        self
     }
 }
 
