@@ -21,6 +21,19 @@ pub fn verify_blake3(data: &Bytes, expected: &str) -> bool {
     blake3_hex(data) == expected
 }
 
+/// The length of a blake3 digest rendered as lowercase hex.
+pub const BLAKE3_HEX_LEN: usize = 64;
+
+/// Returns `true` when `value` is a well-formed blake3 digest: exactly [`BLAKE3_HEX_LEN`] lowercase
+/// hex characters, matching what [`blake3_hex`] produces.
+///
+/// Use this to validate an externally supplied digest (for example an admin quarantine
+/// promote/reject path parameter) before interpolating it into a storage key, so a crafted value
+/// such as `../../config` can never escape its intended key prefix (path-traversal / key injection).
+pub fn is_blake3_hex(value: &str) -> bool {
+    value.len() == BLAKE3_HEX_LEN && value.bytes().all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+}
+
 /// Verify data and return a `Result`, producing `StarmetalError::IntegrityError` on mismatch.
 pub fn verify_or_err(data: &Bytes, expected: &str) -> Result<()> {
     let actual = blake3_hex(data);
@@ -67,6 +80,27 @@ mod tests {
         let data = Bytes::from_static(b"test data");
         let err = verify_or_err(&data, "bad_hash").unwrap_err();
         assert!(err.to_string().contains("integrity check failed"));
+    }
+
+    #[test]
+    fn is_blake3_hex_accepts_a_well_formed_digest() {
+        let digest = blake3_hex(b"hello starmetal");
+        assert!(is_blake3_hex(&digest));
+        assert!(is_blake3_hex(&"a".repeat(BLAKE3_HEX_LEN)));
+    }
+
+    #[test]
+    fn is_blake3_hex_rejects_malformed_input() {
+        assert!(!is_blake3_hex(""), "empty string is not a digest");
+        assert!(!is_blake3_hex(&"a".repeat(63)), "too short");
+        assert!(!is_blake3_hex(&"a".repeat(65)), "too long");
+        assert!(!is_blake3_hex(&"A".repeat(64)), "uppercase hex is not accepted");
+        assert!(!is_blake3_hex(&format!("{}g", "a".repeat(63))), "non-hex character");
+        assert!(!is_blake3_hex("../../config"), "path traversal is not a digest");
+        assert!(
+            !is_blake3_hex(&format!("..%2f..%2f{}", "a".repeat(54))),
+            "percent-encoded traversal"
+        );
     }
 
     #[test]

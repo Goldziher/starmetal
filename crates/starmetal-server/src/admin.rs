@@ -162,6 +162,7 @@ async fn quarantine_promote(
     Path(digest): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     authorize_admin(&state, &headers).await?;
+    validate_quarantine_digest(&digest)?;
     let quarantine = quarantine_handle(&state)?;
     let record = quarantine.promote_quarantine(&digest).await.map_err(map_admin_error)?;
     Ok(Json(record))
@@ -173,9 +174,25 @@ async fn quarantine_reject(
     Path(digest): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     authorize_admin(&state, &headers).await?;
+    validate_quarantine_digest(&digest)?;
     let quarantine = quarantine_handle(&state)?;
     let record = quarantine.reject_quarantine(&digest).await.map_err(map_admin_error)?;
     Ok(Json(record))
+}
+
+/// Reject a digest path parameter that is not a well-formed blake3 hex digest.
+///
+/// `Path<String>` percent-decodes the raw URL segment, so without this check a crafted value such as
+/// `%2e%2e%2f` would decode to `../` and reach `quarantine_record_key` verbatim (CWE-22 path
+/// traversal against the object store). Validating here, before the digest is used for anything,
+/// stops that at the boundary; `transition_quarantine` in `starmetal-service` repeats the same check
+/// as defense in depth.
+fn validate_quarantine_digest(digest: &str) -> Result<(), (StatusCode, String)> {
+    if starmetal_core::integrity::is_blake3_hex(digest) {
+        Ok(())
+    } else {
+        Err((StatusCode::BAD_REQUEST, "invalid blake3 digest".to_string()))
+    }
 }
 
 /// The quarantine review handle, or a 404 when no scanner is attached (the workflow is inactive).
@@ -198,7 +215,6 @@ async fn authorize_admin(state: &AppState, headers: &HeaderMap) -> Result<(), (S
 
     // Authenticate the bearer token to a principal, then require the config-plane `Admin` action
     // via the injected Authorizer (ADR-0022). The current config is namespace-less, so the request
-    // targets the whole default namespace. Admin-migrated tokens carry a `RepositoryAdmin` grant;
     // flat and publish tokens do not, so they are denied here exactly as before.
     if let Some(token) = token
         && let Some(principal) = state.authorizer.authenticate(token)

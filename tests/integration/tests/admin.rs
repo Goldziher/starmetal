@@ -145,3 +145,23 @@ async fn admin_quarantine_endpoints_enforce_auth_and_report_disabled_without_a_s
 
     server.shutdown();
 }
+
+#[tokio::test]
+async fn admin_quarantine_promote_rejects_a_path_traversal_shaped_digest() {
+    let server = TestServer::start_with_admin().await;
+    let client = reqwest::Client::new();
+    let base = server.base_url();
+
+    // `Path<String>` percent-decodes the segment, so this arrives at the handler as `../../config`.
+    // It must be rejected as a malformed digest (400) before it ever reaches storage-key building,
+    // not treated as an unknown record (404) or fail with a server error (500).
+    let response = client
+        .post(format!("{base}/admin/api/v1/quarantine/..%2f..%2fconfig/promote"))
+        .bearer_auth("admin-token")
+        .send()
+        .await
+        .expect("request failed");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    server.shutdown();
+}

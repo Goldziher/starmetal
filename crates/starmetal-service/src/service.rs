@@ -1108,7 +1108,6 @@ impl PublishingService for CachingPackageService {
             ));
         }
 
-        // Serializes concurrent publishes targeting the same ecosystem/name/version coordinate;
         // held for the remainder of this function.
         let _publish_guard = self
             .acquire_publish_lock(request.ecosystem, &request.name, &request.version)
@@ -1552,6 +1551,13 @@ impl CachingPackageService {
     /// Apply an operator promote/reject decision to a quarantine record, stamping the decision time
     /// and persisting the new state. Errors with `ArtifactNotFound` when no record exists.
     async fn transition_quarantine(&self, subject_digest: &str, state: QuarantineState) -> Result<QuarantineRecord> {
+        if !integrity::is_blake3_hex(subject_digest) {
+            // Defense in depth: the admin adapter validates first, but never trust a caller across a
+            // trait boundary — a malformed digest must never reach `quarantine_record_key` (CWE-22).
+            return Err(StarmetalError::Adapter(format!(
+                "invalid blake3 digest: {subject_digest}"
+            )));
+        }
         let record_key = Self::quarantine_record_key(subject_digest);
         let bytes =
             self.storage.get(&record_key).await?.ok_or_else(|| {
