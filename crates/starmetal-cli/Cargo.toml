@@ -4,9 +4,17 @@ description = "sm CLI binary for the Starmetal package registry"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository = "https://github.com/Goldziher/starmetal"
 
 [package.metadata.cargo-machete]
 ignored = ["starmetal-adapters", "starmetal-storage", "serde"]
+
+# ~keep cargo-binstall support: release assets are named starmetal-{target}{archive-suffix}
+# ~keep with the `sm` binary at the archive root, which doesn't match binstall's default
+# ~keep {name}-{version}-{target} naming, so pin the download URL and bin-dir explicitly.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/starmetal-{ target }{ archive-suffix }"
+bin-dir = "{ bin }{ binary-ext }"
 
 [[bin]]
 name = "sm"
