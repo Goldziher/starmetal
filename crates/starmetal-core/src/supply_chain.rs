@@ -593,6 +593,15 @@ pub trait QuarantineReview: Send + Sync {
     /// List every quarantine record, in an unspecified order.
     async fn list_quarantine(&self) -> Result<Vec<QuarantineRecord>>;
 
+    /// The quarantine record for one Blake3 digest, or `None` if none is held. A single keyed lookup
+    /// (records are digest-keyed) — used to classify a digest's [`QuarantineOrigin`] without
+    /// enumerating every record.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error only if the underlying store cannot be read; a missing record is `Ok(None)`.
+    async fn get_quarantine(&self, subject_digest: &str) -> Result<Option<QuarantineRecord>>;
+
     /// Promote a held artifact (identified by its Blake3 digest) so it may be served.
     ///
     /// # Errors

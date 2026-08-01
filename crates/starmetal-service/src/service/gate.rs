@@ -413,6 +413,19 @@ impl QuarantineReview for CachingPackageService {
         Ok(records)
     }
 
+    async fn get_quarantine(&self, subject_digest: &str) -> Result<Option<QuarantineRecord>> {
+        if !integrity::is_blake3_hex(subject_digest) {
+            // Defense in depth: a malformed digest must never reach `quarantine_record_key` (CWE-22).
+            return Err(StarmetalError::Adapter(format!(
+                "invalid blake3 digest: {subject_digest}"
+            )));
+        }
+        match self.storage.get(&Self::quarantine_record_key(subject_digest)).await? {
+            Some(bytes) => Ok(Some(serde_json::from_slice(&bytes)?)),
+            None => Ok(None),
+        }
+    }
+
     async fn promote_quarantine(&self, subject_digest: &str) -> Result<QuarantineRecord> {
         self.transition_quarantine(subject_digest, QuarantineState::Promoted)
             .await

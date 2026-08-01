@@ -354,14 +354,14 @@ fn ingest_quarantine_handle(state: &AppState) -> Result<&std::sync::Arc<dyn Inge
 /// handlers can route it to the ingest workflow (which completes or purges a deferred publish)
 /// rather than the serve workflow (which only flips record state). `false` when quarantine is
 /// disabled or no such record exists — the serve path then reports not-found consistently.
+///
+/// A single keyed lookup (records are digest-keyed), not an enumerate-and-scan of every record.
 async fn is_ingest_hold(state: &AppState, digest: &str) -> Result<bool, (StatusCode, String)> {
     let Some(quarantine) = &state.quarantine else {
         return Ok(false);
     };
-    let records = quarantine.list_quarantine().await.map_err(map_admin_error)?;
-    Ok(records
-        .iter()
-        .any(|record| record.subject_digest == digest && record.origin == QuarantineOrigin::Ingest))
+    let record = quarantine.get_quarantine(digest).await.map_err(map_admin_error)?;
+    Ok(record.is_some_and(|record| record.origin == QuarantineOrigin::Ingest))
 }
 
 async fn authorize_admin(state: &AppState, headers: &HeaderMap) -> Result<(), (StatusCode, String)> {
