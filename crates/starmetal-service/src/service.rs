@@ -2443,6 +2443,73 @@ mod tests {
         );
     }
 
+    /// A [`Scanner`] that always reports a clean but incomplete scan (`completed: false`), to prove
+    /// an inconclusive scan is blocked rather than treated as passing.
+    struct IncompleteScanner;
+
+    #[async_trait]
+    impl Scanner for IncompleteScanner {
+        async fn scan(&self, target: ScanTarget<'_>) -> Result<starmetal_core::supply_chain::ScanReport> {
+            Ok(starmetal_core::supply_chain::ScanReport {
+                scanner: "incomplete".to_string(),
+                subject_digest: integrity::blake3_hex(target.content),
+                vulnerabilities: Vec::new(),
+                completed: false,
+            })
+        }
+
+        fn capabilities(&self) -> starmetal_core::supply_chain::ScannerCapabilities {
+            starmetal_core::supply_chain::ScannerCapabilities {
+                name: "incomplete".to_string(),
+                version: "0".to_string(),
+                ecosystems: Vec::new(),
+                supports_vulnerabilities: true,
+                produces_sbom: false,
+                sbom_formats: Vec::new(),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn publish_is_denied_and_writes_nothing_when_the_scan_did_not_complete() {
+        let storage = Arc::new(MockStorage::new());
+        let service = CachingPackageService::new(storage.clone(), AHashMap::new(), PolicyConfig::default())
+            .with_scanner(Arc::new(IncompleteScanner));
+
+        let error = service.publish_package(scan_gate_request()).await.unwrap_err();
+        assert!(
+            matches!(error, StarmetalError::PolicyViolation(_)),
+            "an incomplete scan must be a policy violation, got: {error}"
+        );
+
+        let name = PackageName::new("sample");
+        assert!(
+            service
+                .get_version_metadata(Ecosystem::PyPI, &name, "1.0.0")
+                .await
+                .is_err(),
+            "a publish blocked by an incomplete scan must leave no metadata behind"
+        );
+    }
+
+    #[tokio::test]
+    async fn serve_is_denied_when_the_scan_on_demand_did_not_complete() {
+        let storage = Arc::new(MockStorage::new());
+        // Publish without a scanner so no report is stored: the serve gate must scan on demand.
+        let publisher = CachingPackageService::new(storage.clone(), AHashMap::new(), PolicyConfig::default());
+        publisher.publish_package(scan_gate_request()).await.unwrap();
+
+        let server = CachingPackageService::new(storage.clone(), AHashMap::new(), PolicyConfig::default())
+            .with_scanner(Arc::new(IncompleteScanner))
+            .enforce_scan_on_serve(true);
+
+        let error = server.get_artifact(&sample_artifact_id()).await.unwrap_err();
+        assert!(
+            matches!(error, StarmetalError::PolicyViolation(_)),
+            "an incomplete scan must deny serving even at the default (most permissive) threshold, got: {error}"
+        );
+    }
+
     /// A [`Scanner`] whose findings can be swapped after construction, to simulate an advisory feed
     /// that discloses a new vulnerability between the first scan and a later re-correlation sweep.
     struct MutableScanner {

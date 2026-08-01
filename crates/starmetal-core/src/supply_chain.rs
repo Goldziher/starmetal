@@ -50,6 +50,9 @@ pub enum PolicyReason {
     FailingProvenance,
     /// No scan report is associated with the artifact and one is required ("no scan = violation").
     MissingScanReport,
+    /// A scan report exists but did not run to completion (`ScanReport::completed == false`), so the
+    /// artifact cannot be confirmed clean.
+    IncompleteScan,
     /// A storage, count, or rate quota was exceeded.
     QuotaExceeded,
     /// A write targeted an immutable, already-published version.
@@ -68,6 +71,7 @@ impl PolicyReason {
             Self::MissingSignature => "missing-signature",
             Self::FailingProvenance => "failing-provenance",
             Self::MissingScanReport => "missing-scan-report",
+            Self::IncompleteScan => "incomplete-scan",
             Self::QuotaExceeded => "quota-exceeded",
             Self::ImmutableVersion => "immutable-version",
         }
@@ -248,15 +252,25 @@ impl ScanReport {
 /// Evaluate a scan report against the maximum tolerated vulnerability severity, yielding the
 /// vulnerability-gate decision consulted at both ingest and serve (ADR-0024).
 ///
-/// A finding strictly more severe than `max_allowed` denies with
-/// [`PolicyReason::VulnSeverityExceeded`]; anything at or below the threshold — including a clean
-/// report — allows. This is pure and framework-free so the same rule governs the publish path and
-/// the serve path. With the default `max_allowed` of [`VulnSeverity::Critical`] nothing exceeds the
-/// threshold, so an attached scanner never blocks until an operator lowers the bound — keeping the
-/// gate additive and non-breaking. Quarantine-instead-of-deny and incomplete-scan (`completed ==
-/// false`) handling are layered in by the caller; this function only ranks findings against the
-/// threshold.
+/// A report whose scan did not run to completion (`completed == false`, e.g. a partial or timed-out
+/// scan) is quarantined with [`PolicyReason::IncompleteScan`] regardless of severity: an artifact
+/// that was never fully scanned cannot be confirmed clean, so it must not be treated as passing the
+/// gate ("fail closed on an inconclusive scan"). For a *complete* report, a finding strictly more
+/// severe than `max_allowed` denies with [`PolicyReason::VulnSeverityExceeded`]; anything at or below
+/// the threshold — including a clean report — allows. This is pure and framework-free so the same
+/// rule governs the publish path and the serve path. With the default `max_allowed` of
+/// [`VulnSeverity::Critical`] nothing exceeds the threshold, so an attached scanner never blocks a
+/// complete, clean-enough scan until an operator lowers the bound — keeping the gate additive and
+/// non-breaking; that threshold-inert-at-default property does not extend to an incomplete scan,
+/// which always blocks. Quarantine-instead-of-deny is layered in by the caller.
 pub fn evaluate_scan_report(report: &ScanReport, max_allowed: VulnSeverity) -> PolicyDecision {
+    if !report.completed {
+        return PolicyDecision::quarantine(
+            PolicyReason::IncompleteScan,
+            "scan did not complete; artifact cannot be confirmed clean",
+        );
+    }
+
     match report.highest_severity() {
         Some(highest) if highest > max_allowed => PolicyDecision::deny(
             PolicyReason::VulnSeverityExceeded,
@@ -574,6 +588,7 @@ mod tests {
             (PolicyReason::MissingSignature, "missing-signature"),
             (PolicyReason::FailingProvenance, "failing-provenance"),
             (PolicyReason::MissingScanReport, "missing-scan-report"),
+            (PolicyReason::IncompleteScan, "incomplete-scan"),
             (PolicyReason::QuotaExceeded, "quota-exceeded"),
             (PolicyReason::ImmutableVersion, "immutable-version"),
         ];
@@ -682,6 +697,22 @@ mod tests {
         let decision = evaluate_scan_report(&report_with(VulnSeverity::Critical), VulnSeverity::Critical);
         assert!(decision.is_allowed());
         assert_eq!(decision.reason_code(), None);
+    }
+
+    #[test]
+    fn should_quarantine_an_incomplete_scan_regardless_of_max_allowed() {
+        // A partial/timed-out scan (`completed: false`) must block serving even when the findings it
+        // did manage to collect (or the absence of any) are within the tolerated severity, and even
+        // at the maximally permissive threshold — an unconfirmed artifact is never treated as clean.
+        let incomplete = ScanReport {
+            scanner: "osv".to_string(),
+            subject_digest: "0".repeat(64),
+            vulnerabilities: vec![],
+            completed: false,
+        };
+        let decision = evaluate_scan_report(&incomplete, VulnSeverity::Critical);
+        assert!(decision.blocks_serving());
+        assert_eq!(decision.reason_code(), Some(PolicyReason::IncompleteScan));
     }
 
     #[test]
