@@ -351,7 +351,13 @@ Each passing artifact's scan report is persisted keyed by its blake3 digest (ide
 report). With `enforce_on_serve` enabled, the same gate runs at serve: `get_artifact` consults the
 stored report — scanning on demand and caching it when absent — and refuses to serve a finding that
 exceeds the threshold, so a proxy-cached artifact that was never published is still gated on first
-read. Scheduled re-correlation against refreshed advisory feeds is not yet wired.
+read.
+
+Set `recorrelation_interval_secs` to a non-zero value to run a background sweep on that interval:
+every stored report is re-scanned against the refreshed advisory feed and rewritten, so an artifact
+that was clean when first scanned is re-evaluated as new advisories land ("scan once, then monitor").
+Combined with `enforce_on_serve`, a package that becomes vulnerable after caching is blocked on its
+next read once a sweep updates its report. The first sweep runs one interval after startup.
 
 The OSV backend queries the [OSV.dev](https://osv.dev) API by package coordinate; no CVE database is
 vendored. Point `osv_endpoint` at a self-hosted OSV mirror to avoid the public API.
@@ -362,12 +368,14 @@ vendored. Point `osv_endpoint` at a self-hosted OSV mirror to avoid the public A
 | `supply_chain.scanner` | `"osv"` | Scanner backend. Only `osv` is available today. |
 | `supply_chain.osv_endpoint` | `null` | Override the OSV base URL (defaults to `https://api.osv.dev`). |
 | `supply_chain.enforce_on_serve` | `false` | Also gate at serve time, scanning cached artifacts on demand. |
+| `supply_chain.recorrelation_interval_secs` | `0` | Interval for the background re-scan sweep; `0` disables it. |
 
 ```toml
 [supply_chain]
 enabled = true
 scanner = "osv"
 enforce_on_serve = true  # gate reads as well as publishes
+recorrelation_interval_secs = 3600  # re-scan stored reports hourly against refreshed advisories
 
 [policies]
 max_vuln_severity = "high"  # deny a critical-severity advisory at both ingest and serve

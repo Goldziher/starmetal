@@ -268,6 +268,45 @@ pub fn evaluate_scan_report(report: &ScanReport, max_allowed: VulnSeverity) -> P
     }
 }
 
+/// Summary of one scheduled re-correlation sweep (ADR-0024).
+///
+/// A sweep re-scans every stored [`ScanReport`] against the (refreshed) advisory feed and rewrites
+/// each one, so an artifact that was clean when first scanned is re-evaluated as new advisories land.
+/// The counters let the scheduler log sweep outcomes and highlight artifacts whose gate decision
+/// flipped from allow to block since their previous scan.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct RecorrelationReport {
+    /// Number of stored reports whose subject artifact was still present and was re-scanned.
+    pub scanned: usize,
+    /// Number of re-scanned reports whose findings changed and were rewritten.
+    pub updated: usize,
+    /// Number of subjects whose re-scan could not complete (transport failure); their stored report
+    /// is left unchanged and the sweep continues.
+    pub failed: usize,
+    /// Human-readable coordinates that now exceed the severity gate but did not at their prior scan.
+    #[serde(default)]
+    pub newly_blocking: Vec<String>,
+}
+
+/// Scheduled maintenance over the persisted supply-chain state (ADR-0024).
+///
+/// This is the "monitor" half of scan-once-then-monitor, kept separate from the request-path
+/// [`Scanner`] port because it is driven by a scheduler rather than an ingest/serve request. The
+/// trait is object-safe so a runtime can hold an `Arc<dyn SupplyChainMaintenance>` and drive it from
+/// a background task.
+#[async_trait]
+pub trait SupplyChainMaintenance: Send + Sync {
+    /// Re-scan every stored scan report against the (refreshed) advisory feed, rewrite the ones whose
+    /// findings changed, and summarize the sweep.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error only on a systemic failure (e.g. the report store is unreadable); a single
+    /// subject whose re-scan fails is counted in [`RecorrelationReport::failed`], not surfaced as an
+    /// error, so one transient failure does not abort the sweep.
+    async fn recorrelate(&self) -> Result<RecorrelationReport>;
+}
+
 /// Capabilities a [`Scanner`] advertises so the pipeline can negotiate whether and how to use it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ScannerCapabilities {

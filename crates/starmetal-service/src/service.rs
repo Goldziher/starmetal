@@ -36,7 +36,9 @@ use starmetal_core::signing::{
     SigningConfig, SigningKeyStatus, SigningMode,
 };
 use starmetal_core::statistics::{EcosystemStatistics, StatisticsSnapshot};
-use starmetal_core::supply_chain::{ScanReport, ScanTarget, Scanner, evaluate_scan_report};
+use starmetal_core::supply_chain::{
+    RecorrelationReport, ScanReport, ScanTarget, Scanner, SupplyChainMaintenance, evaluate_scan_report,
+};
 use zeroize::Zeroizing;
 
 const DSSE_PAE_PREFIX: &str = "DSSEv1";
@@ -328,6 +330,22 @@ struct StagedWrite {
     previous: Option<Bytes>,
 }
 
+/// Storage key prefix under which digest-keyed scan reports are persisted. Scheduled re-correlation
+/// enumerates this prefix to find every stored report.
+const SCAN_REPORT_PREFIX: &str = "_starmetal/scans/";
+
+/// On-disk envelope for a persisted scan report.
+///
+/// The digest-keyed sidecar carries the [`ScanReport`] plus the artifact coordinate it was produced
+/// for. The coordinate is needed by scheduled re-correlation: coordinate-keyed scanners (OSV) query
+/// the advisory feed by `ecosystem/name/version`, not by content digest, so a sweep must recover the
+/// coordinate to re-scan. The serve gate reads only `report`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct PersistedScanReport {
+    artifact: ArtifactId,
+    report: ScanReport,
+}
+
 impl CachingPackageService {
     pub fn new(
         storage: Arc<dyn StoragePort>,
@@ -393,7 +411,7 @@ impl CachingPackageService {
     /// Storage key for an artifact's cached scan report, addressed by the artifact's blake3 digest so
     /// identical bytes (across ecosystems/coordinates) share a single report ("scan once").
     fn scan_report_key(blake3: &str) -> String {
-        format!("_starmetal/scans/{blake3}.json")
+        format!("{SCAN_REPORT_PREFIX}{blake3}.json")
     }
 
     /// Enforce the serve-time vulnerability gate for one artifact's bytes. A no-op unless a scanner is
@@ -410,12 +428,16 @@ impl CachingPackageService {
 
         let report_key = Self::scan_report_key(blake3);
         let report = match self.storage.get(&report_key).await? {
-            Some(bytes) => serde_json::from_slice::<ScanReport>(&bytes)?,
+            Some(bytes) => serde_json::from_slice::<PersistedScanReport>(&bytes)?.report,
             None => {
                 let report = scanner.scan(ScanTarget::new(artifact_id, data)).await?;
                 // Cache the report so subsequent serves of the same bytes skip the upstream scan.
+                let persisted = PersistedScanReport {
+                    artifact: artifact_id.clone(),
+                    report: report.clone(),
+                };
                 self.storage
-                    .put(&report_key, Bytes::from(serde_json::to_vec(&report)?))
+                    .put(&report_key, Bytes::from(serde_json::to_vec(&persisted)?))
                     .await?;
                 report
             }
@@ -1083,7 +1105,7 @@ impl PublishingService for CachingPackageService {
         // that cannot complete (transport failure) propagates as an error — the publish fails closed.
         // Passing reports are carried into the transactional block and stored (digest-keyed) so the
         // serve-time gate finds them without re-scanning.
-        let mut scan_reports: Vec<(String, ScanReport)> = Vec::new();
+        let mut scan_reports: Vec<(String, PersistedScanReport)> = Vec::new();
         if let Some(scanner) = &self.scanner {
             for artifact in &request.artifacts {
                 let artifact_id = ArtifactId {
@@ -1102,15 +1124,21 @@ impl PublishingService for CachingPackageService {
                             .to_string(),
                     ));
                 }
-                scan_reports.push((integrity::blake3_hex(&artifact.data), report));
+                scan_reports.push((
+                    integrity::blake3_hex(&artifact.data),
+                    PersistedScanReport {
+                        artifact: artifact_id,
+                        report,
+                    },
+                ));
             }
         }
 
         let result = async {
-            for (blake3, report) in &scan_reports {
+            for (blake3, persisted) in &scan_reports {
                 self.put_and_track(
                     &Self::scan_report_key(blake3),
-                    Bytes::from(serde_json::to_vec(report)?),
+                    Bytes::from(serde_json::to_vec(persisted)?),
                     &mut staged_keys,
                 )
                 .await?;
@@ -1363,6 +1391,70 @@ impl StatisticsService for CachingPackageService {
             }
         }
     }
+}
+
+#[async_trait]
+impl SupplyChainMaintenance for CachingPackageService {
+    async fn recorrelate(&self) -> Result<RecorrelationReport> {
+        let mut report = RecorrelationReport::default();
+        let Some(scanner) = &self.scanner else {
+            // No scanner attached: nothing to re-correlate against. A benign no-op sweep.
+            return Ok(report);
+        };
+
+        let keys = self.storage.list_prefix(SCAN_REPORT_PREFIX).await?;
+        for key in keys {
+            let Some(bytes) = self.storage.get(&key).await? else {
+                continue;
+            };
+            let persisted: PersistedScanReport = serde_json::from_slice(&bytes)?;
+            // Re-scanning needs the artifact bytes to recompute the digest key and drive a
+            // coordinate-keyed scanner. If the artifact was evicted from the cache, skip it — its
+            // stale report is a GC candidate, not a re-correlation subject.
+            let artifact_key = persisted.artifact.validated_storage_key()?.into_string();
+            let Some(content) = self.storage.get(&artifact_key).await? else {
+                continue;
+            };
+
+            report.scanned += 1;
+            let was_blocking = evaluate_scan_report(&persisted.report, self.policy.max_vuln_severity).blocks_serving();
+
+            let fresh = match scanner.scan(ScanTarget::new(&persisted.artifact, &content)).await {
+                Ok(fresh) => fresh,
+                Err(error) => {
+                    // A transient scan failure must not abort the whole sweep: record it and move on,
+                    // leaving the previously stored report untouched.
+                    tracing::warn!(%error, key = %key, "re-correlation scan failed; keeping the stored report");
+                    report.failed += 1;
+                    continue;
+                }
+            };
+
+            if fresh != persisted.report {
+                let updated = PersistedScanReport {
+                    artifact: persisted.artifact.clone(),
+                    report: fresh.clone(),
+                };
+                self.storage
+                    .put(&key, Bytes::from(serde_json::to_vec(&updated)?))
+                    .await?;
+                report.updated += 1;
+            }
+
+            let now_blocking = evaluate_scan_report(&fresh, self.policy.max_vuln_severity).blocks_serving();
+            if now_blocking && !was_blocking {
+                report.newly_blocking.push(coordinate_label(&persisted.artifact));
+            }
+        }
+
+        Ok(report)
+    }
+}
+
+/// A human-readable `ecosystem/name/version` label for a scanned artifact, used in re-correlation
+/// summaries and logs (not a storage key).
+fn coordinate_label(artifact: &ArtifactId) -> String {
+    format!("{}/{}/{}", artifact.ecosystem, artifact.name.as_str(), artifact.version)
 }
 
 fn unix_now() -> u64 {
@@ -2220,12 +2312,129 @@ mod tests {
             .await
             .unwrap()
             .expect("a scan report is stored at ingest, keyed by the artifact digest");
-        let report: starmetal_core::supply_chain::ScanReport = serde_json::from_slice(&stored).unwrap();
-        assert_eq!(report.vulnerabilities.len(), 1);
+        let persisted: PersistedScanReport = serde_json::from_slice(&stored).unwrap();
+        assert_eq!(persisted.artifact, sample_artifact_id());
+        assert_eq!(persisted.report.vulnerabilities.len(), 1);
         assert_eq!(
-            report.vulnerabilities[0].severity,
+            persisted.report.vulnerabilities[0].severity,
             starmetal_core::policy::VulnSeverity::Low
         );
+    }
+
+    /// A [`Scanner`] whose findings can be swapped after construction, to simulate an advisory feed
+    /// that discloses a new vulnerability between the first scan and a later re-correlation sweep.
+    struct MutableScanner {
+        severity: std::sync::Mutex<Option<starmetal_core::policy::VulnSeverity>>,
+    }
+
+    impl MutableScanner {
+        fn new(severity: Option<starmetal_core::policy::VulnSeverity>) -> Self {
+            Self {
+                severity: std::sync::Mutex::new(severity),
+            }
+        }
+
+        fn set(&self, severity: Option<starmetal_core::policy::VulnSeverity>) {
+            *self.severity.lock().unwrap() = severity;
+        }
+    }
+
+    #[async_trait]
+    impl Scanner for MutableScanner {
+        async fn scan(&self, target: ScanTarget<'_>) -> Result<starmetal_core::supply_chain::ScanReport> {
+            let vulnerabilities = self
+                .severity
+                .lock()
+                .unwrap()
+                .map(|severity| {
+                    vec![starmetal_core::supply_chain::Vulnerability {
+                        id: "CVE-TEST-1".to_string(),
+                        severity,
+                        package: None,
+                        description: None,
+                        fixed_version: None,
+                    }]
+                })
+                .unwrap_or_default();
+            Ok(starmetal_core::supply_chain::ScanReport {
+                scanner: "mutable".to_string(),
+                subject_digest: integrity::blake3_hex(target.content),
+                vulnerabilities,
+                completed: true,
+            })
+        }
+
+        fn capabilities(&self) -> starmetal_core::supply_chain::ScannerCapabilities {
+            starmetal_core::supply_chain::ScannerCapabilities {
+                name: "mutable".to_string(),
+                version: "0".to_string(),
+                ecosystems: Vec::new(),
+                supports_vulnerabilities: true,
+                produces_sbom: false,
+                sbom_formats: Vec::new(),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn recorrelation_rewrites_a_report_and_flags_a_newly_blocking_artifact() {
+        let storage = Arc::new(MockStorage::new());
+        let policy = PolicyConfig {
+            max_vuln_severity: starmetal_core::policy::VulnSeverity::High,
+            ..PolicyConfig::default()
+        };
+        // Publish while the feed reports the artifact clean, so a passing report is persisted.
+        let scanner = Arc::new(MutableScanner::new(None));
+        let service =
+            CachingPackageService::new(storage.clone(), AHashMap::new(), policy).with_scanner(scanner.clone());
+        service.publish_package(scan_gate_request()).await.unwrap();
+
+        // A new Critical advisory lands; the next sweep must re-scan, rewrite, and flag the artifact.
+        scanner.set(Some(starmetal_core::policy::VulnSeverity::Critical));
+        let report = service.recorrelate().await.unwrap();
+        assert_eq!(report.scanned, 1);
+        assert_eq!(report.updated, 1);
+        assert_eq!(report.failed, 0);
+        assert_eq!(report.newly_blocking, vec!["pypi/sample/1.0.0".to_string()]);
+
+        // The rewritten report now carries the Critical finding.
+        let blake3 = integrity::blake3_hex(b"scanned artifact");
+        let stored = storage
+            .get(&format!("_starmetal/scans/{blake3}.json"))
+            .await
+            .unwrap()
+            .expect("the report is still stored");
+        let persisted: PersistedScanReport = serde_json::from_slice(&stored).unwrap();
+        assert_eq!(
+            persisted.report.highest_severity(),
+            Some(starmetal_core::policy::VulnSeverity::Critical)
+        );
+    }
+
+    #[tokio::test]
+    async fn recorrelation_skips_an_evicted_artifact() {
+        let storage = Arc::new(MockStorage::new());
+        let scanner = Arc::new(MutableScanner::new(None));
+        let service =
+            CachingPackageService::new(storage.clone(), AHashMap::new(), PolicyConfig::default()).with_scanner(scanner);
+        service.publish_package(scan_gate_request()).await.unwrap();
+
+        // Evict the artifact bytes but leave the stale report behind.
+        let artifact_key = sample_artifact_id().validated_storage_key().unwrap().into_string();
+        storage.delete(&artifact_key).await.unwrap();
+
+        let report = service.recorrelate().await.unwrap();
+        assert_eq!(report.scanned, 0, "an evicted artifact is not re-scanned");
+        assert_eq!(report.updated, 0);
+        assert!(report.newly_blocking.is_empty());
+    }
+
+    #[tokio::test]
+    async fn recorrelation_is_a_noop_without_a_scanner() {
+        let storage = Arc::new(MockStorage::new());
+        let service = CachingPackageService::new(storage, AHashMap::new(), PolicyConfig::default());
+        let report = service.recorrelate().await.unwrap();
+        assert_eq!(report, RecorrelationReport::default());
     }
 
     #[tokio::test]

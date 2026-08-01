@@ -300,6 +300,12 @@ pub struct SupplyChainConfig {
     /// that exceeds `policies.max_vuln_severity`. Off by default — ingest gating only.
     #[serde(default)]
     pub enforce_on_serve: bool,
+    /// Interval in seconds between scheduled re-correlation sweeps. Each sweep re-scans every stored
+    /// scan report against the (refreshed) advisory feed and rewrites it, so an artifact that was
+    /// clean when first scanned is re-evaluated as new advisories land ("scan once, then monitor").
+    /// `0` (the default) disables the scheduler. Only effective when a scanner is attached.
+    #[serde(default)]
+    pub recorrelation_interval_secs: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -1292,6 +1298,10 @@ certificate_file = "/etc/starmetal/trust/internal-ca.pem"
         assert_eq!(supply_chain.scanner, ScannerKind::Osv);
         assert!(supply_chain.osv_endpoint.is_none());
         assert!(!supply_chain.enforce_on_serve);
+        assert_eq!(
+            supply_chain.recorrelation_interval_secs, 0,
+            "re-correlation scheduler is disabled by default"
+        );
     }
 
     #[test]

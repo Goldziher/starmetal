@@ -10,6 +10,7 @@ use starmetal_core::error::{Result, StarmetalError};
 use starmetal_core::package::{ArtifactId, Ecosystem, PackageName, VersionMetadata};
 use starmetal_core::ports::{PackageService, PublishingService, StatisticsService, StoragePort, UpstreamClient};
 use starmetal_core::publishing::{ProtocolMetadata, PublishRequest, PublishedArtifact, YankRequest};
+use starmetal_core::supply_chain::SupplyChainMaintenance;
 use starmetal_server::state::{AppState, UpstreamClients};
 use starmetal_service::{CachingPackageService, SigningService};
 use starmetal_storage::OpenDalStorage;
@@ -79,6 +80,9 @@ pub struct StarmetalRuntime {
     pub publishing_service: Arc<dyn PublishingService>,
     pub statistics_service: Arc<dyn StatisticsService>,
     pub upstreams: UpstreamClients,
+    /// Handle for scheduled supply-chain re-correlation (ADR-0024). `Some` only when a scanner is
+    /// attached (`supply_chain.enabled` under the scanner feature); drives the background sweep.
+    pub maintenance: Option<Arc<dyn SupplyChainMaintenance>>,
 }
 
 /// Attach a Postgres-backed content store (ADR-0020) to the service when `metadata.enabled`, so
@@ -164,6 +168,18 @@ impl StarmetalRuntime {
         #[cfg(feature = "scanner-osv")]
         let service = attach_scanner(service, &config);
         let service = Arc::new(service);
+
+        // Expose a re-correlation handle only when a scanner is actually attached, so a build without
+        // the scanner feature (or with supply-chain disabled) carries no maintenance handle.
+        #[cfg(feature = "scanner-osv")]
+        let maintenance: Option<Arc<dyn SupplyChainMaintenance>> = if config.supply_chain.enabled {
+            Some(service.clone())
+        } else {
+            None
+        };
+        #[cfg(not(feature = "scanner-osv"))]
+        let maintenance: Option<Arc<dyn SupplyChainMaintenance>> = None;
+
         let upstreams = UpstreamClients {
             #[cfg(feature = "pypi")]
             pypi_upstream,
@@ -190,7 +206,43 @@ impl StarmetalRuntime {
             publishing_service: service.clone(),
             statistics_service: service,
             upstreams,
+            maintenance,
         })
+    }
+
+    /// Spawn the scheduled supply-chain re-correlation sweep (ADR-0024) when configured.
+    ///
+    /// Returns `None` (spawning nothing) unless a scanner is attached and
+    /// `supply_chain.recorrelation_interval_secs` is non-zero. The returned task re-scans every
+    /// stored scan report on each interval and logs the sweep outcome; it runs until the process
+    /// exits (or the caller aborts the handle). The first sweep runs one interval after start, not
+    /// immediately, so startup stays cheap.
+    pub fn spawn_recorrelation_scheduler(&self) -> Option<tokio::task::JoinHandle<()>> {
+        let interval_secs = self.config.supply_chain.recorrelation_interval_secs;
+        if interval_secs == 0 {
+            return None;
+        }
+        let maintenance = self.maintenance.clone()?;
+        let period = std::time::Duration::from_secs(interval_secs);
+        Some(tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(period);
+            ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            // The first tick fires immediately; consume it so the first real sweep waits one period.
+            ticker.tick().await;
+            loop {
+                ticker.tick().await;
+                match maintenance.recorrelate().await {
+                    Ok(report) => tracing::info!(
+                        scanned = report.scanned,
+                        updated = report.updated,
+                        failed = report.failed,
+                        newly_blocking = report.newly_blocking.len(),
+                        "supply-chain re-correlation sweep complete"
+                    ),
+                    Err(error) => tracing::warn!(%error, "supply-chain re-correlation sweep failed"),
+                }
+            }
+        }))
     }
 
     pub fn app_state(&self) -> AppState {

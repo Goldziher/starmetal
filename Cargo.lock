@@ -4148,6 +4148,7 @@ dependencies = [
  "starmetal-versioning",
  "tempfile",
  "tokio",
+ "tracing",
 ]
 
 [[package]]

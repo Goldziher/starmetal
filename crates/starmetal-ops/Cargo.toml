@@ -48,6 +48,7 @@ starmetal-update-core = { workspace = true, optional = true }
 starmetal-updater = { workspace = true, optional = true }
 starmetal-versioning = { workspace = true, optional = true }
 tokio.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
