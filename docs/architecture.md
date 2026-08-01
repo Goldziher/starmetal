@@ -35,6 +35,11 @@ graph TB
         compress[CompressionLayer]
     end
 
+    subgraph AccessControl
+        authorizer[Authorizer / Authenticator port]
+        local_authorizer[LocalAuthorizer]
+    end
+
     subgraph Adapters
         pypi[PyPI]
         npm[npm]
@@ -51,6 +56,10 @@ graph TB
         policy[Policy]
         integrity[Blake3 sidecars]
     end
+
+    publishing --> authorizer
+    admin --> authorizer
+    authorizer --> local_authorizer
 
     subgraph Ports
         storage[StoragePort]
@@ -116,20 +125,26 @@ graph LR
     ops --> service[starmetal-service]
     ops --> storage[starmetal-storage]
     ops --> adapters[starmetal-adapters]
+    ops --> authz[starmetal-authz]
+    ops --> metadata[starmetal-metadata]
     server --> adapters
     server --> service
     adapters --> core[starmetal-core]
     service --> core
     storage --> core
+    authz --> core
+    metadata --> core
 ```
 
 | Crate | Purpose |
 |-------|---------|
-| `starmetal-core` | Domain types, config, policy, ports, lock file, registry schema types |
+| `starmetal-core` | Domain types, config, policy, ports (including `Authorizer`/`Authenticator`), lock file, registry schema types |
 | `starmetal-service` | Pull-through cache, Blake3 verification, policy checks, experimental local publishing |
 | `starmetal-storage` | OpenDAL `StoragePort` implementation |
 | `starmetal-adapters` | Feature-gated protocol routers and upstream clients |
 | `starmetal-server` | Axum app assembly and Tower middleware |
+| `starmetal-authz` | `LocalAuthorizer`: deny-by-default `Authorizer`/`Authenticator` implementation migrating flat auth/admin/publishing tokens into a grant model (ADR-0022) |
+| `starmetal-metadata` | Postgres-backed content model: component/asset/blob, blake3 dedup, garbage collection, retention (ADR-0020) |
 | `starmetal-ops` | Shared local runtime and operator operations |
 | `starmetal-cli` | Clap CLI and stdio MCP server |
 | `starmetal-update-core` | Framework-free dependency-update domain types and ports (experimental) |
@@ -209,6 +224,11 @@ local publishing surfaces:
 - Do not forward uploads upstream.
 - Do not provide full owner, organization, invitation, search, or admin behavior.
 
+All eight publish adapters and the admin API authorize through `starmetal-authz`'s `LocalAuthorizer`
+(ADR-0022), which migrates the flat `[auth]`/`[admin]`/`[publishing]` token config into a deny-by-default
+grant model at startup — there is no separate `[authz]` config section. Read-route gating still uses
+the legacy bearer-token check directly.
+
 ## Dependency Update Engine
 
 Experimental, Phase 0. A Renovate-style dependency-update engine, scoped to Cargo manifests and
@@ -260,6 +280,38 @@ Additional service-managed keys include:
 - `<ecosystem>/<name>/_raw_upstream`
 - `_starmetal/published/<ecosystem>/<name>/<version>.json`
 
+## Content Model & Metadata Store
+
+Experimental, disabled by default. `starmetal-metadata` adds an optional Postgres content model
+(ADR-0020) alongside the flat object-store keys above: publish dual-writes a `Component → Asset →
+Blob` graph, with blobs addressed by their blake3 digest so identical bytes published across
+different ecosystems share one stored blob (cross-ecosystem dedup). Reads re-verify blob integrity
+against the digest key.
+
+Unreferenced blobs are reclaimed by a reference-counted garbage collector (mark unreferenced blobs,
+soft-delete with a grace window, then compact) and by retention policies that delete component
+versions matching configured rules (`keep-latest`, `is-prerelease`, `matches-regex`, `last-updated`,
+`last-downloaded`). Both GC and retention run on optional interval schedulers and are also exposed as
+admin triggers (`POST /admin/api/v1/gc`, `POST /admin/api/v1/retention`). Gated by `[metadata].enabled`
+plus the `metadata` build feature (included in `full`). See [Configuration](configuration.md) and
+[ADR-0020](adr/0020-content-model-and-garbage-collection.md).
+
+## Supply-Chain Pipeline
+
+Experimental, disabled by default. A `Scanner` port with an OSV-backed implementation gates artifacts
+against known vulnerabilities: publish (ingest) rejects an artifact whose worst finding exceeds
+`policies.max_vuln_severity`, and, with `enforce_on_serve`, the same threshold gates `get_artifact` at
+serve time, scanning on demand and persisting the report as a blake3-keyed sidecar so identical bytes
+share one report. A scheduled re-correlation sweep re-scans stored reports against refreshed advisory
+data. With `quarantine` enabled, a serve-time block becomes a recoverable hold instead of a terminal
+deny, promoted or rejected through admin endpoints (`POST /admin/api/v1/quarantine/{digest}/promote`,
+`.../reject`).
+
+Enforcement today is in-service — imperative checks inside `CachingPackageService`, not a Tower
+middleware layer. Gated by `[supply_chain].enabled` plus the `scanner-osv` build feature (included in
+`full`). See [Configuration](configuration.md), [ADR-0024](adr/0024-supply-chain-security-pipeline.md),
+and [ADR-0025](adr/0025-supply-chain-enforcement-architecture.md).
+
 ## Schemas
 
 Schema provenance and generated validation artifacts live in `schemas/`.
@@ -303,3 +355,11 @@ not create support claims without live E2E evidence.
 - [0015 - Statistics and Operational Metrics](adr/0015-statistics-operational-metrics.md)
 - [0016 - Dependency Update Engine](adr/0016-dependency-update-engine.md)
 - [0017 - Forge and Git Integration Port](adr/0017-forge-git-port.md)
+- [0018 - Universal Artifact Repository Direction](adr/0018-universal-artifact-repository-direction.md)
+- [0019 - Repository Kinds and the Recipe/Facet Model, proposed](adr/0019-repository-kinds-recipe-facet-model.md)
+- [0020 - Universal Content Model and Garbage Collection](adr/0020-content-model-and-garbage-collection.md)
+- [0021 - Native Hosted Publishing, proposed](adr/0021-native-hosted-publishing.md)
+- [0022 - Access Control Model](adr/0022-access-control-model.md)
+- [0023 - Git as a Dependency Source, proposed](adr/0023-git-as-dependency-source.md)
+- [0024 - Supply-Chain Security Pipeline, accepted (partial)](adr/0024-supply-chain-security-pipeline.md)
+- [0025 - Supply-Chain Enforcement Architecture (As-Built)](adr/0025-supply-chain-enforcement-architecture.md)

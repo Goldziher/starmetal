@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `starmetal-metadata` crate: an optional Postgres-backed content model (ADR-0020) that dual-writes a
+  `Component → Asset → Blob` graph alongside the flat object store on publish. Blobs are addressed by
+  blake3 digest, so identical bytes published across ecosystems share one stored blob (dedup), and
+  reads re-verify against the digest key. A reference-counted garbage collector (mark, soft-delete with
+  a grace window, compact) and configurable retention policies reclaim unreferenced blobs; both run on
+  optional interval schedulers and as admin-triggered sweeps (`POST /admin/api/v1/gc`,
+  `POST /admin/api/v1/retention`). Gated by `[metadata].enabled` and the `metadata` build feature
+  (included in `full`).
+- `starmetal-authz` crate: `LocalAuthorizer`, a deny-by-default implementation of a new `Authorizer` /
+  `Authenticator` port (ADR-0022). It migrates the existing flat `[auth]`/`[admin]`/`[publishing]`
+  token config into a BREAD-action grant model at startup; no new config section is required. Wired
+  into all eight publish adapters and the admin API.
+- Supply-chain vulnerability pipeline: a `Scanner` port with an OSV-backed implementation gates
+  publish against `policies.max_vuln_severity`, and, with `supply_chain.enforce_on_serve`, gates
+  `get_artifact` reads the same way. Scan reports persist as blake3-keyed sidecars shared across
+  identical bytes. A scheduled re-correlation sweep re-scans stored reports against refreshed
+  advisories. With `supply_chain.quarantine` enabled, a serve-time block becomes a recoverable hold,
+  promoted or rejected through `POST /admin/api/v1/quarantine/{digest}/promote` and `.../reject`.
+  Gated by `[supply_chain].enabled` and the `scanner-osv` build feature (included in `full`).
+  ADR-0025 documents the enforcement architecture.
+
+### Changed
+
+- Bumped `opendal` to 0.58.
+
 ## [0.3.0] - 2026-07-24
 
 ### Added

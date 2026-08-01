@@ -225,6 +225,57 @@ bucket = "starmetal-packages"
 Additional OpenDAL options can be supplied under `[storage.options]` when a deployment needs a
 backend knob that is not modeled by the typed `s3` or `gcs` sections.
 
+## Metadata Store (Postgres)
+
+Experimental, disabled by default. Enabling `[metadata]` adds a Postgres-backed content model
+(ADR-0020) alongside the OpenDAL object store: publish dual-writes a component/asset/blob graph,
+blobs dedup by blake3 digest across ecosystems, and unreferenced blobs are reclaimed by garbage
+collection and retention sweeps. Requires the `metadata` build feature (included in `full`).
+
+Provision a reachable Postgres instance and point `database_url` at it:
+
+```toml
+[metadata]
+enabled = true
+database_url = "postgresql://starmetal:password@postgres.internal:5432/starmetal"
+apply_schema = true    # apply the content-model schema on startup; disable for out-of-band migrations
+gc_interval_secs = 3600
+gc_grace_secs = 86400
+retention_interval_secs = 0
+```
+
+`apply_schema = true` (the default) applies `starmetal-metadata`'s schema on every startup — convenient
+for single-instance deployments. Set it to `false` and run schema migrations out of band when multiple
+instances share one database or migrations are managed by a separate tool. Leave `gc_interval_secs` and
+`retention_interval_secs` at `0` to disable their schedulers and trigger sweeps on demand instead, through
+`POST /admin/api/v1/gc` and `POST /admin/api/v1/retention`.
+
+## Supply-Chain Scanning
+
+Experimental, disabled by default. Enabling `[supply_chain]` gates publish (and, with
+`enforce_on_serve`, cache reads) against OSV vulnerability findings. Requires the `scanner-osv` build
+feature (included in `full`).
+
+```toml
+[supply_chain]
+enabled = true
+scanner = "osv"
+enforce_on_serve = true
+recorrelation_interval_secs = 3600
+quarantine = true
+
+[policies]
+max_vuln_severity = "high"
+```
+
+The OSV backend calls the public `https://api.osv.dev` API by default. For an air-gapped or
+rate-limit-sensitive deployment, run a self-hosted OSV mirror and point `osv_endpoint` at it instead:
+
+```toml
+[supply_chain]
+osv_endpoint = "https://osv-mirror.internal.example.com"
+```
+
 ## Authentication
 
 Read authentication is optional. If enabled, configure bearer tokens in an uncommitted private config
@@ -237,6 +288,10 @@ tokens = ["replace-with-private-token"]
 ```
 
 Do not commit real tokens.
+
+`[auth]`, `[admin]`, and `[publishing]` tokens are the configuration surface; at startup they are
+migrated into `starmetal-authz`'s deny-by-default `Authorizer` grant model (ADR-0022), which the admin
+API and every publish adapter consult. There is no separate authz config to deploy.
 
 ## Admin API
 

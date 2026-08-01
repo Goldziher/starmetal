@@ -199,6 +199,24 @@ ecosystems = ["npm"]
 packages = ["local-pnpm"]
 ```
 
+## Access Control
+
+Authorization runs through an `Authorizer` port (ADR-0022). `LocalAuthorizer` is the built-in
+implementation: at startup it migrates the flat `[auth]`, `[admin]`, and `[publishing]` token sections
+into a grant model rather than reading a separate config section.
+
+- Every `auth.tokens` value migrates to a single shared principal granted `read`/`browse` on every
+  repository.
+- Every `admin.tokens` value migrates to a single shared principal granted admin plus full content
+  access on every repository.
+- Each `publishing.tokens.*` entry migrates to its own principal, with grants built from that token's
+  `scopes`, `ecosystems`, and `packages`.
+
+The migration is deny-by-default: a principal with no matching grant, or a token that authenticates to
+nothing, is denied. All eight publish adapters and the admin API consult the `Authorizer`; read-route
+gating still checks `auth.tokens` directly. There is intentionally no `[authz]` config section yet —
+configure access by setting `[auth]`, `[admin]`, and `[publishing]` tokens as documented above.
+
 ## Upstreams
 
 Defaults configure all currently implemented upstreams: `pypi`, `npm`, `cargo`, `hex`, `maven`,

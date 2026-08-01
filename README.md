@@ -46,6 +46,9 @@ Starmetal sits between package-manager clients and upstream registries:
 | Storage | OpenDAL-backed filesystem, S3, GCS, and memory backends |
 | Operations | CLI plus stdio MCP tools over the same local operations layer |
 | Dependency updates | Scans manifests and opens update PRs, reusing the proxy as the version datasource (experimental; Cargo + GitHub) |
+| Content model | Postgres-backed component/asset/blob store with blake3 cross-ecosystem dedup, reference-counted garbage collection, and retention policies (experimental, disabled by default) |
+| Supply-chain scanning | OSV vulnerability gate at publish and serve time, with serve-time quarantine and admin promote/reject (experimental, disabled by default) |
+| Access control | `Authorizer` port with a deny-by-default grant model migrated from the flat auth/admin/publishing tokens |
 
 Starmetal is built for private/internal deployments first. It is not yet a public internet-facing
 registry product, and every registry workflow should be treated as experimental until fresh live
@@ -200,6 +203,13 @@ path = "/var/lib/starmetal"
 [auth]
 enabled = true
 tokens = ["replace-with-a-secret-token"]
+
+# [metadata]       # experimental Postgres content model: dedup, GC, retention
+# enabled = true
+# database_url = "postgresql://user:password@host:5432/starmetal"
+
+# [supply_chain]   # experimental OSV vulnerability gate at ingest and serve
+# enabled = true
 ```
 
 Upstream URLs must be HTTPS and public by default. Local, private-network, or insecure upstreams
@@ -268,6 +278,8 @@ service/core boundary.
 | `starmetal-storage` | OpenDAL-backed `StoragePort` implementation |
 | `starmetal-adapters` | Feature-gated protocol routers and upstream clients |
 | `starmetal-server` | Axum app assembly and Tower middleware |
+| `starmetal-authz` | `LocalAuthorizer`: deny-by-default `Authorizer`/`Authenticator` implementation migrating flat auth/admin/publishing tokens into a grant model (ADR-0022) |
+| `starmetal-metadata` | Postgres-backed content model: component/asset/blob, blake3 dedup, garbage collection, retention (ADR-0020) |
 | `starmetal-ops` | Shared local operator API used by CLI and MCP |
 | `starmetal-cli` | Clap CLI and stdio MCP server |
 | `starmetal-update-core` | Framework-free dependency-update domain types and ports (experimental) |
@@ -326,13 +338,14 @@ under [`schemas/`](schemas/):
 - [0015 - Statistics and Operational Metrics](docs/adr/0015-statistics-operational-metrics.md)
 - [0016 - Dependency Update Engine](docs/adr/0016-dependency-update-engine.md)
 - [0017 - Forge and Git Integration Port](docs/adr/0017-forge-git-port.md)
-- [0018 - Universal Artifact Repository Direction, proposed](docs/adr/0018-universal-artifact-repository-direction.md)
+- [0018 - Universal Artifact Repository Direction](docs/adr/0018-universal-artifact-repository-direction.md)
 - [0019 - Repository Kinds and the Recipe/Facet Model, proposed](docs/adr/0019-repository-kinds-recipe-facet-model.md)
-- [0020 - Universal Content Model and Garbage Collection, proposed](docs/adr/0020-content-model-and-garbage-collection.md)
+- [0020 - Universal Content Model and Garbage Collection](docs/adr/0020-content-model-and-garbage-collection.md)
 - [0021 - Native Hosted Publishing, proposed](docs/adr/0021-native-hosted-publishing.md)
-- [0022 - Access Control Model, proposed](docs/adr/0022-access-control-model.md)
+- [0022 - Access Control Model](docs/adr/0022-access-control-model.md)
 - [0023 - Git as a Dependency Source, proposed](docs/adr/0023-git-as-dependency-source.md)
-- [0024 - Supply-Chain Security Pipeline, proposed](docs/adr/0024-supply-chain-security-pipeline.md)
+- [0024 - Supply-Chain Security Pipeline, accepted (partial)](docs/adr/0024-supply-chain-security-pipeline.md)
+- [0025 - Supply-Chain Enforcement Architecture (As-Built)](docs/adr/0025-supply-chain-enforcement-architecture.md)
 
 ## License
 
