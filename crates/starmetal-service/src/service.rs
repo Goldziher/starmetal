@@ -13,6 +13,7 @@ use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
 use bytes::Bytes;
 use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey};
+use futures::stream::{self, StreamExt};
 use pkcs8::{
     DecodePrivateKey, ObjectIdentifier, PrivateKeyInfoOwned,
     der::{Decode, DecodePem, asn1::OctetStringRef},
@@ -342,6 +343,31 @@ const SCAN_REPORT_PREFIX: &str = "_starmetal/scans/";
 /// review API enumerates this prefix to list held artifacts.
 const QUARANTINE_PREFIX: &str = "_starmetal/quarantine/";
 
+/// Bounded fan-out for the `recorrelate` re-scan sweep. Caps how many OSV lookups run concurrently
+/// so scheduled maintenance overlaps network-bound scans without unbounded fan-out to the upstream
+/// advisory feed (a bounded, not unbounded, concurrent request burst).
+const RECORRELATION_CONCURRENCY: usize = 8;
+
+/// Per-key outcome of re-correlating one persisted scan report, folded into the aggregate
+/// `RecorrelationReport` by `recorrelate` after the bounded-concurrency sweep completes. Returned as
+/// an owned value (rather than mutating a shared `&mut report`) so per-key work can run concurrently
+/// without sharing mutable state across tasks.
+struct RecorrelationOutcome {
+    scanned: bool,
+    updated: bool,
+    failed: bool,
+    newly_blocking: Option<String>,
+}
+
+impl RecorrelationOutcome {
+    const SKIPPED: Self = Self {
+        scanned: false,
+        updated: false,
+        failed: false,
+        newly_blocking: None,
+    };
+}
+
 /// On-disk envelope for a persisted scan report.
 ///
 /// The digest-keyed sidecar carries the [`ScanReport`] plus the artifact coordinate it was produced
@@ -597,6 +623,62 @@ impl CachingPackageService {
             ));
         }
         Ok(scan_reports)
+    }
+
+    /// Re-correlate a single persisted scan report against a fresh scan, used by `recorrelate`'s
+    /// bounded-concurrency sweep. Storage/serialization failures propagate; a scan that cannot
+    /// complete is recorded as `failed` and returns `Ok` so one bad subject never aborts the sweep.
+    async fn recorrelate_one(&self, scanner: &Arc<dyn Scanner>, key: &str) -> Result<RecorrelationOutcome> {
+        let Some(bytes) = self.storage.get(key).await? else {
+            return Ok(RecorrelationOutcome::SKIPPED);
+        };
+        let persisted: PersistedScanReport = serde_json::from_slice(&bytes)?;
+        // Re-scanning needs the artifact bytes to recompute the digest key and drive a
+        // coordinate-keyed scanner. If the artifact was evicted from the cache, skip it — its
+        // stale report is a GC candidate, not a re-correlation subject.
+        let artifact_key = persisted.artifact.validated_storage_key()?.into_string();
+        let Some(content) = self.storage.get(&artifact_key).await? else {
+            return Ok(RecorrelationOutcome::SKIPPED);
+        };
+
+        let was_blocking = evaluate_scan_report(&persisted.report, self.policy.max_vuln_severity).blocks_serving();
+
+        let fresh = match scanner.scan(ScanTarget::new(&persisted.artifact, &content)).await {
+            Ok(fresh) => fresh,
+            Err(error) => {
+                // A transient scan failure must not abort the whole sweep: record it and move on,
+                // leaving the previously stored report untouched.
+                tracing::warn!(%error, key = %key, "re-correlation scan failed; keeping the stored report");
+                return Ok(RecorrelationOutcome {
+                    scanned: true,
+                    updated: false,
+                    failed: true,
+                    newly_blocking: None,
+                });
+            }
+        };
+
+        let mut updated = false;
+        if fresh != persisted.report {
+            let rewritten = PersistedScanReport {
+                artifact: persisted.artifact.clone(),
+                report: fresh.clone(),
+            };
+            self.storage
+                .put(key, Bytes::from(serde_json::to_vec(&rewritten)?))
+                .await?;
+            updated = true;
+        }
+
+        let now_blocking = evaluate_scan_report(&fresh, self.policy.max_vuln_severity).blocks_serving();
+        let newly_blocking = (now_blocking && !was_blocking).then(|| coordinate_label(&persisted.artifact));
+
+        Ok(RecorrelationOutcome {
+            scanned: true,
+            updated,
+            failed: false,
+            newly_blocking,
+        })
     }
 
     async fn store_content_model(
@@ -1501,53 +1583,37 @@ impl StatisticsService for CachingPackageService {
 impl SupplyChainMaintenance for CachingPackageService {
     async fn recorrelate(&self) -> Result<RecorrelationReport> {
         let mut report = RecorrelationReport::default();
-        let Some(scanner) = &self.scanner else {
+        let Some(scanner) = self.scanner.clone() else {
             // No scanner attached: nothing to re-correlate against. A benign no-op sweep.
             return Ok(report);
         };
 
         let keys = self.storage.list_prefix(SCAN_REPORT_PREFIX).await?;
-        for key in keys {
-            let Some(bytes) = self.storage.get(&key).await? else {
-                continue;
-            };
-            let persisted: PersistedScanReport = serde_json::from_slice(&bytes)?;
-            // Re-scanning needs the artifact bytes to recompute the digest key and drive a
-            // coordinate-keyed scanner. If the artifact was evicted from the cache, skip it — its
-            // stale report is a GC candidate, not a re-correlation subject.
-            let artifact_key = persisted.artifact.validated_storage_key()?.into_string();
-            let Some(content) = self.storage.get(&artifact_key).await? else {
-                continue;
-            };
+        // Bounded concurrency: each subject overlaps its two storage `get`s and the scanner's
+        // network round trip with the others, capped at `RECORRELATION_CONCURRENCY` in flight so the
+        // sweep cannot fan out an unbounded burst of requests to the advisory feed.
+        let outcomes: Vec<Result<RecorrelationOutcome>> = stream::iter(keys)
+            .map(|key| {
+                let scanner = Arc::clone(&scanner);
+                async move { self.recorrelate_one(&scanner, &key).await }
+            })
+            .buffer_unordered(RECORRELATION_CONCURRENCY)
+            .collect()
+            .await;
 
-            report.scanned += 1;
-            let was_blocking = evaluate_scan_report(&persisted.report, self.policy.max_vuln_severity).blocks_serving();
-
-            let fresh = match scanner.scan(ScanTarget::new(&persisted.artifact, &content)).await {
-                Ok(fresh) => fresh,
-                Err(error) => {
-                    // A transient scan failure must not abort the whole sweep: record it and move on,
-                    // leaving the previously stored report untouched.
-                    tracing::warn!(%error, key = %key, "re-correlation scan failed; keeping the stored report");
-                    report.failed += 1;
-                    continue;
-                }
-            };
-
-            if fresh != persisted.report {
-                let updated = PersistedScanReport {
-                    artifact: persisted.artifact.clone(),
-                    report: fresh.clone(),
-                };
-                self.storage
-                    .put(&key, Bytes::from(serde_json::to_vec(&updated)?))
-                    .await?;
+        for outcome in outcomes {
+            let outcome = outcome?;
+            if outcome.scanned {
+                report.scanned += 1;
+            }
+            if outcome.updated {
                 report.updated += 1;
             }
-
-            let now_blocking = evaluate_scan_report(&fresh, self.policy.max_vuln_severity).blocks_serving();
-            if now_blocking && !was_blocking {
-                report.newly_blocking.push(coordinate_label(&persisted.artifact));
+            if outcome.failed {
+                report.failed += 1;
+            }
+            if let Some(label) = outcome.newly_blocking {
+                report.newly_blocking.push(label);
             }
         }
 

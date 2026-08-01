@@ -50,6 +50,8 @@ ed25519-dalek = { version = "3", features = ["pkcs8"] }
 
 flate2 = "1"
 
+futures = "0.3"
+
 hex = "0.4"
 
 jsonschema = "0.48"
