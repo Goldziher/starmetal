@@ -164,9 +164,8 @@ mod tests {
     #[test]
     fn diff_honors_zerover_caret_semantics() {
         let scheme = scheme();
-        // 0.1.2 -> 0.2.0 is breaking under ^0.1.2 (minor is the locked component).
+        // 0.1.2 -> 0.2.0 is breaking under ^0.1.2 (minor is the locked component). ~keep
         assert_eq!(scheme.diff("0.1.2", "0.2.0"), Some(UpdateType::Major));
-        // 0.1.2 -> 0.1.3 is a compatible patch.
         assert_eq!(scheme.diff("0.1.2", "0.1.3"), Some(UpdateType::Patch));
         // Any 0.0.z bump is breaking.
         assert_eq!(scheme.diff("0.0.1", "0.0.2"), Some(UpdateType::Major));
@@ -179,16 +178,14 @@ mod tests {
         let scheme = scheme();
         // ">1.2.3" is exclusive, so it has no representable inclusive lower bound.
         assert_eq!(scheme.min_version(">1.2.3"), None);
-        // ">=1.2.3" does.
         assert_eq!(scheme.min_version(">=1.2.3").as_deref(), Some("1.2.3"));
     }
 
     #[test]
     fn replace_strategy_skips_when_already_compatible() {
         let scheme = scheme();
-        // 1.5.0 already satisfies ^1.2.3 -> no rewrite under Replace.
+        // 1.5.0 already satisfies ^1.2.3 -> no rewrite under Replace. ~keep
         assert_eq!(scheme.get_new_value("^1.2.3", RangeStrategy::Replace, "1.5.0"), None);
-        // 2.0.0 falls outside -> rewrite.
         assert_eq!(
             scheme
                 .get_new_value("^1.2.3", RangeStrategy::Replace, "2.0.0")

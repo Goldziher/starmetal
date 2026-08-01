@@ -289,7 +289,7 @@ impl LocalAuthorizer {
 }
 
 // ---------------------------------------------------------------------------
-// Migration: config sections -> tokens + grants
+// Migration: config sections -> tokens + grants ~keep
 // ---------------------------------------------------------------------------
 
 fn register_admin_tokens(config: &Config, tokens: &mut Vec<TokenEntry>, grants: &mut HashMap<PrincipalId, Grants>) {
@@ -423,7 +423,7 @@ fn map_token_scope(scope: TokenScope) -> Action {
 }
 
 // ---------------------------------------------------------------------------
-// authorize(): grant evaluation
+// authorize(): grant evaluation ~keep
 // ---------------------------------------------------------------------------
 
 /// The `(ecosystem, name)` pair a [`Resource`] names, when it is concrete enough to match a

@@ -1308,7 +1308,7 @@ impl PublishingService for CachingPackageService {
 
         // Serializes concurrent publishes targeting the same ecosystem/name/version coordinate;
         // held until this function returns. The guard prunes its `publish_locks` entry on drop, so
-        // the map is cleaned up on every exit path (success or early-return error), not just success.
+        // the map is cleaned up on every exit path (success or early-return error), not just success. ~keep
         let _publish_guard = self
             .acquire_publish_lock(request.ecosystem, &request.name, &request.version)
             .await;
@@ -2974,7 +2974,7 @@ mod tests {
 
         // Between ingest and the sweep, the feed evolves independently per subject: beta discloses a
         // new Critical advisory (its gate decision flips allow -> block), gamma's scan becomes
-        // unavailable, and alpha stays clean and unchanged.
+        // unavailable, and alpha stays clean and unchanged. ~keep
         scanner.set(
             "beta-1.0.0.tar.gz",
             ScanOutcome::Vulnerable(starmetal_core::policy::VulnSeverity::Critical),

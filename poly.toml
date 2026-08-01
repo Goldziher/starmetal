@@ -43,6 +43,7 @@ preserve_patterns = [
   "HACK",
   "WORKAROUND",
   "NOTE",
+  "~keep",
   "Copyright",
   "Licensed",
   "License",

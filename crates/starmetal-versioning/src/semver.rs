@@ -142,7 +142,7 @@ impl Versioning for SemverVersioning {
 
         // Multi-comparator ranges (e.g. ">=1, <2") cannot have a single operator moved onto
         // the target; if the target is already inside the range there is nothing to do,
-        // otherwise widen the range to include it.
+        // otherwise widen the range to include it. ~keep
         if current_value.contains(',') {
             if already_satisfied {
                 return None;
