@@ -1196,7 +1196,10 @@ impl PublishingService for CachingPackageService {
             .await;
 
         let metadata_key = Self::metadata_key(request.ecosystem, &request.name, &request.version)?;
-        if !request.allow_overwrite && self.storage.exists(&metadata_key).await? {
+        // Held under this coordinate's publish lock (acquired above), so this observation stays
+        // consistent with the overwrite-merge and quota-version-delta decisions below.
+        let version_already_exists = self.storage.exists(&metadata_key).await?;
+        if !request.allow_overwrite && version_already_exists {
             return Err(StarmetalError::Publish(format!(
                 "version already exists: {}/{}@{}",
                 request.ecosystem, request.name, request.version
@@ -1233,6 +1236,7 @@ impl PublishingService for CachingPackageService {
 
         let mut metadata = request.metadata(digests.clone());
         if request.allow_overwrite
+            && version_already_exists
             && let Some(existing) = self.storage.get(&metadata_key).await?
         {
             let mut existing_metadata: VersionMetadata = serde_json::from_slice(&existing)?;
@@ -1276,7 +1280,11 @@ impl PublishingService for CachingPackageService {
             .iter()
             .map(|artifact| artifact.data.len() as u64)
             .sum();
-        let quota_guard = self.reserve_quota(request.ecosystem, quota_namespace, 1, quota_bytes)?;
+        // Overwriting an existing version adds no new version to the coordinate's count (only a
+        // brand-new version does). Bytes are still charged for the full re-uploaded artifact set — a
+        // conservative over-charge on overwrite that fails safe (denies earlier, never bypasses).
+        let quota_versions = u64::from(!version_already_exists);
+        let quota_guard = self.reserve_quota(request.ecosystem, quota_namespace, quota_versions, quota_bytes)?;
 
         // One RFC3339 timestamp for every accessory this publish emits (SBOM documents, provenance
         // attestations), so they agree on a single build time.
@@ -4991,6 +4999,35 @@ mod tests {
             .unwrap_err();
         assert!(matches!(err, StarmetalError::PolicyViolation(_)));
         assert!(err.to_string().contains(PolicyReason::QuotaExceeded.as_str()));
+    }
+
+    #[tokio::test]
+    async fn overwriting_an_existing_version_does_not_consume_another_version_slot() {
+        let storage = Arc::new(MockStorage::new());
+        let quota = QuotaConfig {
+            enabled: true,
+            per_ecosystem: std::collections::HashMap::new(),
+            default_limits: Some(QuotaLimits {
+                max_versions: Some(1),
+                max_bytes: None,
+            }),
+        };
+        let service = CachingPackageService::new(storage, AHashMap::new(), PolicyConfig::default()).with_quota(quota);
+
+        // First publish consumes the coordinate's single version slot.
+        service
+            .publish_package(quota_request(Ecosystem::PyPI, "alpha", "1.0.0", b"v1"))
+            .await
+            .unwrap();
+
+        // Overwriting that same version adds no new version, so it must succeed under max_versions = 1
+        // rather than being charged a second slot.
+        let mut overwrite = quota_request(Ecosystem::PyPI, "alpha", "1.0.0", b"v2");
+        overwrite.allow_overwrite = true;
+        service
+            .publish_package(overwrite)
+            .await
+            .expect("overwriting an existing version must not consume another version slot");
     }
 
     #[tokio::test]
