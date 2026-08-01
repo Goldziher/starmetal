@@ -336,6 +336,12 @@ pub struct SupplyChainConfig {
     /// denials. Only effective with `enforce_on_serve` and a scanner attached.
     #[serde(default)]
     pub quarantine: bool,
+    /// Hold a blocked hosted *publish* as a recoverable quarantine record instead of hard-denying it:
+    /// the uploaded bytes are parked off the live path for operator review, then promoted (which
+    /// completes the deferred publish) or rejected (which purges the bytes) via the admin API. Off by
+    /// default — a blocked publish is denied. Only effective with a scanner attached.
+    #[serde(default)]
+    pub ingest_quarantine: bool,
     /// SBOM generation controls. When enabled, each published artifact gets an SBOM document per
     /// configured format, stored digest-keyed and retrievable via the admin API.
     #[serde(default)]
@@ -1312,6 +1318,10 @@ certificate_file = "/etc/starmetal/trust/internal-ca.pem"
             "re-correlation scheduler is disabled by default"
         );
         assert!(!supply_chain.quarantine, "quarantine mode is off by default");
+        assert!(
+            !supply_chain.ingest_quarantine,
+            "ingest quarantine mode is off by default"
+        );
         assert!(
             !supply_chain.require_signature,
             "signature gate is off by default (fail-open guard)"

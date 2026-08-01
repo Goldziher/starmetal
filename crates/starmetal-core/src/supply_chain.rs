@@ -537,6 +537,23 @@ pub enum QuarantineState {
     Rejected,
 }
 
+/// Which gate held an artifact in quarantine (ADR-0024).
+///
+/// A [`Serve`](QuarantineOrigin::Serve) hold blocked an already-published artifact at read time; an
+/// [`Ingest`](QuarantineOrigin::Ingest) hold blocked a hosted *publish*, holding the uploaded bytes
+/// off the live path for operator review. Promotion differs by origin: a serve hold only flips the
+/// record's state, whereas an ingest hold completes the deferred publish. Defaults to `Serve` so
+/// records persisted before this field existed deserialize unchanged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum QuarantineOrigin {
+    /// The serve-time gate held an already-published artifact at read time.
+    #[default]
+    Serve,
+    /// The ingest-time gate held a hosted publish, deferring it off the live path.
+    Ingest,
+}
+
 /// A record of one artifact held under the quarantine workflow (ADR-0024).
 ///
 /// When quarantine mode is enabled, an artifact that fails the vulnerability gate is recorded here
@@ -549,6 +566,10 @@ pub struct QuarantineRecord {
     pub subject_digest: String,
     /// The artifact coordinate (ecosystem/name/version/filename) that was held.
     pub artifact: ArtifactId,
+    /// Which gate held the artifact (serve-time read vs. ingest-time publish). Defaults to `Serve`
+    /// for records persisted before this field existed.
+    #[serde(default)]
+    pub origin: QuarantineOrigin,
     /// The current lifecycle state.
     pub state: QuarantineState,
     /// The typed policy reason the artifact was quarantined for.
@@ -585,6 +606,35 @@ pub trait QuarantineReview: Send + Sync {
     ///
     /// Returns [`crate::error::StarmetalError::ArtifactNotFound`] when no record exists for the digest.
     async fn reject_quarantine(&self, subject_digest: &str) -> Result<QuarantineRecord>;
+}
+
+/// Operator review of ingest-time quarantine holds (ADR-0024).
+///
+/// Kept separate from [`QuarantineReview`] because promoting an ingest hold is not the same operation
+/// as promoting a serve hold: an ingest hold parked the uploaded bytes off the live path, so promoting
+/// it *completes the deferred publish* (materializing the artifact and its metadata), while rejecting
+/// it purges the held bytes. The admin promote/reject handlers consult a record's
+/// [`QuarantineOrigin`] and route ingest-origin digests here. Object-safe so the server can hold an
+/// `Arc<dyn IngestQuarantine>`.
+#[async_trait]
+pub trait IngestQuarantine: Send + Sync {
+    /// Promote an ingest-held publish (identified by its Blake3 digest): complete the deferred
+    /// publish, moving the held bytes onto the live path, and mark the record promoted.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::StarmetalError::ArtifactNotFound`] when no ingest hold exists for the
+    /// digest.
+    async fn promote_ingest(&self, subject_digest: &str) -> Result<QuarantineRecord>;
+
+    /// Reject an ingest-held publish (identified by its Blake3 digest): purge the held bytes so the
+    /// publish never lands, and mark the record rejected.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::StarmetalError::ArtifactNotFound`] when no ingest hold exists for the
+    /// digest.
+    async fn reject_ingest(&self, subject_digest: &str) -> Result<QuarantineRecord>;
 }
 
 // ---------------------------------------------------------------------------

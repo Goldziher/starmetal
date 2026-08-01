@@ -11,7 +11,7 @@ use starmetal_authz::default_namespace;
 use starmetal_core::authz::{Action, Authorizer, Resource};
 use starmetal_core::content::ContentMaintenance;
 use starmetal_core::package::{ArtifactId, Ecosystem, PackageName};
-use starmetal_core::supply_chain::{QuarantineReview, SbomFormat, SbomIndex};
+use starmetal_core::supply_chain::{IngestQuarantine, QuarantineOrigin, QuarantineReview, SbomFormat, SbomIndex};
 
 #[derive(Debug, Serialize)]
 struct AdminStatus {
@@ -185,8 +185,19 @@ async fn quarantine_promote(
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     authorize_admin(&state, &headers).await?;
     validate_quarantine_digest(&digest)?;
-    let quarantine = quarantine_handle(&state)?;
-    let record = quarantine.promote_quarantine(&digest).await.map_err(map_admin_error)?;
+    // An ingest-origin hold promotes by completing the deferred publish (not merely flipping the
+    // record state), so it routes to the ingest handle; serve-origin holds are unchanged.
+    let record = if is_ingest_hold(&state, &digest).await? {
+        ingest_quarantine_handle(&state)?
+            .promote_ingest(&digest)
+            .await
+            .map_err(map_admin_error)?
+    } else {
+        quarantine_handle(&state)?
+            .promote_quarantine(&digest)
+            .await
+            .map_err(map_admin_error)?
+    };
     Ok(Json(record))
 }
 
@@ -197,8 +208,18 @@ async fn quarantine_reject(
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     authorize_admin(&state, &headers).await?;
     validate_quarantine_digest(&digest)?;
-    let quarantine = quarantine_handle(&state)?;
-    let record = quarantine.reject_quarantine(&digest).await.map_err(map_admin_error)?;
+    // An ingest-origin hold rejects by purging the parked publish bytes; serve-origin is unchanged.
+    let record = if is_ingest_hold(&state, &digest).await? {
+        ingest_quarantine_handle(&state)?
+            .reject_ingest(&digest)
+            .await
+            .map_err(map_admin_error)?
+    } else {
+        quarantine_handle(&state)?
+            .reject_quarantine(&digest)
+            .await
+            .map_err(map_admin_error)?
+    };
     Ok(Json(record))
 }
 
@@ -318,6 +339,29 @@ fn quarantine_handle(state: &AppState) -> Result<&std::sync::Arc<dyn QuarantineR
         StatusCode::NOT_FOUND,
         "supply-chain quarantine is not enabled".to_string(),
     ))
+}
+
+/// The ingest-time quarantine handle, or a 404 when no scanner is attached (the workflow is
+/// inactive), mirroring [`quarantine_handle`].
+fn ingest_quarantine_handle(state: &AppState) -> Result<&std::sync::Arc<dyn IngestQuarantine>, (StatusCode, String)> {
+    state.ingest_quarantine.as_ref().ok_or((
+        StatusCode::NOT_FOUND,
+        "supply-chain quarantine is not enabled".to_string(),
+    ))
+}
+
+/// Whether the quarantine record for `digest` is an ingest-origin hold, so the admin promote/reject
+/// handlers can route it to the ingest workflow (which completes or purges a deferred publish)
+/// rather than the serve workflow (which only flips record state). `false` when quarantine is
+/// disabled or no such record exists — the serve path then reports not-found consistently.
+async fn is_ingest_hold(state: &AppState, digest: &str) -> Result<bool, (StatusCode, String)> {
+    let Some(quarantine) = &state.quarantine else {
+        return Ok(false);
+    };
+    let records = quarantine.list_quarantine().await.map_err(map_admin_error)?;
+    Ok(records
+        .iter()
+        .any(|record| record.subject_digest == digest && record.origin == QuarantineOrigin::Ingest))
 }
 
 async fn authorize_admin(state: &AppState, headers: &HeaderMap) -> Result<(), (StatusCode, String)> {

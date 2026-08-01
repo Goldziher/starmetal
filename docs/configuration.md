@@ -416,6 +416,7 @@ vendored. Point `osv_endpoint` at a self-hosted OSV mirror to avoid the public A
 | `supply_chain.enforce_on_serve` | `false` | Also gate at serve time, scanning cached artifacts on demand. |
 | `supply_chain.recorrelation_interval_secs` | `0` | Interval for the background re-scan sweep; `0` disables it. |
 | `supply_chain.quarantine` | `false` | Hold a serve-time block as a recoverable quarantine record instead of a hard deny. |
+| `supply_chain.ingest_quarantine` | `false` | Hold a blocked hosted publish for operator review (bytes parked off the live path) instead of a hard deny; promote completes the publish, reject purges it. |
 | `supply_chain.sbom` | — | SBOM generation controls (independent of the scanner). |
 | `supply_chain.sbom.enabled` | `false` | Generate and store an SBOM per artifact on publish. |
 | `supply_chain.sbom.formats` | `["cyclonedx", "spdx"]` | Formats to emit for each artifact. |

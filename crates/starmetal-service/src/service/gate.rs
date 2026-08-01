@@ -16,9 +16,9 @@ use starmetal_core::integrity;
 use starmetal_core::package::ArtifactId;
 use starmetal_core::sbom;
 use starmetal_core::supply_chain::{
-    PolicyDecision, PolicyReason, QuarantineRecord, QuarantineReview, QuarantineState, RecorrelationReport, Sbom,
-    SbomFormat, SbomIndex, ScanReport, ScanTarget, Scanner, SupplyChainMaintenance, VerificationTarget,
-    evaluate_scan_report,
+    PolicyDecision, PolicyReason, QuarantineOrigin, QuarantineRecord, QuarantineReview, QuarantineState,
+    RecorrelationReport, Sbom, SbomFormat, SbomIndex, ScanReport, ScanTarget, Scanner, SupplyChainMaintenance,
+    VerificationTarget, evaluate_scan_report,
 };
 
 use super::{CachingPackageService, unix_now};
@@ -246,6 +246,7 @@ impl CachingPackageService {
         let record = QuarantineRecord {
             subject_digest: blake3.to_string(),
             artifact: artifact_id.clone(),
+            origin: QuarantineOrigin::Serve,
             state: QuarantineState::Quarantined,
             reason_code: reason_code.unwrap_or(starmetal_core::supply_chain::PolicyReason::VulnSeverityExceeded),
             reason: reason.clone(),

@@ -28,7 +28,10 @@ use starmetal_core::publishing::{
 use starmetal_core::sbom::{self, SbomHash, SbomSubject};
 use starmetal_core::signing::{SignatureSource, SignatureStatement};
 use starmetal_core::statistics::{EcosystemStatistics, StatisticsSnapshot};
-use starmetal_core::supply_chain::{SbomFormat, ScanTarget, Scanner, Verifier, evaluate_scan_report};
+use starmetal_core::supply_chain::{
+    IngestQuarantine, PolicyReason, QuarantineOrigin, QuarantineRecord, QuarantineState, SbomFormat, ScanTarget,
+    Scanner, Verifier, evaluate_scan_report,
+};
 
 use gate::{PersistedScanReport, QUARANTINE_PREFIX, SBOM_PREFIX, SCAN_REPORT_PREFIX};
 pub use signing::SigningService;
@@ -58,6 +61,11 @@ pub struct CachingPackageService {
     /// When true, a serve-time gate block records a digest-keyed quarantine hold (recoverable via
     /// operator promote/reject) instead of a terminal deny. Off by default (blocks are hard denials).
     quarantine: bool,
+    /// When true, a blocked hosted publish is held for operator review instead of hard-denied: the
+    /// uploaded bytes are parked under `_starmetal/held/<blake3>` off the live path and an
+    /// ingest-origin quarantine record is written. Promote completes the deferred publish; reject
+    /// purges the held bytes. Off by default (a blocked publish is denied).
+    ingest_quarantine: bool,
     /// SBOM formats generated for each artifact on publish (ADR-0024). Empty (the default) disables
     /// SBOM generation; otherwise each published artifact gets one digest-keyed SBOM sidecar per
     /// format. Independent of the scanner — SBOMs are generated from the publish request.
@@ -101,6 +109,11 @@ struct StagedWrite {
     previous: Option<Bytes>,
 }
 
+/// Storage key prefix under which ingest-quarantined (held) publish bytes and their reconstruction
+/// manifest are parked, off the live artifact path, keyed by the artifact's blake3 digest. Promote
+/// replays the manifest through the real publish path; reject purges these keys.
+const HELD_PREFIX: &str = "_starmetal/held/";
+
 /// RAII guard holding a publish coordinate's lock. On drop it releases the lock and prunes the
 /// coordinate's entry from `publish_locks`, so the map is cleaned up on *every* exit path of
 /// `publish_package` — success or early-return error — not just the happy path. Without this, a
@@ -121,6 +134,50 @@ impl Drop for PublishLockGuard<'_> {
     }
 }
 
+/// Outcome of the ingest scan gate for a publish request under ingest-quarantine mode.
+enum ScanGateOutcome {
+    /// Every artifact scanned within the threshold; carries the passing reports to persist.
+    Passed(Vec<(String, PersistedScanReport)>),
+    /// An artifact exceeded the threshold and the publish is to be held for review (ADR-0024).
+    Held(IngestHold),
+}
+
+/// The blocking finding that triggers an ingest-quarantine hold: which artifact blocked, its blake3
+/// (the digest that keys the held bytes, manifest, and quarantine record), and the typed reason.
+struct IngestHold {
+    blocking_artifact: ArtifactId,
+    blocking_blake3: String,
+    reason_code: PolicyReason,
+    reason: String,
+}
+
+/// On-disk manifest for an ingest-quarantined publish, addressed by the blocking artifact's blake3.
+/// Captures every field of the deferred [`PublishRequest`] except the artifact bytes themselves
+/// (which live at `_starmetal/held/<blake3>`, one per artifact), so promotion can reconstruct the
+/// request faithfully — preserving license, protocol metadata, and every artifact.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct HeldPublish {
+    ecosystem: Ecosystem,
+    name: String,
+    version: String,
+    license: Option<String>,
+    yanked: bool,
+    listed: bool,
+    allow_overwrite: bool,
+    allow_shadowing: bool,
+    protocol_metadata: ProtocolMetadata,
+    artifacts: Vec<HeldArtifact>,
+}
+
+/// One artifact within a [`HeldPublish`] manifest: its filename, the blake3 that keys its held
+/// bytes, and the upstream hashes to restore on the reconstructed [`PublishedArtifact`].
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct HeldArtifact {
+    filename: String,
+    blake3: String,
+    upstream_hashes: AHashMap<String, String>,
+}
+
 impl CachingPackageService {
     pub fn new(
         storage: Arc<dyn StoragePort>,
@@ -137,6 +194,7 @@ impl CachingPackageService {
             scanner: None,
             enforce_on_serve: false,
             quarantine: false,
+            ingest_quarantine: false,
             sbom_formats: Vec::new(),
             require_signature: false,
             require_provenance: false,
@@ -162,6 +220,7 @@ impl CachingPackageService {
             scanner: None,
             enforce_on_serve: false,
             quarantine: false,
+            ingest_quarantine: false,
             sbom_formats: Vec::new(),
             require_signature: false,
             require_provenance: false,
@@ -203,6 +262,15 @@ impl CachingPackageService {
         self
     }
 
+    /// Enable (or disable) ingest quarantine mode (ADR-0024). When enabled, a hosted publish blocked
+    /// by the ingest scan gate is held for operator review — its bytes parked off the live path and
+    /// an ingest-origin quarantine record written — instead of hard-denied. Off by default, so a
+    /// blocked publish is denied unless an operator opts in.
+    pub fn with_ingest_quarantine(mut self, enabled: bool) -> Self {
+        self.ingest_quarantine = enabled;
+        self
+    }
+
     /// Enable SBOM generation for the given formats (ADR-0024). Each published artifact then gets one
     /// digest-keyed SBOM sidecar per format. An empty list (the default) disables generation.
     pub fn with_sbom_formats(mut self, formats: Vec<SbomFormat>) -> Self {
@@ -241,6 +309,18 @@ impl CachingPackageService {
     /// Storage key for an artifact's quarantine record, addressed by its blake3 digest.
     pub(in crate::service) fn quarantine_record_key(blake3: &str) -> String {
         format!("{QUARANTINE_PREFIX}{blake3}.json")
+    }
+
+    /// Storage key for one held (ingest-quarantined) artifact's raw bytes, addressed by its blake3.
+    fn held_bytes_key(blake3: &str) -> String {
+        format!("{HELD_PREFIX}{blake3}")
+    }
+
+    /// Storage key for the held-publish manifest, addressed by the *blocking* artifact's blake3 (the
+    /// digest that also keys the quarantine record). The manifest carries everything needed to
+    /// replay the deferred publish on promotion.
+    fn held_manifest_key(blocking_blake3: &str) -> String {
+        format!("{HELD_PREFIX}{blocking_blake3}.manifest.json")
     }
 
     /// Storage key for an artifact's cached scan report, addressed by the artifact's blake3 digest so
@@ -374,9 +454,14 @@ impl CachingPackageService {
     }
 
     /// Vulnerability gate (ADR-0024) for a publish request: when a scanner is attached, scan each
-    /// artifact and reject the publish with a `PolicyViolation` if a finding exceeds
-    /// `policy.max_vuln_severity`. A scan that cannot complete (transport failure) propagates as an
-    /// error — the publish fails closed. Returns an empty `Vec` when no scanner is attached.
+    /// artifact and block the publish if a finding exceeds `policy.max_vuln_severity`. A scan that
+    /// cannot complete (transport failure) propagates as an error — the publish fails closed.
+    ///
+    /// A blocking finding is resolved by mode: with ingest quarantine off it returns a
+    /// `PolicyViolation` error (a hard deny, unchanged); with it on it returns
+    /// [`ScanGateOutcome::Held`] so the caller parks the publish for review. Returns
+    /// [`ScanGateOutcome::Passed`] (empty when no scanner is attached) when every artifact is within
+    /// the threshold.
     ///
     /// `digests` must be index-aligned with `request.artifacts` (the caller's precomputed blake3
     /// hashes), so each passing report is paired with its digest without re-hashing the artifact.
@@ -384,9 +469,9 @@ impl CachingPackageService {
         &self,
         request: &PublishRequest,
         digests: &[String],
-    ) -> Result<Vec<(String, PersistedScanReport)>> {
+    ) -> Result<ScanGateOutcome> {
         let Some(scanner) = &self.scanner else {
-            return Ok(Vec::new());
+            return Ok(ScanGateOutcome::Passed(Vec::new()));
         };
 
         let mut scan_reports = Vec::with_capacity(request.artifacts.len());
@@ -399,13 +484,20 @@ impl CachingPackageService {
             };
             let report = scanner.scan(ScanTarget::new(&artifact_id, &artifact.data)).await?;
             let decision = evaluate_scan_report(&report, self.policy.max_vuln_severity);
-            if decision.blocks_serving() {
-                return Err(StarmetalError::PolicyViolation(
-                    decision
-                        .reason()
-                        .unwrap_or("vulnerability policy violation")
-                        .to_string(),
-                ));
+            if decision.blocks_serving() && !self.digest_is_promoted(blake3).await? {
+                let reason = decision
+                    .reason()
+                    .unwrap_or("vulnerability policy violation")
+                    .to_string();
+                if !self.ingest_quarantine {
+                    return Err(StarmetalError::PolicyViolation(reason));
+                }
+                return Ok(ScanGateOutcome::Held(IngestHold {
+                    blocking_artifact: artifact_id,
+                    blocking_blake3: blake3.clone(),
+                    reason_code: decision.reason_code().unwrap_or(PolicyReason::VulnSeverityExceeded),
+                    reason,
+                }));
             }
             scan_reports.push((
                 blake3.clone(),
@@ -415,7 +507,7 @@ impl CachingPackageService {
                 },
             ));
         }
-        Ok(scan_reports)
+        Ok(ScanGateOutcome::Passed(scan_reports))
     }
 
     async fn store_content_model(
@@ -1141,7 +1233,15 @@ impl PublishingService for CachingPackageService {
         // Vulnerability gate (ADR-0024): runs before the transactional block so a denied artifact
         // leaves no staged writes. Passing reports are carried into the transactional block and
         // stored (digest-keyed) so the serve-time gate finds them without re-scanning.
-        let scan_reports = self.scan_artifacts_for_publish(&request, &blake3_digests).await?;
+        let scan_reports = match self.scan_artifacts_for_publish(&request, &blake3_digests).await? {
+            ScanGateOutcome::Passed(reports) => reports,
+            // Ingest quarantine (ADR-0024): a blocked publish is parked off the live path for
+            // operator review instead of denied. No staged writes exist yet, so the live path stays
+            // untouched; the held bytes, manifest, and record are written under `_starmetal/held/`.
+            ScanGateOutcome::Held(hold) => {
+                return self.hold_ingest_publish(&request, &blake3_digests, hold).await;
+            }
+        };
 
         // One RFC3339 timestamp for every accessory this publish emits (SBOM documents, provenance
         // attestations), so they agree on a single build time.
@@ -1423,6 +1523,219 @@ impl StatisticsService for CachingPackageService {
                 StatisticsSnapshot::default()
             }
         }
+    }
+}
+
+/// Ingest-time quarantine (ADR-0024): holding a scan-blocked hosted publish for review, and the
+/// operator promote/reject workflow that completes or purges it. Kept as inherent methods appended
+/// beside the ingest publish path, distinct from the serve-side [`QuarantineReview`] impl.
+impl CachingPackageService {
+    /// Whether a quarantine record for this blake3 digest has been operator-promoted. Consulted by
+    /// the ingest scan gate so replaying an already-reviewed held publish on promotion clears the
+    /// gate instead of being re-held — mirroring the serve gate, where a promoted record releases
+    /// the artifact despite a blocking scan.
+    async fn digest_is_promoted(&self, blake3: &str) -> Result<bool> {
+        let Some(bytes) = self.storage.get(&Self::quarantine_record_key(blake3)).await? else {
+            return Ok(false);
+        };
+        let record: QuarantineRecord = serde_json::from_slice(&bytes)?;
+        Ok(record.state == QuarantineState::Promoted)
+    }
+
+    /// Park a scan-blocked hosted publish for operator review (ADR-0024 ingest quarantine): store
+    /// each artifact's raw bytes under `_starmetal/held/<blake3>`, a reconstruction manifest under
+    /// `_starmetal/held/<blocking_blake3>.manifest.json`, and an ingest-origin quarantine record
+    /// keyed by the blocking digest. Nothing lands on the live artifact path, so the publish does
+    /// not take effect until an operator promotes it.
+    async fn hold_ingest_publish(
+        &self,
+        request: &PublishRequest,
+        blake3_digests: &[String],
+        hold: IngestHold,
+    ) -> Result<PublishResult> {
+        let mut held_artifacts = Vec::with_capacity(request.artifacts.len());
+        let mut digests = Vec::with_capacity(request.artifacts.len());
+        for (artifact, blake3) in request.artifacts.iter().zip(blake3_digests) {
+            self.storage
+                .put(&Self::held_bytes_key(blake3), artifact.data.clone())
+                .await?;
+            held_artifacts.push(HeldArtifact {
+                filename: artifact.filename.clone(),
+                blake3: blake3.clone(),
+                upstream_hashes: artifact.upstream_hashes.clone(),
+            });
+            digests.push(artifact.digest(blake3.clone()));
+        }
+
+        let manifest = HeldPublish {
+            ecosystem: request.ecosystem,
+            name: request.name.as_str().to_string(),
+            version: request.version.clone(),
+            license: request.license.clone(),
+            yanked: request.yanked,
+            listed: request.listed,
+            allow_overwrite: request.allow_overwrite,
+            allow_shadowing: request.allow_shadowing,
+            protocol_metadata: request.protocol_metadata.clone(),
+            artifacts: held_artifacts,
+        };
+        self.storage
+            .put(
+                &Self::held_manifest_key(&hold.blocking_blake3),
+                Bytes::from(serde_json::to_vec(&manifest)?),
+            )
+            .await?;
+
+        let record = QuarantineRecord {
+            subject_digest: hold.blocking_blake3.clone(),
+            artifact: hold.blocking_artifact,
+            origin: QuarantineOrigin::Ingest,
+            state: QuarantineState::Quarantined,
+            reason_code: hold.reason_code,
+            reason: hold.reason,
+            quarantined_at: unix_now(),
+            decided_at: None,
+        };
+        self.storage
+            .put(
+                &Self::quarantine_record_key(&hold.blocking_blake3),
+                Bytes::from(serde_json::to_vec(&record)?),
+            )
+            .await?;
+
+        Ok(PublishResult {
+            ecosystem: request.ecosystem,
+            name: request.name.clone(),
+            version: request.version.clone(),
+            artifacts: digests,
+            mode: PublishMode::Local,
+        })
+    }
+
+    /// Reconstruct the deferred [`PublishRequest`] for an ingest hold from its manifest and parked
+    /// bytes. Errors with `ArtifactNotFound` if the manifest or any held artifact's bytes are gone.
+    async fn rebuild_held_request(&self, blocking_blake3: &str) -> Result<(HeldPublish, PublishRequest)> {
+        let manifest_bytes = self
+            .storage
+            .get(&Self::held_manifest_key(blocking_blake3))
+            .await?
+            .ok_or_else(|| StarmetalError::ArtifactNotFound(format!("no held publish for {blocking_blake3}")))?;
+        let manifest: HeldPublish = serde_json::from_slice(&manifest_bytes)?;
+
+        let mut artifacts = Vec::with_capacity(manifest.artifacts.len());
+        for held in &manifest.artifacts {
+            let data = self
+                .storage
+                .get(&Self::held_bytes_key(&held.blake3))
+                .await?
+                .ok_or_else(|| StarmetalError::ArtifactNotFound(format!("held bytes missing for {}", held.blake3)))?;
+            artifacts.push(PublishedArtifact {
+                filename: held.filename.clone(),
+                data,
+                upstream_hashes: held.upstream_hashes.clone(),
+            });
+        }
+
+        let request = PublishRequest {
+            ecosystem: manifest.ecosystem,
+            name: PackageName::new(manifest.name.clone()),
+            version: manifest.version.clone(),
+            license: manifest.license.clone(),
+            yanked: manifest.yanked,
+            listed: manifest.listed,
+            artifacts,
+            protocol_metadata: manifest.protocol_metadata.clone(),
+            allow_overwrite: manifest.allow_overwrite,
+            allow_shadowing: manifest.allow_shadowing,
+        };
+        Ok((manifest, request))
+    }
+
+    /// Delete every parked key for an ingest hold: each artifact's bytes and the manifest.
+    async fn purge_held_publish(&self, manifest: &HeldPublish, blocking_blake3: &str) -> Result<()> {
+        for held in &manifest.artifacts {
+            self.storage.delete(&Self::held_bytes_key(&held.blake3)).await?;
+        }
+        self.storage.delete(&Self::held_manifest_key(blocking_blake3)).await?;
+        Ok(())
+    }
+
+    /// Load the ingest-origin quarantine record for a decision: validate the digest (CWE-22 defense
+    /// in depth, mirroring `transition_quarantine`), require the record to exist, and require it to
+    /// be ingest-origin. Shared by promote/reject.
+    async fn load_ingest_record(&self, subject_digest: &str) -> Result<QuarantineRecord> {
+        if !integrity::is_blake3_hex(subject_digest) {
+            return Err(StarmetalError::Adapter(format!(
+                "invalid blake3 digest: {subject_digest}"
+            )));
+        }
+        let bytes = self
+            .storage
+            .get(&Self::quarantine_record_key(subject_digest))
+            .await?
+            .ok_or_else(|| StarmetalError::ArtifactNotFound(format!("no quarantine record for {subject_digest}")))?;
+        let record: QuarantineRecord = serde_json::from_slice(&bytes)?;
+        if record.origin != QuarantineOrigin::Ingest {
+            return Err(StarmetalError::ArtifactNotFound(format!(
+                "no ingest quarantine hold for {subject_digest}"
+            )));
+        }
+        Ok(record)
+    }
+}
+
+#[async_trait]
+impl IngestQuarantine for CachingPackageService {
+    async fn promote_ingest(&self, subject_digest: &str) -> Result<QuarantineRecord> {
+        let mut record = self.load_ingest_record(subject_digest).await?;
+        let (manifest, request) = self.rebuild_held_request(subject_digest).await?;
+
+        // Mark promoted first so the ingest scan gate clears this known-blocking digest when the
+        // publish is replayed through the real publish path, instead of re-holding it.
+        record.state = QuarantineState::Promoted;
+        record.decided_at = Some(unix_now());
+        self.storage
+            .put(
+                &Self::quarantine_record_key(subject_digest),
+                Bytes::from(serde_json::to_vec(&record)?),
+            )
+            .await?;
+
+        // Complete the deferred publish through the real path. On failure, revert the record to
+        // quarantined so the hold stays recoverable rather than stranded promoted-but-unpublished.
+        if let Err(error) = self.publish_package(request).await {
+            record.state = QuarantineState::Quarantined;
+            record.decided_at = None;
+            let _ = self
+                .storage
+                .put(
+                    &Self::quarantine_record_key(subject_digest),
+                    Bytes::from(serde_json::to_vec(&record)?),
+                )
+                .await;
+            return Err(error);
+        }
+
+        self.purge_held_publish(&manifest, subject_digest).await?;
+        Ok(record)
+    }
+
+    async fn reject_ingest(&self, subject_digest: &str) -> Result<QuarantineRecord> {
+        let mut record = self.load_ingest_record(subject_digest).await?;
+        // Purge the parked bytes so the publish can never land. Tolerate a missing manifest (a prior
+        // partial decision) — the record transition below is the authoritative outcome.
+        if let Ok((manifest, _)) = self.rebuild_held_request(subject_digest).await {
+            self.purge_held_publish(&manifest, subject_digest).await?;
+        }
+        record.state = QuarantineState::Rejected;
+        record.decided_at = Some(unix_now());
+        self.storage
+            .put(
+                &Self::quarantine_record_key(subject_digest),
+                Bytes::from(serde_json::to_vec(&record)?),
+            )
+            .await?;
+        Ok(record)
     }
 }
 
@@ -2790,6 +3103,187 @@ mod tests {
             report.newly_blocking.contains(&"pypi/beta/1.0.0".to_string()),
             "beta must be the artifact flagged newly blocking, got: {:?}",
             report.newly_blocking
+        );
+    }
+
+    /// A publishing service whose scanner blocks the sample artifact, with ingest quarantine on, so a
+    /// blocked hosted publish is held for review instead of denied.
+    fn ingest_quarantining_publisher(storage: Arc<MockStorage>) -> CachingPackageService {
+        let policy = PolicyConfig {
+            max_vuln_severity: starmetal_core::policy::VulnSeverity::High,
+            ..PolicyConfig::default()
+        };
+        CachingPackageService::new(storage, AHashMap::new(), policy)
+            .with_scanner(Arc::new(FakeScanner {
+                severity: Some(starmetal_core::policy::VulnSeverity::Critical),
+            }))
+            .with_ingest_quarantine(true)
+    }
+
+    #[tokio::test]
+    async fn ingest_holds_a_blocking_publish_instead_of_denying() {
+        let storage = Arc::new(MockStorage::new());
+        let publisher = ingest_quarantining_publisher(storage.clone());
+
+        // The publish is accepted (not denied) but held.
+        let result = publisher.publish_package(scan_gate_request()).await.unwrap();
+        assert_eq!(result.version, "1.0.0");
+
+        // The uploaded bytes are parked off the live path.
+        let blake3 = integrity::blake3_hex(b"scanned artifact");
+        assert_eq!(
+            storage.get(&format!("_starmetal/held/{blake3}")).await.unwrap(),
+            Some(Bytes::from_static(b"scanned artifact")),
+            "the blocked publish's bytes are held under _starmetal/held/<blake3>"
+        );
+        assert!(
+            storage
+                .get(&format!("_starmetal/held/{blake3}.manifest.json"))
+                .await
+                .unwrap()
+                .is_some(),
+            "a reconstruction manifest is parked alongside the held bytes"
+        );
+
+        // An ingest-origin quarantine record is written.
+        let records = publisher.list_quarantine().await.unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].state, QuarantineState::Quarantined);
+        assert_eq!(records[0].origin, QuarantineOrigin::Ingest);
+        assert_eq!(records[0].artifact, sample_artifact_id());
+        assert_eq!(
+            records[0].reason_code,
+            starmetal_core::supply_chain::PolicyReason::VulnSeverityExceeded
+        );
+
+        // The live path stays empty: the publish did not land.
+        let name = PackageName::new("sample");
+        assert!(
+            publisher
+                .get_version_metadata(Ecosystem::PyPI, &name, "1.0.0")
+                .await
+                .is_err(),
+            "a held publish must not write any live metadata"
+        );
+    }
+
+    #[tokio::test]
+    async fn promoting_an_ingest_hold_completes_the_publish() {
+        let storage = Arc::new(MockStorage::new());
+        let publisher = ingest_quarantining_publisher(storage.clone());
+        let blake3 = integrity::blake3_hex(b"scanned artifact");
+        publisher.publish_package(scan_gate_request()).await.unwrap();
+
+        let promoted = publisher.promote_ingest(&blake3).await.unwrap();
+        assert_eq!(promoted.state, QuarantineState::Promoted);
+        assert!(promoted.decided_at.is_some());
+
+        // The artifact now serves from the live path, having gone through the real publish path.
+        let served = publisher.get_artifact(&sample_artifact_id()).await.unwrap();
+        assert_eq!(served, Bytes::from_static(b"scanned artifact"));
+
+        // The deferred publish's metadata landed, faithfully preserving the request's license.
+        let name = PackageName::new("sample");
+        let metadata = publisher
+            .get_version_metadata(Ecosystem::PyPI, &name, "1.0.0")
+            .await
+            .unwrap();
+        assert_eq!(metadata.license.as_deref(), Some("MIT"));
+
+        // The held bytes and manifest are purged once the publish completes.
+        assert!(
+            storage
+                .get(&format!("_starmetal/held/{blake3}"))
+                .await
+                .unwrap()
+                .is_none(),
+            "held bytes are cleared after promotion"
+        );
+        assert!(
+            storage
+                .get(&format!("_starmetal/held/{blake3}.manifest.json"))
+                .await
+                .unwrap()
+                .is_none(),
+            "the held manifest is cleared after promotion"
+        );
+    }
+
+    #[tokio::test]
+    async fn rejecting_an_ingest_hold_purges_the_held_publish() {
+        let storage = Arc::new(MockStorage::new());
+        let publisher = ingest_quarantining_publisher(storage.clone());
+        let blake3 = integrity::blake3_hex(b"scanned artifact");
+        publisher.publish_package(scan_gate_request()).await.unwrap();
+
+        let rejected = publisher.reject_ingest(&blake3).await.unwrap();
+        assert_eq!(rejected.state, QuarantineState::Rejected);
+        assert!(rejected.decided_at.is_some());
+
+        // The held bytes and manifest are gone, so the publish can never land.
+        assert!(
+            storage
+                .get(&format!("_starmetal/held/{blake3}"))
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            storage
+                .get(&format!("_starmetal/held/{blake3}.manifest.json"))
+                .await
+                .unwrap()
+                .is_none()
+        );
+        let name = PackageName::new("sample");
+        assert!(
+            publisher
+                .get_version_metadata(Ecosystem::PyPI, &name, "1.0.0")
+                .await
+                .is_err(),
+            "a rejected hold never publishes"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_blocked_publish_is_still_denied_when_ingest_quarantine_is_off() {
+        let storage = Arc::new(MockStorage::new());
+        let policy = PolicyConfig {
+            max_vuln_severity: starmetal_core::policy::VulnSeverity::High,
+            ..PolicyConfig::default()
+        };
+        // A scanner is attached and the finding exceeds the threshold, but ingest quarantine is off.
+        let service =
+            CachingPackageService::new(storage.clone(), AHashMap::new(), policy).with_scanner(Arc::new(FakeScanner {
+                severity: Some(starmetal_core::policy::VulnSeverity::Critical),
+            }));
+
+        let error = service.publish_package(scan_gate_request()).await.unwrap_err();
+        assert!(
+            matches!(error, StarmetalError::PolicyViolation(_)),
+            "with ingest quarantine off a blocked publish is hard-denied, got: {error}"
+        );
+
+        // Nothing is held: the deny leaves no parked bytes.
+        let blake3 = integrity::blake3_hex(b"scanned artifact");
+        assert!(
+            storage
+                .get(&format!("_starmetal/held/{blake3}"))
+                .await
+                .unwrap()
+                .is_none(),
+            "a hard-denied publish parks no held bytes"
+        );
+    }
+
+    #[tokio::test]
+    async fn promoting_an_unknown_ingest_digest_is_not_found() {
+        let storage = Arc::new(MockStorage::new());
+        let publisher = ingest_quarantining_publisher(storage);
+        let error = publisher.promote_ingest(&"0".repeat(64)).await.unwrap_err();
+        assert!(
+            matches!(error, StarmetalError::ArtifactNotFound(_)),
+            "promoting a nonexistent ingest hold must be a not-found error, got: {error}"
         );
     }
 

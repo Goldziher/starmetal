@@ -11,7 +11,7 @@ use starmetal_core::error::{Result, StarmetalError};
 use starmetal_core::package::{ArtifactId, Ecosystem, PackageName, VersionMetadata};
 use starmetal_core::ports::{PackageService, PublishingService, StatisticsService, StoragePort, UpstreamClient};
 use starmetal_core::publishing::{ProtocolMetadata, PublishRequest, PublishedArtifact, YankRequest};
-use starmetal_core::supply_chain::{QuarantineReview, SbomIndex, SupplyChainMaintenance};
+use starmetal_core::supply_chain::{IngestQuarantine, QuarantineReview, SbomIndex, SupplyChainMaintenance};
 use starmetal_server::state::{AppState, UpstreamClients};
 use starmetal_service::{CachingPackageService, SigningService};
 use starmetal_storage::OpenDalStorage;
@@ -89,6 +89,10 @@ pub struct StarmetalRuntime {
     /// scanner to the service — so this is `Some` iff a scanner is actually attached. Backs the admin
     /// promote/reject/list endpoints.
     pub quarantine: Option<Arc<dyn QuarantineReview>>,
+    /// Handle for the ingest-time quarantine workflow (ADR-0024). `Some` under the same condition as
+    /// [`quarantine`] (a scanner is attached); backs the admin promote/reject handlers when a held
+    /// digest is ingest-origin, completing or purging the deferred publish.
+    pub ingest_quarantine: Option<Arc<dyn IngestQuarantine>>,
     /// Handle for scheduled metadata maintenance (ADR-0020 Stages 2c/2d): the retention and
     /// garbage-collection sweeps. `Some` only when the content model is attached (`metadata.enabled`
     /// under the `metadata` feature); drives the background sweeps and backs the admin
@@ -165,6 +169,7 @@ fn attach_scanner(service: CachingPackageService, config: &Config) -> CachingPac
         .with_scanner(Arc::new(scanner))
         .enforce_scan_on_serve(config.supply_chain.enforce_on_serve)
         .with_quarantine(config.supply_chain.quarantine)
+        .with_ingest_quarantine(config.supply_chain.ingest_quarantine)
 }
 
 impl StarmetalRuntime {
@@ -246,10 +251,17 @@ impl StarmetalRuntime {
             .supply_chain
             .enabled
             .then(|| service.clone() as Arc<dyn QuarantineReview>);
+        #[cfg(feature = "scanner-osv")]
+        let ingest_quarantine: Option<Arc<dyn IngestQuarantine>> = config
+            .supply_chain
+            .enabled
+            .then(|| service.clone() as Arc<dyn IngestQuarantine>);
         #[cfg(not(feature = "scanner-osv"))]
         let maintenance: Option<Arc<dyn SupplyChainMaintenance>> = None;
         #[cfg(not(feature = "scanner-osv"))]
         let quarantine: Option<Arc<dyn QuarantineReview>> = None;
+        #[cfg(not(feature = "scanner-osv"))]
+        let ingest_quarantine: Option<Arc<dyn IngestQuarantine>> = None;
 
         // SBOM retrieval is exposed whenever SBOM generation is enabled — independent of the scanner.
         let sbom: Option<Arc<dyn SbomIndex>> = config
@@ -286,6 +298,7 @@ impl StarmetalRuntime {
             upstreams,
             maintenance,
             quarantine,
+            ingest_quarantine,
             content_maintenance,
             content_browse,
             sbom,
@@ -395,6 +408,7 @@ impl StarmetalRuntime {
             self.upstreams.clone(),
         )
         .with_quarantine(self.quarantine.clone())
+        .with_ingest_quarantine(self.ingest_quarantine.clone())
         .with_content_maintenance(self.content_maintenance.clone())
         .with_content_browse(self.content_browse.clone())
         .with_sbom(self.sbom.clone())

@@ -7,7 +7,7 @@ use starmetal_core::config::Config;
 use starmetal_core::content::{ContentBrowse, ContentMaintenance};
 use starmetal_core::package::{Ecosystem, PackageName};
 use starmetal_core::ports::{PackageService, PublishingService, StatisticsService};
-use starmetal_core::supply_chain::{QuarantineReview, SbomIndex};
+use starmetal_core::supply_chain::{IngestQuarantine, QuarantineReview, SbomIndex};
 
 /// Shared application state, passed to all handlers via axum's State extractor.
 #[derive(Clone)]
@@ -26,6 +26,11 @@ pub struct AppState {
     /// Quarantine review workflow (ADR-0024), `Some` only when a scanner is attached. Backs the admin
     /// promote/reject/list endpoints; `None` leaves those endpoints reporting quarantine disabled.
     pub quarantine: Option<Arc<dyn QuarantineReview>>,
+    /// Ingest-time quarantine workflow (ADR-0024), `Some` under the same condition as
+    /// [`AppState::quarantine`] (a scanner is attached). The admin promote/reject handlers route
+    /// ingest-origin holds here to complete or purge the deferred publish; `None` leaves them on the
+    /// serve-only path.
+    pub ingest_quarantine: Option<Arc<dyn IngestQuarantine>>,
     /// Scheduled metadata maintenance (ADR-0020 Stages 2c/2d), `Some` only when the content model
     /// is attached (`metadata.enabled`). Backs the admin `/gc` and `/retention` trigger endpoints;
     /// `None` leaves those endpoints reporting metadata maintenance disabled.
@@ -79,6 +84,7 @@ impl AppState {
             authorizer,
             upstreams,
             quarantine: None,
+            ingest_quarantine: None,
             content_maintenance: None,
             content_browse: None,
             sbom: None,
@@ -89,6 +95,13 @@ impl AppState {
     /// admin promote/reject/list endpoints report quarantine disabled unless a scanner is attached.
     pub fn with_quarantine(mut self, quarantine: Option<Arc<dyn QuarantineReview>>) -> Self {
         self.quarantine = quarantine;
+        self
+    }
+
+    /// Attach the ingest-time quarantine handle (ADR-0024) built by the runtime. Absent by default
+    /// so the admin promote/reject handlers stay on the serve-only path unless a scanner is attached.
+    pub fn with_ingest_quarantine(mut self, ingest_quarantine: Option<Arc<dyn IngestQuarantine>>) -> Self {
+        self.ingest_quarantine = ingest_quarantine;
         self
     }
 
