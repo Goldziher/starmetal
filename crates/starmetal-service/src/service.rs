@@ -2579,6 +2579,28 @@ mod tests {
         }
     }
 
+    /// Like [`scan_gate_request`], but for a distinct package coordinate and artifact payload, so
+    /// callers can publish several artifacts with distinct blake3 digests (and thus distinct
+    /// `_starmetal/scans/<digest>.json` reports) in one test.
+    fn scan_gate_request_for(name: &str, version: &str, data: &'static [u8]) -> PublishRequest {
+        PublishRequest {
+            ecosystem: Ecosystem::PyPI,
+            name: PackageName::new(name),
+            version: version.to_string(),
+            license: Some("MIT".to_string()),
+            yanked: false,
+            listed: true,
+            artifacts: vec![PublishedArtifact {
+                filename: format!("{name}-{version}.tar.gz"),
+                data: Bytes::from_static(data),
+                upstream_hashes: AHashMap::new(),
+            }],
+            protocol_metadata: ProtocolMetadata::default_for(Ecosystem::PyPI),
+            allow_overwrite: false,
+            allow_shadowing: false,
+        }
+    }
+
     #[tokio::test]
     async fn publish_is_denied_and_writes_nothing_when_a_scan_exceeds_the_threshold() {
         let storage = Arc::new(MockStorage::new());
@@ -2854,6 +2876,128 @@ mod tests {
         assert_eq!(report, RecorrelationReport::default());
     }
 
+    /// A per-artifact outcome for [`PerArtifactScanner`]: clean, vulnerable at a given severity, or
+    /// unavailable (simulating a transient scan failure).
+    #[derive(Clone, Copy)]
+    enum ScanOutcome {
+        Clean,
+        Vulnerable(starmetal_core::policy::VulnSeverity),
+        Unavailable,
+    }
+
+    /// A [`Scanner`] whose outcome can be swapped independently per artifact filename after
+    /// construction, modeling an advisory feed where different subjects evolve independently between
+    /// scans — unlike [`MutableScanner`], which swaps a single severity shared by every subject. Used
+    /// to prove `recorrelate`'s multi-report fold aggregates disparate per-item outcomes (some
+    /// updated, one failed, one unchanged) correctly under bounded concurrency.
+    struct PerArtifactScanner {
+        outcomes: std::sync::Mutex<AHashMap<String, ScanOutcome>>,
+    }
+
+    impl PerArtifactScanner {
+        fn new() -> Self {
+            Self {
+                outcomes: std::sync::Mutex::new(AHashMap::new()),
+            }
+        }
+
+        fn set(&self, filename: &str, outcome: ScanOutcome) {
+            self.outcomes.lock().unwrap().insert(filename.to_string(), outcome);
+        }
+    }
+
+    #[async_trait]
+    impl Scanner for PerArtifactScanner {
+        async fn scan(&self, target: ScanTarget<'_>) -> Result<starmetal_core::supply_chain::ScanReport> {
+            let outcome = self
+                .outcomes
+                .lock()
+                .unwrap()
+                .get(target.artifact_id.filename.as_str())
+                .copied()
+                .unwrap_or(ScanOutcome::Clean);
+            let vulnerabilities = match outcome {
+                ScanOutcome::Clean => Vec::new(),
+                ScanOutcome::Vulnerable(severity) => vec![starmetal_core::supply_chain::Vulnerability {
+                    id: "CVE-TEST-1".to_string(),
+                    severity,
+                    package: None,
+                    description: None,
+                    fixed_version: None,
+                }],
+                ScanOutcome::Unavailable => return Err(StarmetalError::Upstream("scanner unavailable".to_string())),
+            };
+            Ok(starmetal_core::supply_chain::ScanReport {
+                scanner: "per-artifact".to_string(),
+                subject_digest: integrity::blake3_hex(target.content),
+                vulnerabilities,
+                completed: true,
+            })
+        }
+
+        fn capabilities(&self) -> starmetal_core::supply_chain::ScannerCapabilities {
+            starmetal_core::supply_chain::ScannerCapabilities {
+                name: "per-artifact".to_string(),
+                version: "0".to_string(),
+                ecosystems: Vec::new(),
+                supports_vulnerabilities: true,
+                produces_sbom: false,
+                sbom_formats: Vec::new(),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn recorrelation_aggregates_scanned_updated_and_failed_counts_across_multiple_reports() {
+        let storage = Arc::new(MockStorage::new());
+        let policy = PolicyConfig {
+            max_vuln_severity: starmetal_core::policy::VulnSeverity::High,
+            ..PolicyConfig::default()
+        };
+        let scanner = Arc::new(PerArtifactScanner::new());
+        let service =
+            CachingPackageService::new(storage.clone(), AHashMap::new(), policy).with_scanner(scanner.clone());
+
+        // Three distinct artifacts, all clean at ingest, so three digest-keyed reports are stored.
+        service
+            .publish_package(scan_gate_request_for("alpha", "1.0.0", b"alpha artifact"))
+            .await
+            .unwrap();
+        service
+            .publish_package(scan_gate_request_for("beta", "1.0.0", b"beta artifact"))
+            .await
+            .unwrap();
+        service
+            .publish_package(scan_gate_request_for("gamma", "1.0.0", b"gamma artifact"))
+            .await
+            .unwrap();
+
+        // Between ingest and the sweep, the feed evolves independently per subject: beta discloses a
+        // new Critical advisory (its gate decision flips allow -> block), gamma's scan becomes
+        // unavailable, and alpha stays clean and unchanged.
+        scanner.set(
+            "beta-1.0.0.tar.gz",
+            ScanOutcome::Vulnerable(starmetal_core::policy::VulnSeverity::Critical),
+        );
+        scanner.set("gamma-1.0.0.tar.gz", ScanOutcome::Unavailable);
+
+        let report = service.recorrelate().await.unwrap();
+        assert_eq!(report.scanned, 3, "all three still-present reports are re-scanned");
+        assert_eq!(report.updated, 1, "only beta's findings changed");
+        assert_eq!(report.failed, 1, "gamma's re-scan errored and is counted as failed");
+        assert_eq!(
+            report.newly_blocking.len(),
+            1,
+            "exactly one artifact flips to blocking, got: {:?}",
+            report.newly_blocking
+        );
+        assert!(
+            report.newly_blocking.contains(&"pypi/beta/1.0.0".to_string()),
+            "beta must be the artifact flagged newly blocking, got: {:?}",
+            report.newly_blocking
+        );
+    }
+
     /// A serve-enforcing service whose scanner blocks the sample artifact, with quarantine mode on.
     fn quarantining_server(storage: Arc<MockStorage>) -> CachingPackageService {
         let policy = PolicyConfig {
@@ -2940,6 +3084,33 @@ mod tests {
         assert!(
             matches!(error, StarmetalError::ArtifactNotFound(_)),
             "promoting a nonexistent record must be a not-found error, got: {error}"
+        );
+    }
+
+    #[tokio::test]
+    async fn promote_quarantine_rejects_a_malformed_digest_at_the_service_boundary() {
+        // Defense in depth: even without a scanner attached, a non-blake3-hex digest must be
+        // rejected by `transition_quarantine` itself, before it ever reaches `quarantine_record_key`
+        // — proving the service layer is safe independently of the HTTP admin boundary's validation.
+        let storage = Arc::new(MockStorage::new());
+        let service = CachingPackageService::new(storage.clone(), AHashMap::new(), PolicyConfig::default());
+
+        let error = service.promote_quarantine("../../config").await.unwrap_err();
+        assert!(
+            matches!(error, StarmetalError::Adapter(_)),
+            "a path-traversal digest must be rejected as an adapter error, got: {error}"
+        );
+
+        let error = service.reject_quarantine("not-a-hex-digest").await.unwrap_err();
+        assert!(
+            matches!(error, StarmetalError::Adapter(_)),
+            "a malformed digest passed to reject must be rejected the same way, got: {error}"
+        );
+
+        // Neither call ever built a storage key or touched storage: no reads, no writes.
+        assert!(
+            storage.list_prefix("").await.unwrap().is_empty(),
+            "a malformed digest must never reach storage"
         );
     }
 
