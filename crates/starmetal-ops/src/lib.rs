@@ -215,6 +215,22 @@ impl StarmetalRuntime {
         } else {
             service
         };
+        // Signature/provenance gate (ADR-0024): enable the built-in own-graph verification and (for
+        // provenance) attestation emission on publish/cache-fill. Requiring either without
+        // `[signing]` configured is a startup misconfiguration.
+        let service = if config.supply_chain.require_signature || config.supply_chain.require_provenance {
+            if !config.signing.enabled {
+                return Err(StarmetalError::Config(
+                    "supply_chain.require_signature/require_provenance require [signing] to be enabled".to_string(),
+                ));
+            }
+            service
+                .require_signature(config.supply_chain.require_signature)
+                .require_provenance(config.supply_chain.require_provenance)
+                .emit_provenance(config.supply_chain.require_provenance)
+        } else {
+            service
+        };
         let service = Arc::new(service);
 
         // Expose the supply-chain handles (re-correlation + quarantine review) only when a scanner is
@@ -806,6 +822,22 @@ mod tests {
         std::fs::write(&path, "exists").expect("write");
         let err = write_minimal_config(&path).expect_err("existing config should fail");
         assert!(err.to_string().contains("already exists"));
+    }
+
+    #[tokio::test]
+    async fn require_signature_without_signing_is_a_startup_error() {
+        let mut config = Config::default();
+        config.storage.backend = "memory".to_string();
+        for upstream in config.upstream.values_mut() {
+            upstream.enabled = false;
+        }
+        config.supply_chain.require_signature = true; // but [signing] stays disabled
+
+        let error = StarmetalRuntime::from_config(config)
+            .await
+            .err()
+            .expect("requiring signatures without signing must fail closed at startup");
+        assert!(error.to_string().contains("signing"));
     }
 
     #[tokio::test]

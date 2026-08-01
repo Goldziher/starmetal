@@ -419,6 +419,16 @@ vendored. Point `osv_endpoint` at a self-hosted OSV mirror to avoid the public A
 | `supply_chain.sbom` | — | SBOM generation controls (independent of the scanner). |
 | `supply_chain.sbom.enabled` | `false` | Generate and store an SBOM per artifact on publish. |
 | `supply_chain.sbom.formats` | `["cyclonedx", "spdx"]` | Formats to emit for each artifact. |
+| `supply_chain.require_signature` | `false` | Require a valid Starmetal DSSE signature to serve/publish; else deny (`missing-signature`). |
+| `supply_chain.require_provenance` | `false` | Require a valid Starmetal in-toto/SLSA provenance attestation; else deny (`failing-provenance`). |
+
+`supply_chain.require_signature` and `require_provenance` gate serving and publishing on Starmetal's own
+signature/provenance graph (ADR-0024). Both require `[signing]` to be configured (Starmetal signs with
+its own key); enabling either without signing is a startup error. When `require_provenance` is set,
+publishes and cache-fills emit a DSSE-signed in-toto/SLSA provenance attestation alongside the artifact,
+and serving/publishing is denied unless a valid signature and provenance attestation exist for the
+artifact bytes. Enforcement is uniform across proxy and hosted artifacts; external cosign/sigstore
+verification would be a future verifier backend.
 
 When `supply_chain.sbom.enabled` is set, each published artifact gets one SBOM document per configured
 format (CycloneDX and/or SPDX), generated from the publish request and stored as a sidecar keyed by the

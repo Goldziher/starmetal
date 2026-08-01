@@ -631,6 +631,16 @@
           "minimum": 0,
           "type": "integer"
         },
+        "require_provenance": {
+          "default": false,
+          "description": "Require a valid Starmetal in-toto/SLSA provenance attestation to serve/publish an artifact\n(ADR-0024). When set, publishes and cache-fills emit a signed provenance attestation, and a\nmissing or invalid one is denied (`failing-provenance`) at both ingest and serve. Requires\nsigning to be configured. Off by default.",
+          "type": "boolean"
+        },
+        "require_signature": {
+          "default": false,
+          "description": "Require a valid Starmetal DSSE signature to serve/publish an artifact (ADR-0024). A missing\nor invalid signature is denied (`missing-signature`) at both ingest and serve. Requires\nsigning to be configured (`[signing]`). Off by default.",
+          "type": "boolean"
+        },
         "sbom": {
           "$ref": "#/$defs/SbomConfig",
           "default": {
@@ -791,6 +801,8 @@
         "osv_endpoint": null,
         "quarantine": false,
         "recorrelation_interval_secs": 0,
+        "require_provenance": false,
+        "require_signature": false,
         "sbom": {
           "enabled": false,
           "formats": ["cyclonedx", "spdx"]

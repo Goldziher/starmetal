@@ -1,3 +1,4 @@
+pub mod attestation;
 pub mod authz;
 pub mod config;
 pub mod content;

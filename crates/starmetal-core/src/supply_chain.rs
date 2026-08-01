@@ -423,6 +423,39 @@ pub trait SbomIndex: Send + Sync {
     async fn get_sbom_document(&self, artifact: &ArtifactId, format: SbomFormat) -> Result<Option<Bytes>>;
 }
 
+/// The subject artifact a [`Verifier`] evaluates: its identity, storage key, and content digest.
+///
+/// Borrows its inputs so the caller keeps ownership. The digest lets a verifier confirm an
+/// accessory (signature/attestation) actually covers the bytes in hand.
+#[derive(Debug, Clone, Copy)]
+pub struct VerificationTarget<'a> {
+    /// The identity of the artifact being verified.
+    pub artifact_id: &'a ArtifactId,
+    /// The artifact's storage key (accessory sidecars are addressed relative to it).
+    pub storage_key: &'a str,
+    /// The artifact's BLAKE3 content digest.
+    pub blake3: &'a str,
+}
+
+/// A pluggable signature + provenance verifier for a subject artifact (ADR-0024).
+///
+/// Verifies the referrer/attestation graph Starmetal owns — its DSSE artifact signatures and its
+/// in-toto/SLSA provenance attestations — and returns a [`PolicyDecision`]: [`PolicyDecision::Deny`]
+/// with [`PolicyReason::MissingSignature`] or [`PolicyReason::FailingProvenance`] when a required
+/// accessory is absent or does not verify, else [`PolicyDecision::Allow`]. External verifiers
+/// (cosign/sigstore transparency-log checks) are future implementations of this same port. The
+/// trait is object-safe so the service holds an `Arc<dyn Verifier>` and swaps it per deployment.
+#[async_trait]
+pub trait Verifier: Send + Sync {
+    /// Verify the target's required signature and provenance, returning the policy decision.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error only when verification could not be attempted (e.g. a storage failure);
+    /// an accessory that is absent or fails to verify is a [`PolicyDecision::Deny`], not an error.
+    async fn verify(&self, target: &VerificationTarget<'_>) -> Result<PolicyDecision>;
+}
+
 /// The kind of accessory artifact a [`Referrer`] links to its subject.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]

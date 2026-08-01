@@ -13,7 +13,7 @@ use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
 use bytes::Bytes;
 use chrono::{SecondsFormat, Utc};
-use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey};
+use ed25519_dalek::{Signer, SigningKey, Verifier as Ed25519Verifier, VerifyingKey};
 use futures::stream::{self, StreamExt};
 use pkcs8::{
     DecodePrivateKey, ObjectIdentifier, PrivateKeyInfoOwned,
@@ -21,6 +21,7 @@ use pkcs8::{
     spki::SubjectPublicKeyInfoOwned,
 };
 use sha2::Digest;
+use starmetal_core::attestation::{self, INTOTO_PAYLOAD_TYPE};
 use starmetal_core::content::{Asset, AssetRef, Blob, BlobDigest, Component, ComponentRef, ContentStore};
 use starmetal_core::error::{Result, StarmetalError};
 use starmetal_core::integrity;
@@ -41,14 +42,18 @@ use starmetal_core::signing::{
 };
 use starmetal_core::statistics::{EcosystemStatistics, StatisticsSnapshot};
 use starmetal_core::supply_chain::{
-    QuarantineRecord, QuarantineReview, QuarantineState, RecorrelationReport, Sbom, SbomFormat, SbomIndex, ScanReport,
-    ScanTarget, Scanner, SupplyChainMaintenance, evaluate_scan_report,
+    PolicyDecision, PolicyReason, QuarantineRecord, QuarantineReview, QuarantineState, RecorrelationReport, Sbom,
+    SbomFormat, SbomIndex, ScanReport, ScanTarget, Scanner, SupplyChainMaintenance, VerificationTarget, Verifier,
+    evaluate_scan_report,
 };
 use zeroize::Zeroizing;
 
 const DSSE_PAE_PREFIX: &str = "DSSEv1";
 const ED25519_OID: &str = "1.3.101.112";
 const ED25519_KEY_BYTES: usize = 32;
+
+/// The SLSA builder identity Starmetal stamps into the provenance attestations it produces.
+const STARMETAL_BUILDER_ID: &str = "https://starmetal.dev";
 
 pub struct SigningService {
     mode: SigningMode,
@@ -213,22 +218,30 @@ impl SigningService {
         })
     }
 
-    fn sign_statement(&self, statement: SignatureStatement) -> Result<DsseEnvelope> {
+    /// DSSE-sign an arbitrary payload under `payload_type`, using the key scoped to the coordinate.
+    /// The shared substance behind `sign_statement` (artifact signatures, ADR-0004) and
+    /// `sign_attestation` (in-toto/SLSA provenance, ADR-0024).
+    fn sign_payload(
+        &self,
+        ecosystem: Ecosystem,
+        package: &PackageName,
+        payload_type: &str,
+        payload: &[u8],
+    ) -> Result<DsseEnvelope> {
         if !matches!(self.mode, SigningMode::SignOnly | SigningMode::SignAndVerify) {
             return Err(StarmetalError::Config(
                 "signing service is not configured for signing".to_string(),
             ));
         }
-        let key = self.select_signing_key(statement.ecosystem, &statement.package)?;
+        let key = self.select_signing_key(ecosystem, package)?;
         let signing_key = key
             .signing_key
             .as_ref()
             .ok_or_else(|| StarmetalError::Config(format!("signing key {} has no private key material", key.id)))?;
-        let payload = serde_json::to_vec(&statement)?;
-        let pae = dsse_pae(STARMETAL_DSSE_PAYLOAD_TYPE.as_bytes(), &payload);
+        let pae = dsse_pae(payload_type.as_bytes(), payload);
         let signature = signing_key.sign(&pae);
         Ok(DsseEnvelope {
-            payload_type: STARMETAL_DSSE_PAYLOAD_TYPE.to_string(),
+            payload_type: payload_type.to_string(),
             payload: BASE64_STANDARD.encode(payload),
             signatures: vec![DsseSignature {
                 key_id: key.id.clone(),
@@ -238,6 +251,18 @@ impl SigningService {
                 certificate_chain_pem: key.certificate_chain_pem.clone(),
             }],
         })
+    }
+
+    fn sign_statement(&self, statement: SignatureStatement) -> Result<DsseEnvelope> {
+        let ecosystem = statement.ecosystem;
+        let package = statement.package.clone();
+        let payload = serde_json::to_vec(&statement)?;
+        self.sign_payload(ecosystem, &package, STARMETAL_DSSE_PAYLOAD_TYPE, &payload)
+    }
+
+    /// DSSE-sign an in-toto provenance statement payload with the coordinate's key (ADR-0024).
+    fn sign_attestation(&self, ecosystem: Ecosystem, package: &PackageName, payload: &[u8]) -> Result<DsseEnvelope> {
+        self.sign_payload(ecosystem, package, INTOTO_PAYLOAD_TYPE, payload)
     }
 
     fn verify_envelope(&self, envelope_bytes: &[u8]) -> Result<SignatureStatement> {
@@ -293,6 +318,63 @@ impl SigningService {
             actual: "no configured key verified the envelope".to_string(),
         })
     }
+
+    /// Verify a DSSE envelope of `expected_payload_type` against the configured keys, returning the
+    /// decoded payload of the first signature that verifies. Used to check provenance attestations,
+    /// whose payload is opaque in-toto JSON (unlike the typed `SignatureStatement` of
+    /// `verify_envelope`).
+    fn verify_dsse_payload(&self, envelope_bytes: &[u8], expected_payload_type: &str) -> Result<Vec<u8>> {
+        let envelope: DsseEnvelope = serde_json::from_slice(envelope_bytes)?;
+        if envelope.payload_type != expected_payload_type {
+            return Err(StarmetalError::IntegrityError {
+                expected: expected_payload_type.to_string(),
+                actual: envelope.payload_type,
+            });
+        }
+        let payload = BASE64_STANDARD
+            .decode(&envelope.payload)
+            .map_err(|err| StarmetalError::IntegrityError {
+                expected: "base64 DSSE payload".to_string(),
+                actual: err.to_string(),
+            })?;
+        let pae = dsse_pae(envelope.payload_type.as_bytes(), &payload);
+        for signature in &envelope.signatures {
+            let Some(key) = self.keys.iter().find(|key| key.id == signature.key_id) else {
+                continue;
+            };
+            if signature.algorithm != key.algorithm {
+                continue;
+            }
+            if signature.certificate_fingerprint_sha256 != key.certificate_fingerprint_sha256 {
+                continue;
+            }
+            let signature_bytes =
+                BASE64_STANDARD
+                    .decode(&signature.signature)
+                    .map_err(|err| StarmetalError::IntegrityError {
+                        expected: "base64 DSSE signature".to_string(),
+                        actual: err.to_string(),
+                    })?;
+            let signature = ed25519_dalek::Signature::from_slice(&signature_bytes).map_err(|err| {
+                StarmetalError::IntegrityError {
+                    expected: "ed25519 signature".to_string(),
+                    actual: err.to_string(),
+                }
+            })?;
+            if key.verifying_key.verify(&pae, &signature).is_ok() {
+                return Ok(payload);
+            }
+        }
+        Err(StarmetalError::IntegrityError {
+            expected: "valid DSSE signature".to_string(),
+            actual: "no configured key verified the envelope".to_string(),
+        })
+    }
+
+    /// Verify a provenance attestation DSSE envelope, returning its verified in-toto payload bytes.
+    fn verify_attestation(&self, envelope_bytes: &[u8]) -> Result<Vec<u8>> {
+        self.verify_dsse_payload(envelope_bytes, INTOTO_PAYLOAD_TYPE)
+    }
 }
 
 /// Pull-through caching implementation of `PackageService`.
@@ -320,6 +402,20 @@ pub struct CachingPackageService {
     /// SBOM generation; otherwise each published artifact gets one digest-keyed SBOM sidecar per
     /// format. Independent of the scanner — SBOMs are generated from the publish request.
     sbom_formats: Vec<SbomFormat>,
+    /// Require a valid Starmetal signature to serve/publish (ADR-0024). Gated by reusing the same
+    /// `verify_artifact_signature` used for signing verify-on-read (no second read), mapping a
+    /// failure to a `MissingSignature` denial. Off by default.
+    require_signature: bool,
+    /// Require a valid Starmetal provenance attestation to serve/publish (ADR-0024). Off by default.
+    require_provenance: bool,
+    /// When true (and signing is configured), publishes and cache-fills emit a DSSE-signed
+    /// in-toto/SLSA provenance attestation alongside the artifact, so the provenance gate has one to
+    /// verify. Off by default.
+    emit_provenance: bool,
+    /// External signature/provenance verifier override (ADR-0024). When attached, it *replaces* the
+    /// built-in own-graph verification at the gate — the seam a cosign/sigstore backend plugs into.
+    /// Absent by default (the built-in own-graph verifier is used when `require_*` is set).
+    verifier: Option<Arc<dyn Verifier>>,
     /// Named per-coordinate locks serializing concurrent publishes of the same
     /// `ecosystem/name/version`. `publish_package` prunes an entry once its guard drops and no other
     /// publish still holds a clone of the lock (see `prune_publish_lock`), so the map only grows with
@@ -430,6 +526,10 @@ impl CachingPackageService {
             enforce_on_serve: false,
             quarantine: false,
             sbom_formats: Vec::new(),
+            require_signature: false,
+            require_provenance: false,
+            emit_provenance: false,
+            verifier: None,
             publish_locks: Mutex::new(AHashMap::new()),
         }
     }
@@ -451,6 +551,10 @@ impl CachingPackageService {
             enforce_on_serve: false,
             quarantine: false,
             sbom_formats: Vec::new(),
+            require_signature: false,
+            require_provenance: false,
+            emit_provenance: false,
+            verifier: None,
             publish_locks: Mutex::new(AHashMap::new()),
         }
     }
@@ -491,6 +595,34 @@ impl CachingPackageService {
     /// digest-keyed SBOM sidecar per format. An empty list (the default) disables generation.
     pub fn with_sbom_formats(mut self, formats: Vec<SbomFormat>) -> Self {
         self.sbom_formats = formats;
+        self
+    }
+
+    /// Require a valid signature to serve/publish (ADR-0024). The built-in own-graph gate reuses
+    /// `verify_artifact_signature`; enabling this also suppresses the redundant signing verify-on-read
+    /// so an artifact's signature is verified exactly once. Off by default.
+    pub fn require_signature(mut self, enabled: bool) -> Self {
+        self.require_signature = enabled;
+        self
+    }
+
+    /// Require a valid provenance attestation to serve/publish (ADR-0024). Off by default.
+    pub fn require_provenance(mut self, enabled: bool) -> Self {
+        self.require_provenance = enabled;
+        self
+    }
+
+    /// Enable (or disable) provenance-attestation emission. When enabled and signing is configured,
+    /// publishes and cache-fills emit a signed in-toto/SLSA attestation. Off by default.
+    pub fn emit_provenance(mut self, enabled: bool) -> Self {
+        self.emit_provenance = enabled;
+        self
+    }
+
+    /// Attach an external signature/provenance verifier that replaces the built-in own-graph gate
+    /// (ADR-0024) — the seam for a cosign/sigstore backend. Absent by default.
+    pub fn with_verifier(mut self, verifier: Arc<dyn Verifier>) -> Self {
+        self.verifier = Some(verifier);
         self
     }
 
@@ -612,6 +744,91 @@ impl CachingPackageService {
         }
         self.enforce_quarantine(artifact_id, blake3, decision.reason_code(), reason)
             .await
+    }
+
+    /// Enforce the signature/provenance gate (ADR-0024) for one artifact. Used at both serve
+    /// (`get_artifact`) and ingest (`publish_package`), it denies with `PolicyViolation` (fail
+    /// closed) on any failure.
+    ///
+    /// An attached external verifier *replaces* the built-in check (the cosign/sigstore seam).
+    /// Otherwise the built-in own-graph gate reuses [`verify_artifact_signature`](Self::verify_artifact_signature)
+    /// for the signature — the same verification as signing verify-on-read, so the signature is read
+    /// and checked once, not twice — and [`verify_provenance`](Self::verify_provenance) for the
+    /// attestation.
+    async fn enforce_verification(
+        &self,
+        artifact_id: &ArtifactId,
+        storage_key: &str,
+        blake3: &str,
+        data: &Bytes,
+    ) -> Result<()> {
+        if let Some(verifier) = &self.verifier {
+            let target = VerificationTarget {
+                artifact_id,
+                storage_key,
+                blake3,
+            };
+            return Self::apply_verification(verifier.verify(&target).await?);
+        }
+
+        if self.require_signature
+            && self
+                .verify_artifact_signature(artifact_id, storage_key, data)
+                .await
+                .is_err()
+        {
+            return Self::apply_verification(PolicyDecision::deny(
+                PolicyReason::MissingSignature,
+                "no valid signature for the artifact",
+            ));
+        }
+        if self.require_provenance
+            && let Some(decision) = self.verify_provenance(storage_key, blake3).await?
+        {
+            return Self::apply_verification(decision);
+        }
+        Ok(())
+    }
+
+    /// Map a verifier [`PolicyDecision`] to the gate's `Result`: a blocking decision (`Deny`/
+    /// `Quarantine`) becomes a `PolicyViolation` whose message is prefixed with the stable reason
+    /// code (`<code>: <prose>`) so callers can match on the code; otherwise `Ok`.
+    fn apply_verification(decision: PolicyDecision) -> Result<()> {
+        if decision.blocks_serving() {
+            let code = decision.reason_code().map_or("policy-violation", PolicyReason::as_str);
+            let prose = decision.reason().unwrap_or("signature or provenance policy violation");
+            return Err(StarmetalError::PolicyViolation(format!("{code}: {prose}")));
+        }
+        Ok(())
+    }
+
+    /// Verify the provenance attestation sidecar for an artifact (built-in own-graph provenance
+    /// check). `Ok(None)` when the attestation is present, DSSE-verifies, and names *this* artifact
+    /// as its single subject (by both storage key and BLAKE3 digest); `Ok(Some(Deny))` when it is
+    /// absent, does not verify, or attests a different subject.
+    async fn verify_provenance(&self, storage_key: &str, blake3: &str) -> Result<Option<PolicyDecision>> {
+        let deny = |reason: &str| {
+            Ok(Some(PolicyDecision::deny(
+                PolicyReason::FailingProvenance,
+                reason.to_string(),
+            )))
+        };
+        let Some(signing) = &self.signing else {
+            return deny("signing is not configured, so provenance cannot be verified");
+        };
+        let Some(envelope_bytes) = self.storage.get(&Self::attestation_sidecar_key(storage_key)).await? else {
+            return deny("no provenance attestation for the artifact");
+        };
+        let Ok(payload) = signing.verify_attestation(&envelope_bytes) else {
+            return deny("provenance attestation did not verify");
+        };
+        let Ok(statement) = serde_json::from_slice::<serde_json::Value>(&payload) else {
+            return deny("provenance statement is not valid JSON");
+        };
+        match attestation::statement_subject(&statement) {
+            Some((name, digest)) if name == storage_key && digest == blake3 => Ok(None),
+            _ => deny("provenance subject does not match the artifact"),
+        }
     }
 
     /// Resolve a serve-time gate block under quarantine mode. A promoted artifact is released
@@ -952,6 +1169,12 @@ impl CachingPackageService {
         format!("{storage_key}.starmetal.sig.json")
     }
 
+    /// Storage key for an artifact's provenance attestation sidecar (a DSSE-wrapped in-toto/SLSA
+    /// statement), addressed relative to the artifact's storage key.
+    fn attestation_sidecar_key(storage_key: &str) -> String {
+        format!("{storage_key}.intoto.att.json")
+    }
+
     fn signature_bundle_key(ecosystem: Ecosystem, name: &PackageName, version: &str, filename: &str) -> Result<String> {
         let name = name.storage_segment()?;
         validate_storage_segment("version", version)?;
@@ -1008,8 +1231,38 @@ impl CachingPackageService {
         self.put_and_track(bundle_key, bytes, staged_writes).await
     }
 
+    /// Produce and store a DSSE-signed in-toto/SLSA provenance attestation for an artifact, keyed by
+    /// its storage key (ADR-0024). A no-op when signing is not configured (nothing can be signed).
+    /// Staged via `put_and_track`, so a publish rollback removes it.
+    async fn sign_and_store_attestation(
+        &self,
+        ecosystem: Ecosystem,
+        package: &PackageName,
+        storage_key: &str,
+        blake3: &str,
+        built_at: &str,
+        staged_writes: &mut Vec<StagedWrite>,
+    ) -> Result<()> {
+        let Some(signing) = &self.signing else {
+            return Ok(());
+        };
+        let statement = attestation::provenance_statement(storage_key, blake3, STARMETAL_BUILDER_ID, built_at);
+        let payload = serde_json::to_vec(&statement)?;
+        let envelope = signing.sign_attestation(ecosystem, package, &payload)?;
+        let bytes = Bytes::from(serde_json::to_vec(&envelope)?);
+        self.put_and_track(&Self::attestation_sidecar_key(storage_key), bytes, staged_writes)
+            .await
+    }
+
     fn verify_on_read(&self) -> bool {
         self.signing.as_ref().is_some_and(|signing| signing.verify_on_read())
+    }
+
+    /// Whether the supply-chain gate (`enforce_verification`) already verifies the signature — the
+    /// built-in `require_signature` path or any attached external verifier — so signing
+    /// verify-on-read need not repeat it.
+    fn gates_signature(&self) -> bool {
+        self.require_signature || self.verifier.is_some()
     }
 
     async fn verify_storage_signature(&self, check: StoredObjectSignatureCheck<'_>) -> Result<()> {
@@ -1257,8 +1510,13 @@ impl PackageService for CachingPackageService {
         let key = artifact_id.validated_storage_key()?.into_string();
         let hash_key = format!("{key}.blake3");
 
-        if let Some(cached) = self.storage.get(&key).await? {
-            let expected_hash = self.storage.get(&hash_key).await?.ok_or_else(|| {
+        // The artifact bytes and their blake3 sidecar are both needed on every cache hit and their
+        // keys are independent, so fetch them concurrently — one round-trip instead of two on
+        // object-store backends. On a miss the sidecar fetch is discarded (it overlapped the bytes
+        // fetch, so it added no latency).
+        let (cached, cached_hash) = futures::try_join!(self.storage.get(&key), self.storage.get(&hash_key))?;
+        if let Some(cached) = cached {
+            let expected_hash = cached_hash.ok_or_else(|| {
                 self.record_integrity_failure(artifact_id.ecosystem);
                 StarmetalError::IntegrityError {
                     expected: format!("missing sidecar {hash_key}"),
@@ -1270,11 +1528,14 @@ impl PackageService for CachingPackageService {
                 self.record_integrity_failure(artifact_id.ecosystem);
                 return Err(err);
             }
-            if self.verify_on_read() {
+            // Signing verify-on-read is skipped when the supply-chain signature gate already covers
+            // it (it reuses the same `verify_artifact_signature`), so the signature is checked once.
+            if self.verify_on_read() && !self.gates_signature() {
                 self.verify_artifact_signature(artifact_id, &key, &cached).await?;
             }
             self.enforce_serve_scan(artifact_id, expected, &cached).await?;
-            // Recorded only after both gates pass, so a denied/quarantined serve is never counted as
+            self.enforce_verification(artifact_id, &key, expected, &cached).await?;
+            // Recorded only after all gates pass, so a denied/quarantined serve is never counted as
             // served (matches the cache-miss branch below, which records bytes_served in the same
             // place).
             self.record_statistics(artifact_id.ecosystem, |stats| {
@@ -1323,6 +1584,18 @@ impl PackageService for CachingPackageService {
                 )?;
                 self.sign_and_store_statement(statement, &sidecar_key, &bundle_key, &mut staged_writes)
                     .await?;
+                if self.emit_provenance {
+                    let fetched_at = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
+                    self.sign_and_store_attestation(
+                        artifact_id.ecosystem,
+                        &artifact_id.name,
+                        &key,
+                        &hash,
+                        &fetched_at,
+                        &mut staged_writes,
+                    )
+                    .await?;
+                }
             }
             self.put_and_track(&hash_key, Bytes::from(hash.clone()), &mut staged_writes)
                 .await?;
@@ -1334,6 +1607,13 @@ impl PackageService for CachingPackageService {
             return Err(err);
         }
         self.enforce_serve_scan(artifact_id, &hash, &data).await?;
+        // A signature/provenance denial at cache-fill must not leave the just-cached (unverifiable)
+        // bytes behind — roll them back, unlike the scan gate above whose quarantine intentionally
+        // holds them.
+        if let Err(err) = self.enforce_verification(artifact_id, &key, &hash, &data).await {
+            self.rollback_staged_writes(&staged_writes).await;
+            return Err(err);
+        }
         self.record_statistics(artifact_id.ecosystem, |stats| {
             stats.bytes_served = stats.bytes_served.saturating_add(data.len() as u64);
         });
@@ -1462,12 +1742,9 @@ impl PublishingService for CachingPackageService {
         // stored (digest-keyed) so the serve-time gate finds them without re-scanning.
         let scan_reports = self.scan_artifacts_for_publish(&request, &blake3_digests).await?;
 
-        // One creation timestamp for every SBOM this publish emits (empty when SBOM is disabled).
-        let sbom_created_at = if self.sbom_formats.is_empty() {
-            String::new()
-        } else {
-            Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
-        };
+        // One RFC3339 timestamp for every accessory this publish emits (SBOM documents, provenance
+        // attestations), so they agree on a single build time.
+        let publish_timestamp = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
 
         let result = async {
             for (blake3, persisted) in &scan_reports {
@@ -1520,7 +1797,25 @@ impl PublishingService for CachingPackageService {
                         .await?;
                 }
 
-                self.store_sbom_documents(&request, artifact, blake3, &key, &sbom_created_at, &mut staged_keys)
+                self.store_sbom_documents(&request, artifact, blake3, &key, &publish_timestamp, &mut staged_keys)
+                    .await?;
+
+                if self.emit_provenance {
+                    self.sign_and_store_attestation(
+                        request.ecosystem,
+                        &request.name,
+                        &key,
+                        blake3,
+                        &publish_timestamp,
+                        &mut staged_keys,
+                    )
+                    .await?;
+                }
+
+                // Ingest gate (ADR-0024): verify the just-produced signature/provenance for this
+                // artifact. A denial (e.g. required signing not configured) propagates out of the
+                // transactional block and rolls back every staged write for this publish.
+                self.enforce_verification(&artifact_id, &key, blake3, &artifact.data)
                     .await?;
             }
 
@@ -3604,6 +3899,403 @@ mod tests {
         let err = service.get_artifact(&artifact_id).await.unwrap_err();
         assert!(matches!(err, StarmetalError::IntegrityError { .. }));
         assert!(err.to_string().contains("signature statement mismatch"));
+    }
+
+    #[cfg(unix)]
+    fn signing_backed_service(key_path: PathBuf, storage: Arc<MockStorage>) -> CachingPackageService {
+        let signing = SigningService::from_config(&signing_config(key_path)).unwrap().unwrap();
+        CachingPackageService::new_with_signing(storage, AHashMap::new(), PolicyConfig::default(), Some(signing))
+    }
+
+    /// A stub external [`Verifier`] returning a fixed decision, for the port-delegation contract test.
+    struct StubVerifier(PolicyDecision);
+
+    #[async_trait]
+    impl Verifier for StubVerifier {
+        async fn verify(&self, _target: &VerificationTarget<'_>) -> Result<PolicyDecision> {
+            Ok(self.0.clone())
+        }
+    }
+
+    /// A [`Verifier`] that always fails with an I/O-style error, for the fail-closed contract test.
+    struct ErroringVerifier;
+
+    #[async_trait]
+    impl Verifier for ErroringVerifier {
+        async fn verify(&self, _target: &VerificationTarget<'_>) -> Result<PolicyDecision> {
+            Err(StarmetalError::Storage("verifier backend unavailable".to_string()))
+        }
+    }
+
+    fn pypi_publish(name: &str, filename: &str, data: &'static [u8]) -> PublishRequest {
+        PublishRequest {
+            ecosystem: Ecosystem::PyPI,
+            name: PackageName::new(name),
+            version: "1.0.0".to_string(),
+            license: Some("MIT".to_string()),
+            yanked: false,
+            listed: true,
+            artifacts: vec![PublishedArtifact {
+                filename: filename.to_string(),
+                data: Bytes::from_static(data),
+                upstream_hashes: AHashMap::new(),
+            }],
+            protocol_metadata: ProtocolMetadata::default_for(Ecosystem::PyPI),
+            allow_overwrite: false,
+            allow_shadowing: false,
+        }
+    }
+
+    fn pypi_artifact_id(name: &str, filename: &str) -> ArtifactId {
+        ArtifactId {
+            ecosystem: Ecosystem::PyPI,
+            name: PackageName::new(name),
+            version: "1.0.0".to_string(),
+            filename: filename.to_string(),
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn signature_provenance_gate_serves_a_signed_and_attested_artifact() {
+        let dir = tempfile::tempdir().unwrap();
+        let key_path = dir.path().join("signing.pk8");
+        write_test_signing_key(&key_path, 0o600);
+        let storage = Arc::new(MockStorage::new());
+        let service = signing_backed_service(key_path, storage.clone())
+            .require_signature(true)
+            .require_provenance(true)
+            .emit_provenance(true);
+
+        service
+            .publish_package(pypi_publish("attested", "attested-1.0.0.tar.gz", b"attested bytes"))
+            .await
+            .unwrap();
+
+        let artifact_id = pypi_artifact_id("attested", "attested-1.0.0.tar.gz");
+        // The provenance attestation sidecar was produced on publish.
+        assert!(
+            storage
+                .get(&CachingPackageService::attestation_sidecar_key(
+                    &artifact_id.storage_key()
+                ))
+                .await
+                .unwrap()
+                .is_some(),
+            "attestation sidecar stored"
+        );
+        // The serve gate passes: valid signature + provenance let the artifact be served.
+        let served = service.get_artifact(&artifact_id).await.unwrap();
+        assert_eq!(served, Bytes::from_static(b"attested bytes"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn builtin_gate_denies_a_missing_signature() {
+        let dir = tempfile::tempdir().unwrap();
+        let key_path = dir.path().join("signing.pk8");
+        write_test_signing_key(&key_path, 0o600);
+        let storage = Arc::new(MockStorage::new());
+        let service = signing_backed_service(key_path, storage).require_signature(true);
+
+        // No signature sidecar was ever produced, so the built-in gate denies.
+        let artifact_id = pypi_artifact_id("unsigned", "unsigned-1.0.0.tar.gz");
+        let data = Bytes::from_static(b"unsigned");
+        let error = service
+            .enforce_verification(
+                &artifact_id,
+                &artifact_id.storage_key(),
+                &integrity::blake3_hex(&data),
+                &data,
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(error, StarmetalError::PolicyViolation(_)));
+        assert!(error.to_string().contains("signature"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn builtin_verify_provenance_binds_the_subject_name_and_digest() {
+        let dir = tempfile::tempdir().unwrap();
+        let key_path = dir.path().join("signing.pk8");
+        write_test_signing_key(&key_path, 0o600);
+        let storage = Arc::new(MockStorage::new());
+        // Publish with signing on but provenance emission off: a signature exists, no attestation.
+        let service = signing_backed_service(key_path, storage);
+        service
+            .publish_package(pypi_publish("signed", "signed-1.0.0.tar.gz", b"signed bytes"))
+            .await
+            .unwrap();
+
+        let artifact_id = pypi_artifact_id("signed", "signed-1.0.0.tar.gz");
+        let storage_key = artifact_id.storage_key();
+        let blake3 = integrity::blake3_hex(&Bytes::from_static(b"signed bytes"));
+
+        // No attestation at all -> deny.
+        let decision = service.verify_provenance(&storage_key, &blake3).await.unwrap();
+        assert_eq!(
+            decision.and_then(|d| d.reason_code()),
+            Some(PolicyReason::FailingProvenance)
+        );
+
+        // Now emit an attestation, then confirm the check binds BOTH subject name and digest: a
+        // matching pair passes, a mismatched digest (same key) is rejected — a valid attestation for
+        // one artifact cannot cover a different-bytes artifact at the same key.
+        let mut staged = Vec::new();
+        service
+            .sign_and_store_attestation(
+                Ecosystem::PyPI,
+                &artifact_id.name,
+                &storage_key,
+                &blake3,
+                "t",
+                &mut staged,
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            service.verify_provenance(&storage_key, &blake3).await.unwrap(),
+            None,
+            "matching subject passes"
+        );
+        let decision = service.verify_provenance(&storage_key, "deadbeef").await.unwrap();
+        assert_eq!(
+            decision.and_then(|d| d.reason_code()),
+            Some(PolicyReason::FailingProvenance),
+            "a subject-digest mismatch is denied"
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn ingest_gate_denies_and_rolls_back_when_required_provenance_is_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let key_path = dir.path().join("signing.pk8");
+        write_test_signing_key(&key_path, 0o600);
+        let storage = Arc::new(MockStorage::new());
+        // Require provenance at the gate, but do NOT emit it — the ingest gate must deny the publish.
+        let service = signing_backed_service(key_path, storage.clone()).require_provenance(true);
+
+        let error = service
+            .publish_package(pypi_publish("no-prov", "no-prov-1.0.0.tar.gz", b"no provenance"))
+            .await
+            .unwrap_err();
+        assert!(matches!(error, StarmetalError::PolicyViolation(_)));
+        assert!(error.to_string().contains(PolicyReason::FailingProvenance.as_str()));
+
+        // The denied publish rolled back: the artifact bytes were not left in storage.
+        let artifact_id = pypi_artifact_id("no-prov", "no-prov-1.0.0.tar.gz");
+        assert!(
+            storage.get(&artifact_id.storage_key()).await.unwrap().is_none(),
+            "denied publish must roll back the staged artifact write"
+        );
+    }
+
+    /// Build a service whose gate is driven only by an external stub verifier (no signing).
+    fn service_with_stub_verifier(storage: Arc<MockStorage>, verifier: Arc<dyn Verifier>) -> CachingPackageService {
+        CachingPackageService::new(storage, AHashMap::new(), PolicyConfig::default()).with_verifier(verifier)
+    }
+
+    #[tokio::test]
+    async fn external_verifier_decision_drives_the_gate_across_all_variants() {
+        // Contract test for the pluggable `Verifier` port. `blocks_serving()` semantics: Deny and
+        // Quarantine block; Allow and Warn pass.
+        let storage = Arc::new(MockStorage::new());
+        let artifact_id = pypi_artifact_id("ext", "ext-1.0.0.tar.gz");
+        let data = Bytes::from_static(b"ext");
+        let gate = |verifier: Arc<dyn Verifier>| {
+            let storage = storage.clone();
+            let artifact_id = artifact_id.clone();
+            let data = data.clone();
+            async move {
+                service_with_stub_verifier(storage, verifier)
+                    .enforce_verification(&artifact_id, &artifact_id.storage_key(), "abc", &data)
+                    .await
+            }
+        };
+
+        let stub = |decision: PolicyDecision| Arc::new(StubVerifier(decision)) as Arc<dyn Verifier>;
+        gate(stub(PolicyDecision::allow())).await.expect("Allow passes");
+        gate(stub(PolicyDecision::warn(PolicyReason::MissingSignature, "advisory")))
+            .await
+            .expect("Warn passes (non-blocking)");
+        assert!(
+            matches!(
+                gate(stub(PolicyDecision::deny(PolicyReason::FailingProvenance, "no"))).await,
+                Err(StarmetalError::PolicyViolation(_))
+            ),
+            "Deny blocks"
+        );
+        assert!(
+            matches!(
+                gate(stub(PolicyDecision::quarantine(
+                    PolicyReason::VulnSeverityExceeded,
+                    "held"
+                )))
+                .await,
+                Err(StarmetalError::PolicyViolation(_))
+            ),
+            "Quarantine blocks"
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn an_external_verifier_replaces_the_builtin_signature_gate() {
+        // With require_signature on AND an Allow-returning external verifier attached, the built-in
+        // missing-signature check must be *replaced* (skipped) — proving the external verifier is the
+        // sole authority, not an additional one. No signature is ever produced here.
+        let storage = Arc::new(MockStorage::new());
+        let allower = Arc::new(StubVerifier(PolicyDecision::allow())) as Arc<dyn Verifier>;
+        let service = CachingPackageService::new(storage, AHashMap::new(), PolicyConfig::default())
+            .require_signature(true)
+            .with_verifier(allower);
+        let artifact_id = pypi_artifact_id("ext", "ext-1.0.0.tar.gz");
+        service
+            .enforce_verification(
+                &artifact_id,
+                &artifact_id.storage_key(),
+                "abc",
+                &Bytes::from_static(b"ext"),
+            )
+            .await
+            .expect("an external Allow replaces (skips) the built-in require_signature check");
+    }
+
+    #[tokio::test]
+    async fn cache_fill_verification_denial_rolls_back_the_cached_bytes() {
+        let storage = Arc::new(MockStorage::new());
+        let filename = "pkg-1.0.0.tar.gz";
+        let mut artifacts = AHashMap::new();
+        artifacts.insert(filename.to_string(), Bytes::from_static(b"upstream artifact"));
+        let mut metadata = AHashMap::new();
+        metadata.insert(
+            "1.0.0".to_string(),
+            test_metadata_with_artifact("pkg", "1.0.0", filename, AHashMap::new()),
+        );
+        let upstream = MockUpstream {
+            eco: Ecosystem::PyPI,
+            versions: vec![VersionInfo {
+                version: "1.0.0".to_string(),
+                yanked: false,
+            }],
+            metadata,
+            artifacts,
+        };
+        // require_provenance with no signing configured => the built-in gate denies at cache-fill,
+        // exercising the upstream-fetch rollback path (distinct from the cache-hit/publish paths).
+        let service = build_service(storage.clone(), upstream, PolicyConfig::default()).require_provenance(true);
+        let artifact_id = ArtifactId {
+            ecosystem: Ecosystem::PyPI,
+            name: PackageName::new("pkg"),
+            version: "1.0.0".to_string(),
+            filename: filename.to_string(),
+        };
+
+        let error = service.get_artifact(&artifact_id).await.unwrap_err();
+        assert!(matches!(error, StarmetalError::PolicyViolation(_)));
+        assert!(error.to_string().contains(PolicyReason::FailingProvenance.as_str()));
+
+        // The just-cached (unverifiable) bytes and their sidecar were rolled back, not left behind.
+        let key = artifact_id.storage_key();
+        assert!(storage.get(&key).await.unwrap().is_none(), "artifact bytes rolled back");
+        assert!(
+            storage.get(&format!("{key}.blake3")).await.unwrap().is_none(),
+            "blake3 sidecar rolled back"
+        );
+    }
+
+    #[test]
+    fn gates_signature_reflects_the_signature_controls() {
+        let storage = Arc::new(MockStorage::new());
+        let base = || CachingPackageService::new(storage.clone(), AHashMap::new(), PolicyConfig::default());
+        assert!(!base().gates_signature(), "off by default");
+        assert!(
+            base().require_signature(true).gates_signature(),
+            "require_signature gates"
+        );
+        assert!(
+            base()
+                .with_verifier(Arc::new(StubVerifier(PolicyDecision::allow())))
+                .gates_signature(),
+            "an external verifier gates"
+        );
+        assert!(
+            !base().require_provenance(true).gates_signature(),
+            "provenance alone does not gate the signature (so verify-on-read still runs)"
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn verify_provenance_rejects_an_attestation_naming_a_different_subject() {
+        let dir = tempfile::tempdir().unwrap();
+        let key_path = dir.path().join("signing.pk8");
+        write_test_signing_key(&key_path, 0o600);
+        let storage = Arc::new(MockStorage::new());
+        // The service and a standalone signer share the same key, so the service verifies what the
+        // signer produces.
+        let service = signing_backed_service(key_path.clone(), storage.clone());
+        let signer = SigningService::from_config(&signing_config(key_path)).unwrap().unwrap();
+
+        let artifact_id = pypi_artifact_id("victim", "victim-1.0.0.tar.gz");
+        let storage_key = artifact_id.storage_key();
+        let blake3 = integrity::blake3_hex(&Bytes::from_static(b"victim bytes"));
+
+        // Plant, at the victim's attestation sidecar, a validly-signed attestation whose subject NAME
+        // is a different coordinate (but the same digest). Binding on digest alone would accept it.
+        let statement = attestation::provenance_statement(
+            "pypi/impostor/9.9.9/impostor.tgz",
+            &blake3,
+            "https://starmetal.dev",
+            "t",
+        );
+        let envelope = signer
+            .sign_attestation(
+                Ecosystem::PyPI,
+                &artifact_id.name,
+                &serde_json::to_vec(&statement).unwrap(),
+            )
+            .unwrap();
+        storage
+            .put(
+                &CachingPackageService::attestation_sidecar_key(&storage_key),
+                Bytes::from(serde_json::to_vec(&envelope).unwrap()),
+            )
+            .await
+            .unwrap();
+
+        let decision = service.verify_provenance(&storage_key, &blake3).await.unwrap();
+        assert_eq!(
+            decision.and_then(|d| d.reason_code()),
+            Some(PolicyReason::FailingProvenance),
+            "a subject-name mismatch is denied even with a matching digest"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_verifier_error_propagates_as_an_error_not_a_policy_denial() {
+        // A broken external verifier (I/O failure) must fail closed as a genuine error, not be
+        // silently swallowed or mis-mapped to a policy allow — mirroring the Scanner port's
+        // fail-closed contract.
+        let storage = Arc::new(MockStorage::new());
+        let erroring = Arc::new(ErroringVerifier) as Arc<dyn Verifier>;
+        let service = service_with_stub_verifier(storage, erroring);
+        let artifact_id = pypi_artifact_id("ext", "ext-1.0.0.tar.gz");
+        let error = service
+            .enforce_verification(
+                &artifact_id,
+                &artifact_id.storage_key(),
+                "abc",
+                &Bytes::from_static(b"ext"),
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(error, StarmetalError::Storage(_)),
+            "a verifier I/O error propagates verbatim, not as a policy violation"
+        );
     }
 
     #[cfg(unix)]

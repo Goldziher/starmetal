@@ -340,6 +340,17 @@ pub struct SupplyChainConfig {
     /// configured format, stored digest-keyed and retrievable via the admin API.
     #[serde(default)]
     pub sbom: SbomConfig,
+    /// Require a valid Starmetal DSSE signature to serve/publish an artifact (ADR-0024). A missing
+    /// or invalid signature is denied (`missing-signature`) at both ingest and serve. Requires
+    /// signing to be configured (`[signing]`). Off by default.
+    #[serde(default)]
+    pub require_signature: bool,
+    /// Require a valid Starmetal in-toto/SLSA provenance attestation to serve/publish an artifact
+    /// (ADR-0024). When set, publishes and cache-fills emit a signed provenance attestation, and a
+    /// missing or invalid one is denied (`failing-provenance`) at both ingest and serve. Requires
+    /// signing to be configured. Off by default.
+    #[serde(default)]
+    pub require_provenance: bool,
 }
 
 /// SBOM generation controls (ADR-0024). Independent of the scanner: SBOMs are generated from the
@@ -1301,6 +1312,14 @@ certificate_file = "/etc/starmetal/trust/internal-ca.pem"
             "re-correlation scheduler is disabled by default"
         );
         assert!(!supply_chain.quarantine, "quarantine mode is off by default");
+        assert!(
+            !supply_chain.require_signature,
+            "signature gate is off by default (fail-open guard)"
+        );
+        assert!(
+            !supply_chain.require_provenance,
+            "provenance gate is off by default (fail-open guard)"
+        );
     }
 
     #[test]
