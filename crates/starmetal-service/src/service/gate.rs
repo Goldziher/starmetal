@@ -227,17 +227,25 @@ impl CachingPackageService {
         let record_key = Self::quarantine_record_key(blake3);
         if let Some(bytes) = self.storage.get(&record_key).await? {
             let record: QuarantineRecord = serde_json::from_slice(&bytes)?;
-            match record.state {
-                QuarantineState::Promoted => return Ok(()),
-                QuarantineState::Rejected => {
-                    return Err(StarmetalError::PolicyViolation(format!(
-                        "artifact is quarantined and was rejected: {reason}"
-                    )));
-                }
-                QuarantineState::Quarantined => {
-                    return Err(StarmetalError::PolicyViolation(format!(
-                        "artifact is quarantined pending review: {reason}"
-                    )));
+            // Records are digest-keyed, but blake3 carries no coordinate binding, so a record found
+            // here may belong to a *different* package that shares bytes. Only a decision made for
+            // this exact coordinate may release or refuse it — otherwise an operator's promotion of
+            // one package would silently clear the gate for any other package with identical bytes,
+            // and its rejection would block one (CWE-863). A coordinate mismatch falls through to
+            // (re)record this coordinate's own hold, failing closed.
+            if &record.artifact == artifact_id {
+                match record.state {
+                    QuarantineState::Promoted => return Ok(()),
+                    QuarantineState::Rejected => {
+                        return Err(StarmetalError::PolicyViolation(format!(
+                            "artifact is quarantined and was rejected: {reason}"
+                        )));
+                    }
+                    QuarantineState::Quarantined => {
+                        return Err(StarmetalError::PolicyViolation(format!(
+                            "artifact is quarantined pending review: {reason}"
+                        )));
+                    }
                 }
             }
         }

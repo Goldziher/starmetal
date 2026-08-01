@@ -484,7 +484,7 @@ impl CachingPackageService {
             };
             let report = scanner.scan(ScanTarget::new(&artifact_id, &artifact.data)).await?;
             let decision = evaluate_scan_report(&report, self.policy.max_vuln_severity);
-            if decision.blocks_serving() && !self.digest_is_promoted(blake3).await? {
+            if decision.blocks_serving() && !self.coordinate_is_promoted(&artifact_id, blake3).await? {
                 let reason = decision
                     .reason()
                     .unwrap_or("vulnerability policy violation")
@@ -1530,16 +1530,22 @@ impl StatisticsService for CachingPackageService {
 /// operator promote/reject workflow that completes or purges it. Kept as inherent methods appended
 /// beside the ingest publish path, distinct from the serve-side [`QuarantineReview`] impl.
 impl CachingPackageService {
-    /// Whether a quarantine record for this blake3 digest has been operator-promoted. Consulted by
-    /// the ingest scan gate so replaying an already-reviewed held publish on promotion clears the
-    /// gate instead of being re-held — mirroring the serve gate, where a promoted record releases
-    /// the artifact despite a blocking scan.
-    async fn digest_is_promoted(&self, blake3: &str) -> Result<bool> {
+    /// Whether an operator promoted a quarantine hold for *exactly this coordinate and digest*.
+    /// Consulted by the ingest scan gate so replaying an already-reviewed held publish on promotion
+    /// clears the gate instead of being re-held — mirroring the serve gate.
+    ///
+    /// The match is bound to the record's `artifact` coordinate, not the content digest alone
+    /// (records are digest-keyed, but blake3 carries no coordinate binding): an operator's decision
+    /// to promote one held publish must not become an unscoped amnesty that clears the gate for a
+    /// *different* package that happens to share bytes. Without the coordinate check, an attacker
+    /// could republish previously-promoted bytes under an arbitrary coordinate and bypass the
+    /// vulnerability gate entirely (CWE-863).
+    async fn coordinate_is_promoted(&self, artifact_id: &ArtifactId, blake3: &str) -> Result<bool> {
         let Some(bytes) = self.storage.get(&Self::quarantine_record_key(blake3)).await? else {
             return Ok(false);
         };
         let record: QuarantineRecord = serde_json::from_slice(&bytes)?;
-        Ok(record.state == QuarantineState::Promoted)
+        Ok(record.state == QuarantineState::Promoted && &record.artifact == artifact_id)
     }
 
     /// Park a scan-blocked hosted publish for operator review (ADR-0024 ingest quarantine): store
@@ -3284,6 +3290,39 @@ mod tests {
         assert!(
             matches!(error, StarmetalError::ArtifactNotFound(_)),
             "promoting a nonexistent ingest hold must be a not-found error, got: {error}"
+        );
+    }
+
+    #[tokio::test]
+    async fn promoting_one_coordinate_does_not_clear_the_gate_for_another_sharing_bytes() {
+        // Regression (CWE-863): a promotion is scoped to the reviewed coordinate, not the content
+        // digest. Promoting `sample@1.0.0` must not let an attacker republish the identical bytes
+        // under a different coordinate and bypass the vulnerability gate.
+        let storage = Arc::new(MockStorage::new());
+        let publisher = ingest_quarantining_publisher(storage);
+        let blake3 = integrity::blake3_hex(b"scanned artifact");
+
+        // Hold, then promote, the sample coordinate — its bytes are now an operator-approved digest.
+        publisher.publish_package(scan_gate_request()).await.unwrap();
+        publisher.promote_ingest(&blake3).await.unwrap();
+        assert!(
+            publisher
+                .get_version_metadata(Ecosystem::PyPI, &PackageName::new("sample"), "1.0.0")
+                .await
+                .is_ok(),
+            "the promoted coordinate publishes live"
+        );
+
+        // A *different* coordinate with byte-identical content (same blake3) must still be held —
+        // the promoted record for `sample` must not clear the gate for `evil`.
+        let evil = scan_gate_request_for("evil", "1.0.0", b"scanned artifact");
+        publisher.publish_package(evil).await.unwrap();
+        assert!(
+            publisher
+                .get_version_metadata(Ecosystem::PyPI, &PackageName::new("evil"), "1.0.0")
+                .await
+                .is_err(),
+            "a foreign coordinate sharing promoted bytes must not publish live (gate bypass closed)"
         );
     }
 
