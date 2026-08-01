@@ -1003,14 +1003,17 @@ impl PackageService for CachingPackageService {
                 self.record_integrity_failure(artifact_id.ecosystem);
                 return Err(err);
             }
-            self.record_statistics(artifact_id.ecosystem, |stats| {
-                stats.artifact_cache_hits = stats.artifact_cache_hits.saturating_add(1);
-                stats.bytes_served = stats.bytes_served.saturating_add(cached.len() as u64);
-            });
             if self.verify_on_read() {
                 self.verify_artifact_signature(artifact_id, &key, &cached).await?;
             }
             self.enforce_serve_scan(artifact_id, expected, &cached).await?;
+            // Recorded only after both gates pass, so a denied/quarantined serve is never counted as
+            // served (matches the cache-miss branch below, which records bytes_served in the same
+            // place).
+            self.record_statistics(artifact_id.ecosystem, |stats| {
+                stats.artifact_cache_hits = stats.artifact_cache_hits.saturating_add(1);
+                stats.bytes_served = stats.bytes_served.saturating_add(cached.len() as u64);
+            });
             return Ok(cached);
         }
 
@@ -2753,6 +2756,40 @@ mod tests {
                 .unwrap()
                 .is_some(),
             "a scan-on-demand report is cached at serve"
+        );
+    }
+
+    #[tokio::test]
+    async fn serve_denies_when_a_scan_on_demand_exceeds_the_threshold_does_not_count_the_bytes() {
+        let storage = Arc::new(MockStorage::new());
+        // Publish without a scanner so the artifact is already cached: the denied serve below takes
+        // the cache-hit branch, not the upstream-fetch miss branch.
+        let publisher = CachingPackageService::new(storage.clone(), AHashMap::new(), PolicyConfig::default());
+        publisher.publish_package(scan_gate_request()).await.unwrap();
+
+        let policy = PolicyConfig {
+            max_vuln_severity: starmetal_core::policy::VulnSeverity::High,
+            ..PolicyConfig::default()
+        };
+        let server = CachingPackageService::new(storage.clone(), AHashMap::new(), policy)
+            .with_scanner(Arc::new(FakeScanner {
+                severity: Some(starmetal_core::policy::VulnSeverity::Critical),
+            }))
+            .enforce_scan_on_serve(true);
+
+        server.get_artifact(&sample_artifact_id()).await.unwrap_err();
+
+        // A denied cache-hit serve must not be counted as served: the gate ran before the artifact
+        // bytes ever left the service.
+        let snapshot = server.statistics();
+        let pypi = snapshot
+            .ecosystems
+            .get("pypi")
+            .expect("pypi statistics should be present after the denied serve attempt");
+        assert_eq!(pypi.bytes_served, 0, "a denied serve must not count bytes_served");
+        assert_eq!(
+            pypi.artifact_cache_hits, 0,
+            "a denied serve must not count artifact_cache_hits"
         );
     }
 
