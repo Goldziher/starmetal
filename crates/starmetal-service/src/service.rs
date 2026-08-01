@@ -430,7 +430,10 @@ struct StoredObjectSignatureCheck<'a> {
     filename: Option<&'a str>,
     storage_key: &'a str,
     data: &'a Bytes,
-    source: SignatureSource,
+    /// The signature sources this check accepts. The sidecar is read and verified once; the
+    /// statement's declared source must be one of these (an artifact may have been signed either
+    /// locally or as an upstream cache-fill, so both are accepted without re-reading).
+    allowed_sources: &'a [SignatureSource],
 }
 
 struct StagedWrite {
@@ -1287,7 +1290,7 @@ impl CachingPackageService {
             || statement.filename.as_deref() != check.filename
             || statement.blake3 != actual
             || statement.size != check.data.len() as u64
-            || statement.source != check.source
+            || !check.allowed_sources.contains(&statement.source)
         {
             return Err(StarmetalError::IntegrityError {
                 expected: "signature statement matching stored object".to_string(),
@@ -1298,32 +1301,18 @@ impl CachingPackageService {
     }
 
     async fn verify_artifact_signature(&self, artifact_id: &ArtifactId, storage_key: &str, data: &Bytes) -> Result<()> {
-        let local_result = self
-            .verify_storage_signature(StoredObjectSignatureCheck {
-                ecosystem: artifact_id.ecosystem,
-                name: &artifact_id.name,
-                version: &artifact_id.version,
-                filename: Some(artifact_id.filename.as_str()),
-                storage_key,
-                data,
-                source: SignatureSource::Local,
-            })
-            .await;
-        match local_result {
-            Ok(()) => Ok(()),
-            Err(local_err) => self
-                .verify_storage_signature(StoredObjectSignatureCheck {
-                    ecosystem: artifact_id.ecosystem,
-                    name: &artifact_id.name,
-                    version: &artifact_id.version,
-                    filename: Some(artifact_id.filename.as_str()),
-                    storage_key,
-                    data,
-                    source: SignatureSource::UpstreamCache,
-                })
-                .await
-                .map_err(|_| local_err),
-        }
+        // An artifact signature may carry either a local-publish or upstream-cache source; accept
+        // both from a single sidecar read + verify (rather than reading and verifying twice).
+        self.verify_storage_signature(StoredObjectSignatureCheck {
+            ecosystem: artifact_id.ecosystem,
+            name: &artifact_id.name,
+            version: &artifact_id.version,
+            filename: Some(artifact_id.filename.as_str()),
+            storage_key,
+            data,
+            allowed_sources: &[SignatureSource::Local, SignatureSource::UpstreamCache],
+        })
+        .await
     }
 
     async fn verify_metadata_signature(
@@ -1341,7 +1330,7 @@ impl CachingPackageService {
             filename: None,
             storage_key,
             data,
-            source: SignatureSource::Metadata,
+            allowed_sources: &[SignatureSource::Metadata],
         })
         .await
     }
@@ -4203,6 +4192,61 @@ mod tests {
         assert!(
             storage.get(&format!("{key}.blake3")).await.unwrap().is_none(),
             "blake3 sidecar rolled back"
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn cache_fill_deny_also_rolls_back_a_staged_signature_sidecar() {
+        // With signing + sign_cached_upstream on, a cache-fill stages a signature sidecar *before*
+        // the provenance gate denies — the rollback must remove that sidecar too, not just the bytes.
+        let dir = tempfile::tempdir().unwrap();
+        let key_path = dir.path().join("signing.pk8");
+        write_test_signing_key(&key_path, 0o600);
+        let mut config = signing_config(key_path);
+        config.sign_cached_upstream = true;
+        let signing = SigningService::from_config(&config).unwrap().unwrap();
+
+        let storage = Arc::new(MockStorage::new());
+        let filename = "pkg-1.0.0.tar.gz";
+        let mut artifacts = AHashMap::new();
+        artifacts.insert(filename.to_string(), Bytes::from_static(b"upstream artifact"));
+        let mut metadata = AHashMap::new();
+        metadata.insert(
+            "1.0.0".to_string(),
+            test_metadata_with_artifact("pkg", "1.0.0", filename, AHashMap::new()),
+        );
+        let mut clients: AHashMap<Ecosystem, Arc<dyn UpstreamClient>> = AHashMap::new();
+        clients.insert(
+            Ecosystem::PyPI,
+            Arc::new(MockUpstream {
+                eco: Ecosystem::PyPI,
+                versions: vec![VersionInfo {
+                    version: "1.0.0".to_string(),
+                    yanked: false,
+                }],
+                metadata,
+                artifacts,
+            }),
+        );
+        // require_provenance but emit none: the fill signs the artifact, then the gate denies.
+        let service =
+            CachingPackageService::new_with_signing(storage.clone(), clients, PolicyConfig::default(), Some(signing))
+                .require_provenance(true);
+
+        let artifact_id = pypi_artifact_id("pkg", filename);
+        let error = service.get_artifact(&artifact_id).await.unwrap_err();
+        assert!(matches!(error, StarmetalError::PolicyViolation(_)));
+
+        let key = artifact_id.storage_key();
+        assert!(storage.get(&key).await.unwrap().is_none(), "artifact bytes rolled back");
+        assert!(
+            storage
+                .get(&CachingPackageService::signature_sidecar_key(&key))
+                .await
+                .unwrap()
+                .is_none(),
+            "the signature sidecar staged during cache-fill was rolled back"
         );
     }
 
