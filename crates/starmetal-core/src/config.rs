@@ -306,6 +306,11 @@ pub struct SupplyChainConfig {
     /// `0` (the default) disables the scheduler. Only effective when a scanner is attached.
     #[serde(default)]
     pub recorrelation_interval_secs: u64,
+    /// Hold a serve-time gate block as a recoverable quarantine record (an operator can promote or
+    /// reject it via the admin API) instead of a terminal deny. Off by default — blocks are hard
+    /// denials. Only effective with `enforce_on_serve` and a scanner attached.
+    #[serde(default)]
+    pub quarantine: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -1302,6 +1307,7 @@ certificate_file = "/etc/starmetal/trust/internal-ca.pem"
             supply_chain.recorrelation_interval_secs, 0,
             "re-correlation scheduler is disabled by default"
         );
+        assert!(!supply_chain.quarantine, "quarantine mode is off by default");
     }
 
     #[test]

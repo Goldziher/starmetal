@@ -359,6 +359,12 @@ that was clean when first scanned is re-evaluated as new advisories land ("scan 
 Combined with `enforce_on_serve`, a package that becomes vulnerable after caching is blocked on its
 next read once a sweep updates its report. The first sweep runs one interval after startup.
 
+With `quarantine` enabled, a serve-time block records a recoverable quarantine hold (keyed by the
+artifact's blake3 digest) instead of a terminal deny: the artifact is withheld, but an operator can
+later promote it (release for serving) or reject it (withhold permanently) — a first-seen block is
+recorded as `quarantined`, a promoted artifact serves despite the finding, and a rejected one never
+serves. Off by default, so a blocked artifact is hard-denied unless an operator opts in.
+
 The OSV backend queries the [OSV.dev](https://osv.dev) API by package coordinate; no CVE database is
 vendored. Point `osv_endpoint` at a self-hosted OSV mirror to avoid the public API.
 
@@ -369,6 +375,7 @@ vendored. Point `osv_endpoint` at a self-hosted OSV mirror to avoid the public A
 | `supply_chain.osv_endpoint` | `null` | Override the OSV base URL (defaults to `https://api.osv.dev`). |
 | `supply_chain.enforce_on_serve` | `false` | Also gate at serve time, scanning cached artifacts on demand. |
 | `supply_chain.recorrelation_interval_secs` | `0` | Interval for the background re-scan sweep; `0` disables it. |
+| `supply_chain.quarantine` | `false` | Hold a serve-time block as a recoverable quarantine record instead of a hard deny. |
 
 ```toml
 [supply_chain]

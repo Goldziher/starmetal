@@ -457,6 +457,11 @@
           "description": "Override the OSV endpoint base URL (defaults to the public `https://api.osv.dev`). Useful for\na self-hosted OSV mirror.",
           "type": ["string", "null"]
         },
+        "quarantine": {
+          "default": false,
+          "description": "Hold a serve-time gate block as a recoverable quarantine record (an operator can promote or\nreject it via the admin API) instead of a terminal deny. Off by default — blocks are hard\ndenials. Only effective with `enforce_on_serve` and a scanner attached.",
+          "type": "boolean"
+        },
         "recorrelation_interval_secs": {
           "default": 0,
           "description": "Interval in seconds between scheduled re-correlation sweeps. Each sweep re-scans every stored\nscan report against the (refreshed) advisory feed and rewrites it, so an artifact that was\nclean when first scanned is re-evaluated as new advisories land (\"scan once, then monitor\").\n`0` (the default) disables the scheduler. Only effective when a scanner is attached.",
@@ -608,6 +613,7 @@
         "enabled": false,
         "enforce_on_serve": false,
         "osv_endpoint": null,
+        "quarantine": false,
         "recorrelation_interval_secs": 0,
         "scanner": "osv"
       }

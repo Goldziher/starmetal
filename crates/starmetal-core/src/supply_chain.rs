@@ -474,6 +474,56 @@ pub enum QuarantineState {
     Rejected,
 }
 
+/// A record of one artifact held under the quarantine workflow (ADR-0024).
+///
+/// When quarantine mode is enabled, an artifact that fails the vulnerability gate is recorded here
+/// (keyed by its Blake3 digest) and held rather than hard-denied, so an operator can later promote it
+/// (release for serving) or reject it (withhold permanently). The coordinate is retained for operator
+/// context; the reason captures why the gate blocked.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct QuarantineRecord {
+    /// Blake3 digest of the held artifact — the record's stable identity.
+    pub subject_digest: String,
+    /// The artifact coordinate (ecosystem/name/version/filename) that was held.
+    pub artifact: ArtifactId,
+    /// The current lifecycle state.
+    pub state: QuarantineState,
+    /// The typed policy reason the artifact was quarantined for.
+    pub reason_code: PolicyReason,
+    /// Human-readable explanation of the quarantine.
+    pub reason: String,
+    /// Unix timestamp (seconds) when the artifact was first quarantined.
+    pub quarantined_at: u64,
+    /// Unix timestamp (seconds) of the promote/reject decision, if one has been made.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decided_at: Option<u64>,
+}
+
+/// Operator review of the quarantine workflow (ADR-0024).
+///
+/// Kept separate from the request-path [`Scanner`] and the scheduled [`SupplyChainMaintenance`]: these
+/// are operator-driven decisions surfaced through the admin API. The trait is object-safe so the
+/// server can hold an `Arc<dyn QuarantineReview>`.
+#[async_trait]
+pub trait QuarantineReview: Send + Sync {
+    /// List every quarantine record, in an unspecified order.
+    async fn list_quarantine(&self) -> Result<Vec<QuarantineRecord>>;
+
+    /// Promote a held artifact (identified by its Blake3 digest) so it may be served.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::StarmetalError::ArtifactNotFound`] when no record exists for the digest.
+    async fn promote_quarantine(&self, subject_digest: &str) -> Result<QuarantineRecord>;
+
+    /// Reject a held artifact (identified by its Blake3 digest) so it is never served.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::StarmetalError::ArtifactNotFound`] when no record exists for the digest.
+    async fn reject_quarantine(&self, subject_digest: &str) -> Result<QuarantineRecord>;
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------

@@ -37,7 +37,8 @@ use starmetal_core::signing::{
 };
 use starmetal_core::statistics::{EcosystemStatistics, StatisticsSnapshot};
 use starmetal_core::supply_chain::{
-    RecorrelationReport, ScanReport, ScanTarget, Scanner, SupplyChainMaintenance, evaluate_scan_report,
+    QuarantineRecord, QuarantineReview, QuarantineState, RecorrelationReport, ScanReport, ScanTarget, Scanner,
+    SupplyChainMaintenance, evaluate_scan_report,
 };
 use zeroize::Zeroizing;
 
@@ -308,6 +309,9 @@ pub struct CachingPackageService {
     /// `get_artifact` loads the artifact's stored scan report (scanning on demand and caching it
     /// when absent) and denies serving when a finding exceeds `policy.max_vuln_severity`.
     enforce_on_serve: bool,
+    /// When true, a serve-time gate block records a digest-keyed quarantine hold (recoverable via
+    /// operator promote/reject) instead of a terminal deny. Off by default (blocks are hard denials).
+    quarantine: bool,
     /// Named per-coordinate locks serializing concurrent publishes of the same
     /// `ecosystem/name/version`. Entries are not pruned yet: the map is bounded by the number of
     /// distinct coordinates published in-process. A future improvement can prune an entry once its
@@ -333,6 +337,10 @@ struct StagedWrite {
 /// Storage key prefix under which digest-keyed scan reports are persisted. Scheduled re-correlation
 /// enumerates this prefix to find every stored report.
 const SCAN_REPORT_PREFIX: &str = "_starmetal/scans/";
+
+/// Storage key prefix under which digest-keyed quarantine records are persisted. The quarantine
+/// review API enumerates this prefix to list held artifacts.
+const QUARANTINE_PREFIX: &str = "_starmetal/quarantine/";
 
 /// On-disk envelope for a persisted scan report.
 ///
@@ -361,6 +369,7 @@ impl CachingPackageService {
             content_store: None,
             scanner: None,
             enforce_on_serve: false,
+            quarantine: false,
             publish_locks: Mutex::new(AHashMap::new()),
         }
     }
@@ -380,6 +389,7 @@ impl CachingPackageService {
             content_store: None,
             scanner: None,
             enforce_on_serve: false,
+            quarantine: false,
             publish_locks: Mutex::new(AHashMap::new()),
         }
     }
@@ -406,6 +416,19 @@ impl CachingPackageService {
     pub fn enforce_scan_on_serve(mut self, enabled: bool) -> Self {
         self.enforce_on_serve = enabled;
         self
+    }
+
+    /// Enable (or disable) quarantine mode. When enabled, a serve-time gate block records a
+    /// recoverable quarantine hold (an operator can later promote or reject the artifact) instead of a
+    /// terminal deny. Off by default, so a blocked artifact is hard-denied unless an operator opts in.
+    pub fn with_quarantine(mut self, enabled: bool) -> Self {
+        self.quarantine = enabled;
+        self
+    }
+
+    /// Storage key for an artifact's quarantine record, addressed by its blake3 digest.
+    fn quarantine_record_key(blake3: &str) -> String {
+        format!("{QUARANTINE_PREFIX}{blake3}.json")
     }
 
     /// Storage key for an artifact's cached scan report, addressed by the artifact's blake3 digest so
@@ -444,15 +467,65 @@ impl CachingPackageService {
         };
 
         let decision = evaluate_scan_report(&report, self.policy.max_vuln_severity);
-        if decision.blocks_serving() {
-            return Err(StarmetalError::PolicyViolation(
-                decision
-                    .reason()
-                    .unwrap_or("vulnerability policy violation")
-                    .to_string(),
-            ));
+        if !decision.blocks_serving() {
+            return Ok(());
         }
-        Ok(())
+        let reason = decision
+            .reason()
+            .unwrap_or("vulnerability policy violation")
+            .to_string();
+        if !self.quarantine {
+            return Err(StarmetalError::PolicyViolation(reason));
+        }
+        self.enforce_quarantine(artifact_id, blake3, decision.reason_code(), reason)
+            .await
+    }
+
+    /// Resolve a serve-time gate block under quarantine mode. A promoted artifact is released
+    /// (`Ok`); a rejected one is refused; a still-held or first-seen artifact is (re)recorded as
+    /// quarantined and refused. The digest-keyed record makes the block recoverable via the operator
+    /// promote/reject workflow rather than a terminal deny.
+    async fn enforce_quarantine(
+        &self,
+        artifact_id: &ArtifactId,
+        blake3: &str,
+        reason_code: Option<starmetal_core::supply_chain::PolicyReason>,
+        reason: String,
+    ) -> Result<()> {
+        let record_key = Self::quarantine_record_key(blake3);
+        if let Some(bytes) = self.storage.get(&record_key).await? {
+            let record: QuarantineRecord = serde_json::from_slice(&bytes)?;
+            match record.state {
+                QuarantineState::Promoted => return Ok(()),
+                QuarantineState::Rejected => {
+                    return Err(StarmetalError::PolicyViolation(format!(
+                        "artifact is quarantined and was rejected: {reason}"
+                    )));
+                }
+                QuarantineState::Quarantined => {
+                    return Err(StarmetalError::PolicyViolation(format!(
+                        "artifact is quarantined pending review: {reason}"
+                    )));
+                }
+            }
+        }
+
+        // First time this digest is blocked: record the hold so an operator can review it.
+        let record = QuarantineRecord {
+            subject_digest: blake3.to_string(),
+            artifact: artifact_id.clone(),
+            state: QuarantineState::Quarantined,
+            reason_code: reason_code.unwrap_or(starmetal_core::supply_chain::PolicyReason::VulnSeverityExceeded),
+            reason: reason.clone(),
+            quarantined_at: unix_now(),
+            decided_at: None,
+        };
+        self.storage
+            .put(&record_key, Bytes::from(serde_json::to_vec(&record)?))
+            .await?;
+        Err(StarmetalError::PolicyViolation(format!(
+            "artifact is quarantined pending review: {reason}"
+        )))
     }
 
     /// Acquire an owned lock scoped to a single `ecosystem/name/version` publish coordinate,
@@ -1451,6 +1524,49 @@ impl SupplyChainMaintenance for CachingPackageService {
     }
 }
 
+#[async_trait]
+impl QuarantineReview for CachingPackageService {
+    async fn list_quarantine(&self) -> Result<Vec<QuarantineRecord>> {
+        let keys = self.storage.list_prefix(QUARANTINE_PREFIX).await?;
+        let mut records = Vec::with_capacity(keys.len());
+        for key in keys {
+            if let Some(bytes) = self.storage.get(&key).await? {
+                records.push(serde_json::from_slice::<QuarantineRecord>(&bytes)?);
+            }
+        }
+        Ok(records)
+    }
+
+    async fn promote_quarantine(&self, subject_digest: &str) -> Result<QuarantineRecord> {
+        self.transition_quarantine(subject_digest, QuarantineState::Promoted)
+            .await
+    }
+
+    async fn reject_quarantine(&self, subject_digest: &str) -> Result<QuarantineRecord> {
+        self.transition_quarantine(subject_digest, QuarantineState::Rejected)
+            .await
+    }
+}
+
+impl CachingPackageService {
+    /// Apply an operator promote/reject decision to a quarantine record, stamping the decision time
+    /// and persisting the new state. Errors with `ArtifactNotFound` when no record exists.
+    async fn transition_quarantine(&self, subject_digest: &str, state: QuarantineState) -> Result<QuarantineRecord> {
+        let record_key = Self::quarantine_record_key(subject_digest);
+        let bytes =
+            self.storage.get(&record_key).await?.ok_or_else(|| {
+                StarmetalError::ArtifactNotFound(format!("no quarantine record for {subject_digest}"))
+            })?;
+        let mut record: QuarantineRecord = serde_json::from_slice(&bytes)?;
+        record.state = state;
+        record.decided_at = Some(unix_now());
+        self.storage
+            .put(&record_key, Bytes::from(serde_json::to_vec(&record)?))
+            .await?;
+        Ok(record)
+    }
+}
+
 /// A human-readable `ecosystem/name/version` label for a scanned artifact, used in re-correlation
 /// summaries and logs (not a storage key).
 fn coordinate_label(artifact: &ArtifactId) -> String {
@@ -2435,6 +2551,95 @@ mod tests {
         let service = CachingPackageService::new(storage, AHashMap::new(), PolicyConfig::default());
         let report = service.recorrelate().await.unwrap();
         assert_eq!(report, RecorrelationReport::default());
+    }
+
+    /// A serve-enforcing service whose scanner blocks the sample artifact, with quarantine mode on.
+    fn quarantining_server(storage: Arc<MockStorage>) -> CachingPackageService {
+        let policy = PolicyConfig {
+            max_vuln_severity: starmetal_core::policy::VulnSeverity::High,
+            ..PolicyConfig::default()
+        };
+        CachingPackageService::new(storage, AHashMap::new(), policy)
+            .with_scanner(Arc::new(FakeScanner {
+                severity: Some(starmetal_core::policy::VulnSeverity::Critical),
+            }))
+            .enforce_scan_on_serve(true)
+            .with_quarantine(true)
+    }
+
+    #[tokio::test]
+    async fn serve_holds_a_blocking_artifact_in_quarantine_instead_of_denying() {
+        let storage = Arc::new(MockStorage::new());
+        let publisher = CachingPackageService::new(storage.clone(), AHashMap::new(), PolicyConfig::default());
+        publisher.publish_package(scan_gate_request()).await.unwrap();
+
+        let server = quarantining_server(storage.clone());
+        let error = server.get_artifact(&sample_artifact_id()).await.unwrap_err();
+        assert!(
+            matches!(error, StarmetalError::PolicyViolation(_)),
+            "a held artifact is not served, got: {error}"
+        );
+
+        // A recoverable quarantine record is written for the digest.
+        let records = server.list_quarantine().await.unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].state, QuarantineState::Quarantined);
+        assert_eq!(records[0].artifact, sample_artifact_id());
+        assert_eq!(
+            records[0].reason_code,
+            starmetal_core::supply_chain::PolicyReason::VulnSeverityExceeded
+        );
+    }
+
+    #[tokio::test]
+    async fn promoting_a_quarantined_artifact_releases_it_for_serving() {
+        let storage = Arc::new(MockStorage::new());
+        let publisher = CachingPackageService::new(storage.clone(), AHashMap::new(), PolicyConfig::default());
+        publisher.publish_package(scan_gate_request()).await.unwrap();
+
+        let server = quarantining_server(storage.clone());
+        let digest = integrity::blake3_hex(b"scanned artifact");
+        // Held on first serve.
+        server.get_artifact(&sample_artifact_id()).await.unwrap_err();
+
+        let promoted = server.promote_quarantine(&digest).await.unwrap();
+        assert_eq!(promoted.state, QuarantineState::Promoted);
+        assert!(promoted.decided_at.is_some());
+
+        // The operator override now permits serving despite the blocking scan.
+        let served = server.get_artifact(&sample_artifact_id()).await.unwrap();
+        assert_eq!(served, Bytes::from_static(b"scanned artifact"));
+    }
+
+    #[tokio::test]
+    async fn rejecting_a_quarantined_artifact_keeps_it_unservable() {
+        let storage = Arc::new(MockStorage::new());
+        let publisher = CachingPackageService::new(storage.clone(), AHashMap::new(), PolicyConfig::default());
+        publisher.publish_package(scan_gate_request()).await.unwrap();
+
+        let server = quarantining_server(storage.clone());
+        let digest = integrity::blake3_hex(b"scanned artifact");
+        server.get_artifact(&sample_artifact_id()).await.unwrap_err();
+
+        let rejected = server.reject_quarantine(&digest).await.unwrap();
+        assert_eq!(rejected.state, QuarantineState::Rejected);
+
+        let error = server.get_artifact(&sample_artifact_id()).await.unwrap_err();
+        assert!(
+            matches!(error, StarmetalError::PolicyViolation(_)),
+            "a rejected artifact stays unservable, got: {error}"
+        );
+    }
+
+    #[tokio::test]
+    async fn promoting_an_unknown_digest_is_not_found() {
+        let storage = Arc::new(MockStorage::new());
+        let server = quarantining_server(storage);
+        let error = server.promote_quarantine(&"0".repeat(64)).await.unwrap_err();
+        assert!(
+            matches!(error, StarmetalError::ArtifactNotFound(_)),
+            "promoting a nonexistent record must be a not-found error, got: {error}"
+        );
     }
 
     #[tokio::test]

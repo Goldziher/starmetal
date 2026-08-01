@@ -10,7 +10,7 @@ use starmetal_core::error::{Result, StarmetalError};
 use starmetal_core::package::{ArtifactId, Ecosystem, PackageName, VersionMetadata};
 use starmetal_core::ports::{PackageService, PublishingService, StatisticsService, StoragePort, UpstreamClient};
 use starmetal_core::publishing::{ProtocolMetadata, PublishRequest, PublishedArtifact, YankRequest};
-use starmetal_core::supply_chain::SupplyChainMaintenance;
+use starmetal_core::supply_chain::{QuarantineReview, SupplyChainMaintenance};
 use starmetal_server::state::{AppState, UpstreamClients};
 use starmetal_service::{CachingPackageService, SigningService};
 use starmetal_storage::OpenDalStorage;
@@ -83,6 +83,9 @@ pub struct StarmetalRuntime {
     /// Handle for scheduled supply-chain re-correlation (ADR-0024). `Some` only when a scanner is
     /// attached (`supply_chain.enabled` under the scanner feature); drives the background sweep.
     pub maintenance: Option<Arc<dyn SupplyChainMaintenance>>,
+    /// Handle for the quarantine review workflow (ADR-0024). `Some` only when a scanner is attached;
+    /// backs the admin promote/reject/list endpoints.
+    pub quarantine: Option<Arc<dyn QuarantineReview>>,
 }
 
 /// Attach a Postgres-backed content store (ADR-0020) to the service when `metadata.enabled`, so
@@ -129,6 +132,7 @@ fn attach_scanner(service: CachingPackageService, config: &Config) -> CachingPac
     service
         .with_scanner(Arc::new(scanner))
         .enforce_scan_on_serve(config.supply_chain.enforce_on_serve)
+        .with_quarantine(config.supply_chain.quarantine)
 }
 
 impl StarmetalRuntime {
@@ -169,16 +173,23 @@ impl StarmetalRuntime {
         let service = attach_scanner(service, &config);
         let service = Arc::new(service);
 
-        // Expose a re-correlation handle only when a scanner is actually attached, so a build without
-        // the scanner feature (or with supply-chain disabled) carries no maintenance handle.
+        // Expose the supply-chain handles (re-correlation + quarantine review) only when a scanner is
+        // actually attached, so a build without the scanner feature (or with supply-chain disabled)
+        // carries neither.
         #[cfg(feature = "scanner-osv")]
-        let maintenance: Option<Arc<dyn SupplyChainMaintenance>> = if config.supply_chain.enabled {
-            Some(service.clone())
-        } else {
-            None
-        };
+        let maintenance: Option<Arc<dyn SupplyChainMaintenance>> = config
+            .supply_chain
+            .enabled
+            .then(|| service.clone() as Arc<dyn SupplyChainMaintenance>);
+        #[cfg(feature = "scanner-osv")]
+        let quarantine: Option<Arc<dyn QuarantineReview>> = config
+            .supply_chain
+            .enabled
+            .then(|| service.clone() as Arc<dyn QuarantineReview>);
         #[cfg(not(feature = "scanner-osv"))]
         let maintenance: Option<Arc<dyn SupplyChainMaintenance>> = None;
+        #[cfg(not(feature = "scanner-osv"))]
+        let quarantine: Option<Arc<dyn QuarantineReview>> = None;
 
         let upstreams = UpstreamClients {
             #[cfg(feature = "pypi")]
@@ -207,6 +218,7 @@ impl StarmetalRuntime {
             statistics_service: service,
             upstreams,
             maintenance,
+            quarantine,
         })
     }
 
