@@ -538,7 +538,13 @@ impl CachingPackageService {
     ) -> tokio::sync::OwnedMutexGuard<()> {
         let key = format!("{ecosystem}/{}/{version}", name.as_str());
         let lock = {
-            let mut locks = self.publish_locks.lock().expect("publish_locks mutex poisoned");
+            // A poisoned lock only means some other publish panicked while holding it; the guarded
+            // value is just the per-coordinate lock map, so recovering it is safe (matches the
+            // statistics mutex handling elsewhere in this file).
+            let mut locks = self
+                .publish_locks
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             Arc::clone(
                 locks
                     .entry(key)
