@@ -1,11 +1,8 @@
-use std::collections::BTreeMap;
-#[cfg(not(unix))]
-use std::fs;
-use std::path::Path;
+mod gate;
+mod signing;
+
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
-#[cfg(unix)]
-use std::{fs, os::unix::fs::PermissionsExt};
 
 use ahash::AHashMap;
 use async_trait::async_trait;
@@ -13,15 +10,8 @@ use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
 use bytes::Bytes;
 use chrono::{SecondsFormat, Utc};
-use ed25519_dalek::{Signer, SigningKey, Verifier as Ed25519Verifier, VerifyingKey};
-use futures::stream::{self, StreamExt};
-use pkcs8::{
-    DecodePrivateKey, ObjectIdentifier, PrivateKeyInfoOwned,
-    der::{Decode, DecodePem, asn1::OctetStringRef},
-    spki::SubjectPublicKeyInfoOwned,
-};
 use sha2::Digest;
-use starmetal_core::attestation::{self, INTOTO_PAYLOAD_TYPE};
+use starmetal_core::attestation;
 use starmetal_core::content::{Asset, AssetRef, Blob, BlobDigest, Component, ComponentRef, ContentStore};
 use starmetal_core::error::{Result, StarmetalError};
 use starmetal_core::integrity;
@@ -36,346 +26,16 @@ use starmetal_core::publishing::{
     YankRequest,
 };
 use starmetal_core::sbom::{self, SbomHash, SbomSubject};
-use starmetal_core::signing::{
-    DsseEnvelope, DsseSignature, STARMETAL_DSSE_PAYLOAD_TYPE, SignatureSource, SignatureStatement, SigningAlgorithm,
-    SigningConfig, SigningKeyStatus, SigningMode,
-};
+use starmetal_core::signing::{SignatureSource, SignatureStatement};
 use starmetal_core::statistics::{EcosystemStatistics, StatisticsSnapshot};
-use starmetal_core::supply_chain::{
-    PolicyDecision, PolicyReason, QuarantineRecord, QuarantineReview, QuarantineState, RecorrelationReport, Sbom,
-    SbomFormat, SbomIndex, ScanReport, ScanTarget, Scanner, SupplyChainMaintenance, VerificationTarget, Verifier,
-    evaluate_scan_report,
-};
-use zeroize::Zeroizing;
+use starmetal_core::supply_chain::{SbomFormat, ScanTarget, Scanner, Verifier, evaluate_scan_report};
 
-const DSSE_PAE_PREFIX: &str = "DSSEv1";
-const ED25519_OID: &str = "1.3.101.112";
-const ED25519_KEY_BYTES: usize = 32;
+use gate::{PersistedScanReport, QUARANTINE_PREFIX, SBOM_PREFIX, SCAN_REPORT_PREFIX};
+pub use signing::SigningService;
+use signing::StatementInput;
 
 /// The SLSA builder identity Starmetal stamps into the provenance attestations it produces.
 const STARMETAL_BUILDER_ID: &str = "https://starmetal.dev";
-
-pub struct SigningService {
-    mode: SigningMode,
-    verify_on_read: bool,
-    sign_cached_upstream: bool,
-    keys: Vec<SigningKeyMaterial>,
-}
-
-struct SigningKeyMaterial {
-    id: String,
-    algorithm: SigningAlgorithm,
-    status: SigningKeyStatus,
-    signing_key: Option<SigningKey>,
-    verifying_key: VerifyingKey,
-    certificate_fingerprint_sha256: Option<String>,
-    certificate_chain_pem: Vec<String>,
-    ecosystems: Vec<Ecosystem>,
-    packages: Vec<String>,
-}
-
-struct StatementInput {
-    ecosystem: Ecosystem,
-    package: PackageName,
-    version: String,
-    filename: Option<String>,
-    storage_key: String,
-    size: u64,
-    blake3: String,
-    upstream_hashes: AHashMap<String, String>,
-    source: SignatureSource,
-}
-
-impl SigningService {
-    pub fn from_config(config: &SigningConfig) -> Result<Option<Self>> {
-        if !config.enabled {
-            return Ok(None);
-        }
-
-        let mut keys = Vec::new();
-        for key in &config.keys {
-            if key.status == SigningKeyStatus::Disabled {
-                continue;
-            }
-            if key.status == SigningKeyStatus::VerifyOnly && key.private_key_file.is_some() {
-                return Err(StarmetalError::Config(format!(
-                    "verify-only signing key {} must use public_key_file instead of private_key_file",
-                    key.id
-                )));
-            }
-            let signing_key = if let Some(private_key_file) = &key.private_key_file {
-                if key.private_key_password_env.is_some() {
-                    return Err(StarmetalError::Config(format!(
-                        "signing key {} uses encrypted private keys, which are not implemented yet",
-                        key.id
-                    )));
-                }
-                validate_private_key_permissions(private_key_file)?;
-                let private_key_pem = Zeroizing::new(fs::read_to_string(private_key_file)?);
-                Some(load_ed25519_signing_key(private_key_pem.as_str(), &key.id)?)
-            } else {
-                None
-            };
-            let verifying_key = if let Some(public_key_file) = &key.public_key_file {
-                let public_key_pem = fs::read_to_string(public_key_file)?;
-                let verifying_key = load_ed25519_verifying_key(&public_key_pem, &key.id)?;
-                if let Some(signing_key) = &signing_key
-                    && signing_key.verifying_key().to_bytes() != verifying_key.to_bytes()
-                {
-                    return Err(StarmetalError::Config(format!(
-                        "signing key {} private_key_file does not match public_key_file",
-                        key.id
-                    )));
-                }
-                verifying_key
-            } else if let Some(signing_key) = &signing_key {
-                signing_key.verifying_key()
-            } else {
-                return Err(StarmetalError::Config(format!(
-                    "signing key {} requires private_key_file or public_key_file",
-                    key.id
-                )));
-            };
-            let certificate_fingerprint_sha256 = optional_file_sha256(key.certificate_file.as_deref())?;
-            let certificate_chain_pem = optional_pem_chain(key.certificate_chain_file.as_deref())?;
-            keys.push(SigningKeyMaterial {
-                id: key.id.clone(),
-                algorithm: key.algorithm,
-                status: key.status,
-                signing_key,
-                verifying_key,
-                certificate_fingerprint_sha256,
-                certificate_chain_pem,
-                ecosystems: key.ecosystems.clone(),
-                packages: key.packages.clone(),
-            });
-        }
-
-        if matches!(config.mode, SigningMode::SignOnly | SigningMode::SignAndVerify)
-            && !keys.iter().any(|key| {
-                key.status == SigningKeyStatus::Active
-                    && key.algorithm == SigningAlgorithm::Ed25519
-                    && key.signing_key.is_some()
-            })
-        {
-            return Err(StarmetalError::Config(
-                "signing requires a loadable active ed25519 key".to_string(),
-            ));
-        }
-        if matches!(config.mode, SigningMode::SignAndVerify | SigningMode::VerifyOnly) && keys.is_empty() {
-            return Err(StarmetalError::Config(
-                "signature verification requires at least one verification key".to_string(),
-            ));
-        }
-
-        Ok(Some(Self {
-            mode: config.mode,
-            verify_on_read: config.verify_on_read
-                || matches!(config.mode, SigningMode::SignAndVerify | SigningMode::VerifyOnly),
-            sign_cached_upstream: config.sign_cached_upstream,
-            keys,
-        }))
-    }
-
-    fn verify_on_read(&self) -> bool {
-        self.verify_on_read && matches!(self.mode, SigningMode::SignAndVerify | SigningMode::VerifyOnly)
-    }
-
-    fn sign_cached_upstream(&self) -> bool {
-        self.sign_cached_upstream && matches!(self.mode, SigningMode::SignOnly | SigningMode::SignAndVerify)
-    }
-
-    fn select_signing_key(&self, ecosystem: Ecosystem, package: &PackageName) -> Result<&SigningKeyMaterial> {
-        self.keys
-            .iter()
-            .find(|key| {
-                if key.status != SigningKeyStatus::Active || key.signing_key.is_none() {
-                    return false;
-                }
-                let ecosystem_allowed = key.ecosystems.is_empty() || key.ecosystems.contains(&ecosystem);
-                let package_allowed =
-                    key.packages.is_empty() || key.packages.iter().any(|name| name == package.as_str());
-                ecosystem_allowed && package_allowed
-            })
-            .ok_or_else(|| StarmetalError::Config(format!("no signing key is scoped for {ecosystem}/{package}")))
-    }
-
-    fn statement(&self, input: StatementInput) -> Result<SignatureStatement> {
-        let key = self.select_signing_key(input.ecosystem, &input.package)?;
-        Ok(SignatureStatement {
-            ecosystem: input.ecosystem,
-            package: input.package,
-            version: input.version,
-            filename: input.filename,
-            storage_key: input.storage_key,
-            size: input.size,
-            blake3: input.blake3,
-            upstream_hashes: input.upstream_hashes.into_iter().collect::<BTreeMap<_, _>>(),
-            source: input.source,
-            issued_at_unix_seconds: unix_now(),
-            key_id: key.id.clone(),
-            certificate_fingerprint_sha256: key.certificate_fingerprint_sha256.clone(),
-        })
-    }
-
-    /// DSSE-sign an arbitrary payload under `payload_type`, using the key scoped to the coordinate.
-    /// The shared substance behind `sign_statement` (artifact signatures, ADR-0004) and
-    /// `sign_attestation` (in-toto/SLSA provenance, ADR-0024).
-    fn sign_payload(
-        &self,
-        ecosystem: Ecosystem,
-        package: &PackageName,
-        payload_type: &str,
-        payload: &[u8],
-    ) -> Result<DsseEnvelope> {
-        if !matches!(self.mode, SigningMode::SignOnly | SigningMode::SignAndVerify) {
-            return Err(StarmetalError::Config(
-                "signing service is not configured for signing".to_string(),
-            ));
-        }
-        let key = self.select_signing_key(ecosystem, package)?;
-        let signing_key = key
-            .signing_key
-            .as_ref()
-            .ok_or_else(|| StarmetalError::Config(format!("signing key {} has no private key material", key.id)))?;
-        let pae = dsse_pae(payload_type.as_bytes(), payload);
-        let signature = signing_key.sign(&pae);
-        Ok(DsseEnvelope {
-            payload_type: payload_type.to_string(),
-            payload: BASE64_STANDARD.encode(payload),
-            signatures: vec![DsseSignature {
-                key_id: key.id.clone(),
-                algorithm: key.algorithm,
-                signature: BASE64_STANDARD.encode(signature.to_bytes()),
-                certificate_fingerprint_sha256: key.certificate_fingerprint_sha256.clone(),
-                certificate_chain_pem: key.certificate_chain_pem.clone(),
-            }],
-        })
-    }
-
-    fn sign_statement(&self, statement: SignatureStatement) -> Result<DsseEnvelope> {
-        let ecosystem = statement.ecosystem;
-        let package = statement.package.clone();
-        let payload = serde_json::to_vec(&statement)?;
-        self.sign_payload(ecosystem, &package, STARMETAL_DSSE_PAYLOAD_TYPE, &payload)
-    }
-
-    /// DSSE-sign an in-toto provenance statement payload with the coordinate's key (ADR-0024).
-    fn sign_attestation(&self, ecosystem: Ecosystem, package: &PackageName, payload: &[u8]) -> Result<DsseEnvelope> {
-        self.sign_payload(ecosystem, package, INTOTO_PAYLOAD_TYPE, payload)
-    }
-
-    fn verify_envelope(&self, envelope_bytes: &[u8]) -> Result<SignatureStatement> {
-        let envelope: DsseEnvelope = serde_json::from_slice(envelope_bytes)?;
-        if envelope.payload_type != STARMETAL_DSSE_PAYLOAD_TYPE {
-            return Err(StarmetalError::IntegrityError {
-                expected: STARMETAL_DSSE_PAYLOAD_TYPE.to_string(),
-                actual: envelope.payload_type,
-            });
-        }
-        let payload = BASE64_STANDARD
-            .decode(&envelope.payload)
-            .map_err(|err| StarmetalError::IntegrityError {
-                expected: "base64 DSSE payload".to_string(),
-                actual: err.to_string(),
-            })?;
-        let pae = dsse_pae(envelope.payload_type.as_bytes(), &payload);
-        for signature in &envelope.signatures {
-            let Some(key) = self.keys.iter().find(|key| key.id == signature.key_id) else {
-                continue;
-            };
-            if signature.algorithm != key.algorithm {
-                continue;
-            }
-            if signature.certificate_fingerprint_sha256 != key.certificate_fingerprint_sha256 {
-                continue;
-            }
-            let signature_bytes =
-                BASE64_STANDARD
-                    .decode(&signature.signature)
-                    .map_err(|err| StarmetalError::IntegrityError {
-                        expected: "base64 DSSE signature".to_string(),
-                        actual: err.to_string(),
-                    })?;
-            let signature = ed25519_dalek::Signature::from_slice(&signature_bytes).map_err(|err| {
-                StarmetalError::IntegrityError {
-                    expected: "ed25519 signature".to_string(),
-                    actual: err.to_string(),
-                }
-            })?;
-            if key.verifying_key.verify(&pae, &signature).is_ok() {
-                let statement: SignatureStatement = serde_json::from_slice(&payload)?;
-                if statement.key_id != key.id
-                    || statement.certificate_fingerprint_sha256 != key.certificate_fingerprint_sha256
-                {
-                    continue;
-                }
-                return Ok(statement);
-            }
-        }
-        Err(StarmetalError::IntegrityError {
-            expected: "valid DSSE signature".to_string(),
-            actual: "no configured key verified the envelope".to_string(),
-        })
-    }
-
-    /// Verify a DSSE envelope of `expected_payload_type` against the configured keys, returning the
-    /// decoded payload of the first signature that verifies. Used to check provenance attestations,
-    /// whose payload is opaque in-toto JSON (unlike the typed `SignatureStatement` of
-    /// `verify_envelope`).
-    fn verify_dsse_payload(&self, envelope_bytes: &[u8], expected_payload_type: &str) -> Result<Vec<u8>> {
-        let envelope: DsseEnvelope = serde_json::from_slice(envelope_bytes)?;
-        if envelope.payload_type != expected_payload_type {
-            return Err(StarmetalError::IntegrityError {
-                expected: expected_payload_type.to_string(),
-                actual: envelope.payload_type,
-            });
-        }
-        let payload = BASE64_STANDARD
-            .decode(&envelope.payload)
-            .map_err(|err| StarmetalError::IntegrityError {
-                expected: "base64 DSSE payload".to_string(),
-                actual: err.to_string(),
-            })?;
-        let pae = dsse_pae(envelope.payload_type.as_bytes(), &payload);
-        for signature in &envelope.signatures {
-            let Some(key) = self.keys.iter().find(|key| key.id == signature.key_id) else {
-                continue;
-            };
-            if signature.algorithm != key.algorithm {
-                continue;
-            }
-            if signature.certificate_fingerprint_sha256 != key.certificate_fingerprint_sha256 {
-                continue;
-            }
-            let signature_bytes =
-                BASE64_STANDARD
-                    .decode(&signature.signature)
-                    .map_err(|err| StarmetalError::IntegrityError {
-                        expected: "base64 DSSE signature".to_string(),
-                        actual: err.to_string(),
-                    })?;
-            let signature = ed25519_dalek::Signature::from_slice(&signature_bytes).map_err(|err| {
-                StarmetalError::IntegrityError {
-                    expected: "ed25519 signature".to_string(),
-                    actual: err.to_string(),
-                }
-            })?;
-            if key.verifying_key.verify(&pae, &signature).is_ok() {
-                return Ok(payload);
-            }
-        }
-        Err(StarmetalError::IntegrityError {
-            expected: "valid DSSE signature".to_string(),
-            actual: "no configured key verified the envelope".to_string(),
-        })
-    }
-
-    /// Verify a provenance attestation DSSE envelope, returning its verified in-toto payload bytes.
-    fn verify_attestation(&self, envelope_bytes: &[u8]) -> Result<Vec<u8>> {
-        self.verify_dsse_payload(envelope_bytes, INTOTO_PAYLOAD_TYPE)
-    }
-}
 
 /// Pull-through caching implementation of `PackageService`.
 ///
@@ -441,45 +101,6 @@ struct StagedWrite {
     previous: Option<Bytes>,
 }
 
-/// Storage key prefix under which digest-keyed scan reports are persisted. Scheduled re-correlation
-/// enumerates this prefix to find every stored report.
-const SCAN_REPORT_PREFIX: &str = "_starmetal/scans/";
-
-/// Storage key prefix under which digest-keyed quarantine records are persisted. The quarantine
-/// review API enumerates this prefix to list held artifacts.
-const QUARANTINE_PREFIX: &str = "_starmetal/quarantine/";
-
-/// Storage key prefix under which SBOM documents are persisted, keyed by the artifact's validated
-/// coordinate (ecosystem/name/version/filename) plus format — *not* its content digest, since an
-/// SBOM embeds coordinate identity and license and must not collide between two coordinates that
-/// share bytes (see `sbom_key`).
-const SBOM_PREFIX: &str = "_starmetal/sbom/";
-
-/// Bounded fan-out for the `recorrelate` re-scan sweep. Caps how many OSV lookups run concurrently
-/// so scheduled maintenance overlaps network-bound scans without unbounded fan-out to the upstream
-/// advisory feed (a bounded, not unbounded, concurrent request burst).
-const RECORRELATION_CONCURRENCY: usize = 8;
-
-/// Per-key outcome of re-correlating one persisted scan report, folded into the aggregate
-/// `RecorrelationReport` by `recorrelate` after the bounded-concurrency sweep completes. Returned as
-/// an owned value (rather than mutating a shared `&mut report`) so per-key work can run concurrently
-/// without sharing mutable state across tasks.
-struct RecorrelationOutcome {
-    scanned: bool,
-    updated: bool,
-    failed: bool,
-    newly_blocking: Option<String>,
-}
-
-impl RecorrelationOutcome {
-    const SKIPPED: Self = Self {
-        scanned: false,
-        updated: false,
-        failed: false,
-        newly_blocking: None,
-    };
-}
-
 /// RAII guard holding a publish coordinate's lock. On drop it releases the lock and prunes the
 /// coordinate's entry from `publish_locks`, so the map is cleaned up on *every* exit path of
 /// `publish_package` — success or early-return error — not just the happy path. Without this, a
@@ -498,18 +119,6 @@ impl Drop for PublishLockGuard<'_> {
         self.guard = None;
         self.service.prune_publish_lock(&self.key);
     }
-}
-
-/// On-disk envelope for a persisted scan report.
-///
-/// The digest-keyed sidecar carries the [`ScanReport`] plus the artifact coordinate it was produced
-/// for. The coordinate is needed by scheduled re-correlation: coordinate-keyed scanners (OSV) query
-/// the advisory feed by `ecosystem/name/version`, not by content digest, so a sweep must recover the
-/// coordinate to re-scan. The serve gate reads only `report`.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-struct PersistedScanReport {
-    artifact: ArtifactId,
-    report: ScanReport,
 }
 
 impl CachingPackageService {
@@ -630,13 +239,13 @@ impl CachingPackageService {
     }
 
     /// Storage key for an artifact's quarantine record, addressed by its blake3 digest.
-    fn quarantine_record_key(blake3: &str) -> String {
+    pub(in crate::service) fn quarantine_record_key(blake3: &str) -> String {
         format!("{QUARANTINE_PREFIX}{blake3}.json")
     }
 
     /// Storage key for an artifact's cached scan report, addressed by the artifact's blake3 digest so
     /// identical bytes (across ecosystems/coordinates) share a single report ("scan once").
-    fn scan_report_key(blake3: &str) -> String {
+    pub(in crate::service) fn scan_report_key(blake3: &str) -> String {
         format!("{SCAN_REPORT_PREFIX}{blake3}.json")
     }
 
@@ -644,7 +253,7 @@ impl CachingPackageService {
     /// coordinate storage key (ecosystem/name/version/filename) — *not* its content digest. An SBOM
     /// embeds coordinate identity and license, so two coordinates sharing bytes must not collide on
     /// one document; coordinate-keying also inherits the artifact key's traversal validation.
-    fn sbom_key(artifact_key: &str, format: SbomFormat) -> String {
+    pub(in crate::service) fn sbom_key(artifact_key: &str, format: SbomFormat) -> String {
         format!("{SBOM_PREFIX}{artifact_key}.{format}.json")
     }
 
@@ -703,182 +312,6 @@ impl CachingPackageService {
                 .await?;
         }
         Ok(())
-    }
-
-    /// Enforce the serve-time vulnerability gate for one artifact's bytes. A no-op unless a scanner is
-    /// attached and serve enforcement is enabled. Loads the digest-keyed scan report, scanning on
-    /// demand and caching it when absent, then denies with a `PolicyViolation` when the report exceeds
-    /// `policy.max_vuln_severity`. A scan that cannot complete fails the serve closed.
-    async fn enforce_serve_scan(&self, artifact_id: &ArtifactId, blake3: &str, data: &Bytes) -> Result<()> {
-        let Some(scanner) = &self.scanner else {
-            return Ok(());
-        };
-        if !self.enforce_on_serve {
-            return Ok(());
-        }
-
-        let report_key = Self::scan_report_key(blake3);
-        let report = match self.storage.get(&report_key).await? {
-            Some(bytes) => serde_json::from_slice::<PersistedScanReport>(&bytes)?.report,
-            None => {
-                let report = scanner.scan(ScanTarget::new(artifact_id, data)).await?;
-                // Cache the report so subsequent serves of the same bytes skip the upstream scan.
-                let persisted = PersistedScanReport {
-                    artifact: artifact_id.clone(),
-                    report: report.clone(),
-                };
-                self.storage
-                    .put(&report_key, Bytes::from(serde_json::to_vec(&persisted)?))
-                    .await?;
-                report
-            }
-        };
-
-        let decision = evaluate_scan_report(&report, self.policy.max_vuln_severity);
-        if !decision.blocks_serving() {
-            return Ok(());
-        }
-        let reason = decision
-            .reason()
-            .unwrap_or("vulnerability policy violation")
-            .to_string();
-        if !self.quarantine {
-            return Err(StarmetalError::PolicyViolation(reason));
-        }
-        self.enforce_quarantine(artifact_id, blake3, decision.reason_code(), reason)
-            .await
-    }
-
-    /// Enforce the signature/provenance gate (ADR-0024) for one artifact. Used at both serve
-    /// (`get_artifact`) and ingest (`publish_package`), it denies with `PolicyViolation` (fail
-    /// closed) on any failure.
-    ///
-    /// An attached external verifier *replaces* the built-in check (the cosign/sigstore seam).
-    /// Otherwise the built-in own-graph gate reuses [`verify_artifact_signature`](Self::verify_artifact_signature)
-    /// for the signature — the same verification as signing verify-on-read, so the signature is read
-    /// and checked once, not twice — and [`verify_provenance`](Self::verify_provenance) for the
-    /// attestation.
-    async fn enforce_verification(
-        &self,
-        artifact_id: &ArtifactId,
-        storage_key: &str,
-        blake3: &str,
-        data: &Bytes,
-    ) -> Result<()> {
-        if let Some(verifier) = &self.verifier {
-            let target = VerificationTarget {
-                artifact_id,
-                storage_key,
-                blake3,
-            };
-            return Self::apply_verification(verifier.verify(&target).await?);
-        }
-
-        if self.require_signature
-            && self
-                .verify_artifact_signature(artifact_id, storage_key, data)
-                .await
-                .is_err()
-        {
-            return Self::apply_verification(PolicyDecision::deny(
-                PolicyReason::MissingSignature,
-                "no valid signature for the artifact",
-            ));
-        }
-        if self.require_provenance
-            && let Some(decision) = self.verify_provenance(storage_key, blake3).await?
-        {
-            return Self::apply_verification(decision);
-        }
-        Ok(())
-    }
-
-    /// Map a verifier [`PolicyDecision`] to the gate's `Result`: a blocking decision (`Deny`/
-    /// `Quarantine`) becomes a `PolicyViolation` whose message is prefixed with the stable reason
-    /// code (`<code>: <prose>`) so callers can match on the code; otherwise `Ok`.
-    fn apply_verification(decision: PolicyDecision) -> Result<()> {
-        if decision.blocks_serving() {
-            let code = decision.reason_code().map_or("policy-violation", PolicyReason::as_str);
-            let prose = decision.reason().unwrap_or("signature or provenance policy violation");
-            return Err(StarmetalError::PolicyViolation(format!("{code}: {prose}")));
-        }
-        Ok(())
-    }
-
-    /// Verify the provenance attestation sidecar for an artifact (built-in own-graph provenance
-    /// check). `Ok(None)` when the attestation is present, DSSE-verifies, and names *this* artifact
-    /// as its single subject (by both storage key and BLAKE3 digest); `Ok(Some(Deny))` when it is
-    /// absent, does not verify, or attests a different subject.
-    async fn verify_provenance(&self, storage_key: &str, blake3: &str) -> Result<Option<PolicyDecision>> {
-        let deny = |reason: &str| {
-            Ok(Some(PolicyDecision::deny(
-                PolicyReason::FailingProvenance,
-                reason.to_string(),
-            )))
-        };
-        let Some(signing) = &self.signing else {
-            return deny("signing is not configured, so provenance cannot be verified");
-        };
-        let Some(envelope_bytes) = self.storage.get(&Self::attestation_sidecar_key(storage_key)).await? else {
-            return deny("no provenance attestation for the artifact");
-        };
-        let Ok(payload) = signing.verify_attestation(&envelope_bytes) else {
-            return deny("provenance attestation did not verify");
-        };
-        let Ok(statement) = serde_json::from_slice::<serde_json::Value>(&payload) else {
-            return deny("provenance statement is not valid JSON");
-        };
-        match attestation::statement_subject(&statement) {
-            Some((name, digest)) if name == storage_key && digest == blake3 => Ok(None),
-            _ => deny("provenance subject does not match the artifact"),
-        }
-    }
-
-    /// Resolve a serve-time gate block under quarantine mode. A promoted artifact is released
-    /// (`Ok`); a rejected one is refused; a still-held or first-seen artifact is (re)recorded as
-    /// quarantined and refused. The digest-keyed record makes the block recoverable via the operator
-    /// promote/reject workflow rather than a terminal deny.
-    async fn enforce_quarantine(
-        &self,
-        artifact_id: &ArtifactId,
-        blake3: &str,
-        reason_code: Option<starmetal_core::supply_chain::PolicyReason>,
-        reason: String,
-    ) -> Result<()> {
-        let record_key = Self::quarantine_record_key(blake3);
-        if let Some(bytes) = self.storage.get(&record_key).await? {
-            let record: QuarantineRecord = serde_json::from_slice(&bytes)?;
-            match record.state {
-                QuarantineState::Promoted => return Ok(()),
-                QuarantineState::Rejected => {
-                    return Err(StarmetalError::PolicyViolation(format!(
-                        "artifact is quarantined and was rejected: {reason}"
-                    )));
-                }
-                QuarantineState::Quarantined => {
-                    return Err(StarmetalError::PolicyViolation(format!(
-                        "artifact is quarantined pending review: {reason}"
-                    )));
-                }
-            }
-        }
-
-        // First time this digest is blocked: record the hold so an operator can review it.
-        let record = QuarantineRecord {
-            subject_digest: blake3.to_string(),
-            artifact: artifact_id.clone(),
-            state: QuarantineState::Quarantined,
-            reason_code: reason_code.unwrap_or(starmetal_core::supply_chain::PolicyReason::VulnSeverityExceeded),
-            reason: reason.clone(),
-            quarantined_at: unix_now(),
-            decided_at: None,
-        };
-        self.storage
-            .put(&record_key, Bytes::from(serde_json::to_vec(&record)?))
-            .await?;
-        Err(StarmetalError::PolicyViolation(format!(
-            "artifact is quarantined pending review: {reason}"
-        )))
     }
 
     /// The `publish_locks` map key for a single `ecosystem/name/version` publish coordinate. Shared
@@ -983,62 +416,6 @@ impl CachingPackageService {
             ));
         }
         Ok(scan_reports)
-    }
-
-    /// Re-correlate a single persisted scan report against a fresh scan, used by `recorrelate`'s
-    /// bounded-concurrency sweep. Storage/serialization failures propagate; a scan that cannot
-    /// complete is recorded as `failed` and returns `Ok` so one bad subject never aborts the sweep.
-    async fn recorrelate_one(&self, scanner: &Arc<dyn Scanner>, key: &str) -> Result<RecorrelationOutcome> {
-        let Some(bytes) = self.storage.get(key).await? else {
-            return Ok(RecorrelationOutcome::SKIPPED);
-        };
-        let persisted: PersistedScanReport = serde_json::from_slice(&bytes)?;
-        // Re-scanning needs the artifact bytes to recompute the digest key and drive a
-        // coordinate-keyed scanner. If the artifact was evicted from the cache, skip it — its
-        // stale report is a GC candidate, not a re-correlation subject.
-        let artifact_key = persisted.artifact.validated_storage_key()?.into_string();
-        let Some(content) = self.storage.get(&artifact_key).await? else {
-            return Ok(RecorrelationOutcome::SKIPPED);
-        };
-
-        let was_blocking = evaluate_scan_report(&persisted.report, self.policy.max_vuln_severity).blocks_serving();
-
-        let fresh = match scanner.scan(ScanTarget::new(&persisted.artifact, &content)).await {
-            Ok(fresh) => fresh,
-            Err(error) => {
-                // A transient scan failure must not abort the whole sweep: record it and move on,
-                // leaving the previously stored report untouched.
-                tracing::warn!(%error, key = %key, "re-correlation scan failed; keeping the stored report");
-                return Ok(RecorrelationOutcome {
-                    scanned: true,
-                    updated: false,
-                    failed: true,
-                    newly_blocking: None,
-                });
-            }
-        };
-
-        let mut updated = false;
-        if fresh != persisted.report {
-            let rewritten = PersistedScanReport {
-                artifact: persisted.artifact.clone(),
-                report: fresh.clone(),
-            };
-            self.storage
-                .put(key, Bytes::from(serde_json::to_vec(&rewritten)?))
-                .await?;
-            updated = true;
-        }
-
-        let now_blocking = evaluate_scan_report(&fresh, self.policy.max_vuln_severity).blocks_serving();
-        let newly_blocking = (now_blocking && !was_blocking).then(|| coordinate_label(&persisted.artifact));
-
-        Ok(RecorrelationOutcome {
-            scanned: true,
-            updated,
-            failed: false,
-            newly_blocking,
-        })
     }
 
     async fn store_content_model(
@@ -1174,7 +551,7 @@ impl CachingPackageService {
 
     /// Storage key for an artifact's provenance attestation sidecar (a DSSE-wrapped in-toto/SLSA
     /// statement), addressed relative to the artifact's storage key.
-    fn attestation_sidecar_key(storage_key: &str) -> String {
+    pub(in crate::service) fn attestation_sidecar_key(storage_key: &str) -> String {
         format!("{storage_key}.intoto.att.json")
     }
 
@@ -1300,7 +677,12 @@ impl CachingPackageService {
         Ok(())
     }
 
-    async fn verify_artifact_signature(&self, artifact_id: &ArtifactId, storage_key: &str, data: &Bytes) -> Result<()> {
+    pub(in crate::service) async fn verify_artifact_signature(
+        &self,
+        artifact_id: &ArtifactId,
+        storage_key: &str,
+        data: &Bytes,
+    ) -> Result<()> {
         // An artifact signature may carry either a local-publish or upstream-cache source; accept
         // both from a single sidecar read + verify (rather than reading and verifying twice).
         self.verify_storage_signature(StoredObjectSignatureCheck {
@@ -1505,109 +887,12 @@ impl PackageService for CachingPackageService {
         // fetch, so it added no latency).
         let (cached, cached_hash) = futures::try_join!(self.storage.get(&key), self.storage.get(&hash_key))?;
         if let Some(cached) = cached {
-            let expected_hash = cached_hash.ok_or_else(|| {
-                self.record_integrity_failure(artifact_id.ecosystem);
-                StarmetalError::IntegrityError {
-                    expected: format!("missing sidecar {hash_key}"),
-                    actual: "unverified cached artifact".to_string(),
-                }
-            })?;
-            let expected = std::str::from_utf8(&expected_hash).map_err(|e| StarmetalError::Storage(e.to_string()))?;
-            if let Err(err) = integrity::verify_or_err(&cached, expected) {
-                self.record_integrity_failure(artifact_id.ecosystem);
-                return Err(err);
-            }
-            // Signing verify-on-read is skipped when the supply-chain signature gate already covers
-            // it (it reuses the same `verify_artifact_signature`), so the signature is checked once.
-            if self.verify_on_read() && !self.gates_signature() {
-                self.verify_artifact_signature(artifact_id, &key, &cached).await?;
-            }
-            self.enforce_serve_scan(artifact_id, expected, &cached).await?;
-            self.enforce_verification(artifact_id, &key, expected, &cached).await?;
-            // Recorded only after all gates pass, so a denied/quarantined serve is never counted as
-            // served (matches the cache-miss branch below, which records bytes_served in the same
-            // place).
-            self.record_statistics(artifact_id.ecosystem, |stats| {
-                stats.artifact_cache_hits = stats.artifact_cache_hits.saturating_add(1);
-                stats.bytes_served = stats.bytes_served.saturating_add(cached.len() as u64);
-            });
-            return Ok(cached);
+            return self
+                .serve_cached_artifact(artifact_id, &key, &hash_key, cached, cached_hash)
+                .await;
         }
-
-        self.record_statistics(artifact_id.ecosystem, |stats| {
-            stats.artifact_cache_misses = stats.artifact_cache_misses.saturating_add(1);
-        });
-        tracing::info!(key, "fetching artifact from upstream");
-        let upstream = self.upstream(artifact_id.ecosystem)?;
-        let data = upstream.fetch_artifact(artifact_id).await.inspect_err(|_err| {
-            self.record_upstream_error(artifact_id.ecosystem);
-        })?;
-        if let Err(err) = Self::verify_upstream_hash(&data, artifact_digest) {
-            self.record_integrity_failure(artifact_id.ecosystem);
-            return Err(err);
-        }
-
-        let hash = integrity::blake3_hex(&data);
-        let mut staged_writes = Vec::new();
-        let result = async {
-            if let Some(signing) = &self.signing
-                && signing.sign_cached_upstream()
-            {
-                let statement = signing.statement(StatementInput {
-                    ecosystem: artifact_id.ecosystem,
-                    package: artifact_id.name.clone(),
-                    version: artifact_id.version.clone(),
-                    filename: Some(artifact_id.filename.clone()),
-                    storage_key: key.clone(),
-                    size: data.len() as u64,
-                    blake3: hash.clone(),
-                    upstream_hashes: artifact_digest.upstream_hashes.clone(),
-                    source: SignatureSource::UpstreamCache,
-                })?;
-                let sidecar_key = Self::signature_sidecar_key(&key);
-                let bundle_key = Self::signature_bundle_key(
-                    artifact_id.ecosystem,
-                    &artifact_id.name,
-                    &artifact_id.version,
-                    &format!("{}.sig.json", artifact_id.filename),
-                )?;
-                self.sign_and_store_statement(statement, &sidecar_key, &bundle_key, &mut staged_writes)
-                    .await?;
-                if self.emit_provenance {
-                    let fetched_at = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
-                    self.sign_and_store_attestation(
-                        artifact_id.ecosystem,
-                        &artifact_id.name,
-                        &key,
-                        &hash,
-                        &fetched_at,
-                        &mut staged_writes,
-                    )
-                    .await?;
-                }
-            }
-            self.put_and_track(&hash_key, Bytes::from(hash.clone()), &mut staged_writes)
-                .await?;
-            self.put_and_track(&key, data.clone(), &mut staged_writes).await
-        }
-        .await;
-        if let Err(err) = result {
-            self.rollback_staged_writes(&staged_writes).await;
-            return Err(err);
-        }
-        self.enforce_serve_scan(artifact_id, &hash, &data).await?;
-        // A signature/provenance denial at cache-fill must not leave the just-cached (unverifiable)
-        // bytes behind — roll them back, unlike the scan gate above whose quarantine intentionally
-        // holds them.
-        if let Err(err) = self.enforce_verification(artifact_id, &key, &hash, &data).await {
-            self.rollback_staged_writes(&staged_writes).await;
-            return Err(err);
-        }
-        self.record_statistics(artifact_id.ecosystem, |stats| {
-            stats.bytes_served = stats.bytes_served.saturating_add(data.len() as u64);
-        });
-
-        Ok(data)
+        self.fetch_and_cache_artifact(artifact_id, &key, &hash_key, artifact_digest)
+            .await
     }
 
     async fn list_packages(&self, ecosystem: Ecosystem) -> Result<Vec<PackageName>> {
@@ -1640,6 +925,133 @@ impl PackageService for CachingPackageService {
         self.check_package_allowed(name)?;
         let key = Self::raw_upstream_key(ecosystem, name)?;
         self.storage.put(&key, data).await
+    }
+}
+
+impl CachingPackageService {
+    /// Serve an artifact from a cache hit: verify its blake3 sidecar and (unless the supply-chain
+    /// gate already covers it) its signature, run the serve-time scan and signature/provenance
+    /// gates, then record the hit. Extracted from `get_artifact`'s cache-hit branch.
+    async fn serve_cached_artifact(
+        &self,
+        artifact_id: &ArtifactId,
+        key: &str,
+        hash_key: &str,
+        cached: Bytes,
+        cached_hash: Option<Bytes>,
+    ) -> Result<Bytes> {
+        let expected_hash = cached_hash.ok_or_else(|| {
+            self.record_integrity_failure(artifact_id.ecosystem);
+            StarmetalError::IntegrityError {
+                expected: format!("missing sidecar {hash_key}"),
+                actual: "unverified cached artifact".to_string(),
+            }
+        })?;
+        let expected = std::str::from_utf8(&expected_hash).map_err(|e| StarmetalError::Storage(e.to_string()))?;
+        if let Err(err) = integrity::verify_or_err(&cached, expected) {
+            self.record_integrity_failure(artifact_id.ecosystem);
+            return Err(err);
+        }
+        // Signing verify-on-read is skipped when the supply-chain signature gate already covers
+        // it (it reuses the same `verify_artifact_signature`), so the signature is checked once.
+        if self.verify_on_read() && !self.gates_signature() {
+            self.verify_artifact_signature(artifact_id, key, &cached).await?;
+        }
+        self.enforce_serve_scan(artifact_id, expected, &cached).await?;
+        self.enforce_verification(artifact_id, key, expected, &cached).await?;
+        // Recorded only after all gates pass, so a denied/quarantined serve is never counted as
+        // served (matches the cache-miss branch, which records bytes_served in the same place).
+        self.record_statistics(artifact_id.ecosystem, |stats| {
+            stats.artifact_cache_hits = stats.artifact_cache_hits.saturating_add(1);
+            stats.bytes_served = stats.bytes_served.saturating_add(cached.len() as u64);
+        });
+        Ok(cached)
+    }
+
+    /// Fetch an artifact from upstream on a cache miss: verify the upstream hash, optionally sign and
+    /// emit provenance, cache the bytes and their sidecar, then run the serve-time gates (rolling
+    /// back a signature/provenance denial). Extracted from `get_artifact`'s cache-miss branch.
+    async fn fetch_and_cache_artifact(
+        &self,
+        artifact_id: &ArtifactId,
+        key: &str,
+        hash_key: &str,
+        artifact_digest: &ArtifactDigest,
+    ) -> Result<Bytes> {
+        self.record_statistics(artifact_id.ecosystem, |stats| {
+            stats.artifact_cache_misses = stats.artifact_cache_misses.saturating_add(1);
+        });
+        tracing::info!(key, "fetching artifact from upstream");
+        let upstream = self.upstream(artifact_id.ecosystem)?;
+        let data = upstream.fetch_artifact(artifact_id).await.inspect_err(|_err| {
+            self.record_upstream_error(artifact_id.ecosystem);
+        })?;
+        if let Err(err) = Self::verify_upstream_hash(&data, artifact_digest) {
+            self.record_integrity_failure(artifact_id.ecosystem);
+            return Err(err);
+        }
+
+        let hash = integrity::blake3_hex(&data);
+        let mut staged_writes = Vec::new();
+        let result = async {
+            if let Some(signing) = &self.signing
+                && signing.sign_cached_upstream()
+            {
+                let statement = signing.statement(StatementInput {
+                    ecosystem: artifact_id.ecosystem,
+                    package: artifact_id.name.clone(),
+                    version: artifact_id.version.clone(),
+                    filename: Some(artifact_id.filename.clone()),
+                    storage_key: key.to_string(),
+                    size: data.len() as u64,
+                    blake3: hash.clone(),
+                    upstream_hashes: artifact_digest.upstream_hashes.clone(),
+                    source: SignatureSource::UpstreamCache,
+                })?;
+                let sidecar_key = Self::signature_sidecar_key(key);
+                let bundle_key = Self::signature_bundle_key(
+                    artifact_id.ecosystem,
+                    &artifact_id.name,
+                    &artifact_id.version,
+                    &format!("{}.sig.json", artifact_id.filename),
+                )?;
+                self.sign_and_store_statement(statement, &sidecar_key, &bundle_key, &mut staged_writes)
+                    .await?;
+                if self.emit_provenance {
+                    let fetched_at = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
+                    self.sign_and_store_attestation(
+                        artifact_id.ecosystem,
+                        &artifact_id.name,
+                        key,
+                        &hash,
+                        &fetched_at,
+                        &mut staged_writes,
+                    )
+                    .await?;
+                }
+            }
+            self.put_and_track(hash_key, Bytes::from(hash.clone()), &mut staged_writes)
+                .await?;
+            self.put_and_track(key, data.clone(), &mut staged_writes).await
+        }
+        .await;
+        if let Err(err) = result {
+            self.rollback_staged_writes(&staged_writes).await;
+            return Err(err);
+        }
+        self.enforce_serve_scan(artifact_id, &hash, &data).await?;
+        // A signature/provenance denial at cache-fill must not leave the just-cached (unverifiable)
+        // bytes behind — roll them back, unlike the scan gate above whose quarantine intentionally
+        // holds them.
+        if let Err(err) = self.enforce_verification(artifact_id, key, &hash, &data).await {
+            self.rollback_staged_writes(&staged_writes).await;
+            return Err(err);
+        }
+        self.record_statistics(artifact_id.ecosystem, |stats| {
+            stats.bytes_served = stats.bytes_served.saturating_add(data.len() as u64);
+        });
+
+        Ok(data)
     }
 }
 
@@ -2014,133 +1426,6 @@ impl StatisticsService for CachingPackageService {
     }
 }
 
-#[async_trait]
-impl SupplyChainMaintenance for CachingPackageService {
-    async fn recorrelate(&self) -> Result<RecorrelationReport> {
-        let mut report = RecorrelationReport::default();
-        let Some(scanner) = self.scanner.clone() else {
-            // No scanner attached: nothing to re-correlate against. A benign no-op sweep.
-            return Ok(report);
-        };
-
-        let keys = self.storage.list_prefix(SCAN_REPORT_PREFIX).await?;
-        // Bounded concurrency: each subject overlaps its two storage `get`s and the scanner's
-        // network round trip with the others, capped at `RECORRELATION_CONCURRENCY` in flight so the
-        // sweep cannot fan out an unbounded burst of requests to the advisory feed.
-        let outcomes: Vec<Result<RecorrelationOutcome>> = stream::iter(keys)
-            .map(|key| {
-                let scanner = Arc::clone(&scanner);
-                async move { self.recorrelate_one(&scanner, &key).await }
-            })
-            .buffer_unordered(RECORRELATION_CONCURRENCY)
-            .collect()
-            .await;
-
-        for outcome in outcomes {
-            let outcome = outcome?;
-            if outcome.scanned {
-                report.scanned += 1;
-            }
-            if outcome.updated {
-                report.updated += 1;
-            }
-            if outcome.failed {
-                report.failed += 1;
-            }
-            if let Some(label) = outcome.newly_blocking {
-                report.newly_blocking.push(label);
-            }
-        }
-
-        Ok(report)
-    }
-}
-
-#[async_trait]
-impl QuarantineReview for CachingPackageService {
-    async fn list_quarantine(&self) -> Result<Vec<QuarantineRecord>> {
-        let keys = self.storage.list_prefix(QUARANTINE_PREFIX).await?;
-        let mut records = Vec::with_capacity(keys.len());
-        for key in keys {
-            if let Some(bytes) = self.storage.get(&key).await? {
-                records.push(serde_json::from_slice::<QuarantineRecord>(&bytes)?);
-            }
-        }
-        Ok(records)
-    }
-
-    async fn promote_quarantine(&self, subject_digest: &str) -> Result<QuarantineRecord> {
-        self.transition_quarantine(subject_digest, QuarantineState::Promoted)
-            .await
-    }
-
-    async fn reject_quarantine(&self, subject_digest: &str) -> Result<QuarantineRecord> {
-        self.transition_quarantine(subject_digest, QuarantineState::Rejected)
-            .await
-    }
-}
-
-impl CachingPackageService {
-    /// Apply an operator promote/reject decision to a quarantine record, stamping the decision time
-    /// and persisting the new state. Errors with `ArtifactNotFound` when no record exists.
-    async fn transition_quarantine(&self, subject_digest: &str, state: QuarantineState) -> Result<QuarantineRecord> {
-        if !integrity::is_blake3_hex(subject_digest) {
-            // Defense in depth: the admin adapter validates first, but never trust a caller across a
-            // trait boundary — a malformed digest must never reach `quarantine_record_key` (CWE-22).
-            return Err(StarmetalError::Adapter(format!(
-                "invalid blake3 digest: {subject_digest}"
-            )));
-        }
-        let record_key = Self::quarantine_record_key(subject_digest);
-        let bytes =
-            self.storage.get(&record_key).await?.ok_or_else(|| {
-                StarmetalError::ArtifactNotFound(format!("no quarantine record for {subject_digest}"))
-            })?;
-        let mut record: QuarantineRecord = serde_json::from_slice(&bytes)?;
-        record.state = state;
-        record.decided_at = Some(unix_now());
-        self.storage
-            .put(&record_key, Bytes::from(serde_json::to_vec(&record)?))
-            .await?;
-        Ok(record)
-    }
-}
-
-/// A human-readable `ecosystem/name/version` label for a scanned artifact, used in re-correlation
-/// summaries and logs (not a storage key).
-fn coordinate_label(artifact: &ArtifactId) -> String {
-    format!("{}/{}/{}", artifact.ecosystem, artifact.name.as_str(), artifact.version)
-}
-
-#[async_trait]
-impl SbomIndex for CachingPackageService {
-    async fn list_sboms(&self, artifact: &ArtifactId) -> Result<Vec<Sbom>> {
-        let artifact_key = artifact.validated_storage_key()?.into_string();
-        // The artifact's blake3 (its SBOM subject digest) is the sidecar written beside the bytes.
-        let subject_digest = match self.storage.get(&format!("{artifact_key}.blake3")).await? {
-            Some(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
-            None => String::new(),
-        };
-        let mut sboms = Vec::new();
-        for format in [SbomFormat::CycloneDx, SbomFormat::Spdx] {
-            if let Some(bytes) = self.storage.get(&Self::sbom_key(&artifact_key, format)).await? {
-                sboms.push(Sbom {
-                    format,
-                    subject_digest: subject_digest.clone(),
-                    document_digest: integrity::blake3_hex(&bytes),
-                    media_type: sbom::media_type(format).to_string(),
-                });
-            }
-        }
-        Ok(sboms)
-    }
-
-    async fn get_sbom_document(&self, artifact: &ArtifactId, format: SbomFormat) -> Result<Option<Bytes>> {
-        let artifact_key = artifact.validated_storage_key()?.into_string();
-        self.storage.get(&Self::sbom_key(&artifact_key, format)).await
-    }
-}
-
 /// Map an upstream hash algorithm label (as advertised by a registry, e.g. `sha256`) to the
 /// CycloneDX spelling, or `None` for an algorithm the SBOM formats do not define.
 fn cyclonedx_hash_algorithm(upstream_algorithm: &str) -> Option<&'static str> {
@@ -2153,25 +1438,11 @@ fn cyclonedx_hash_algorithm(upstream_algorithm: &str) -> Option<&'static str> {
     }
 }
 
-fn unix_now() -> u64 {
+pub(in crate::service) fn unix_now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .ok()
         .map_or(0, |duration| duration.as_secs())
-}
-
-fn dsse_pae(payload_type: &[u8], payload: &[u8]) -> Vec<u8> {
-    let mut encoded = Vec::new();
-    encoded.extend_from_slice(DSSE_PAE_PREFIX.as_bytes());
-    encoded.push(b' ');
-    encoded.extend_from_slice(payload_type.len().to_string().as_bytes());
-    encoded.push(b' ');
-    encoded.extend_from_slice(payload_type);
-    encoded.push(b' ');
-    encoded.extend_from_slice(payload.len().to_string().as_bytes());
-    encoded.push(b' ');
-    encoded.extend_from_slice(payload);
-    encoded
 }
 
 fn crate_safe_signature_filename(filename: &str) -> Result<String> {
@@ -2184,86 +1455,6 @@ fn crate_safe_signature_filename(filename: &str) -> Result<String> {
         .collect::<String>();
     validate_storage_segment("signature filename", &encoded)?;
     Ok(encoded)
-}
-
-fn optional_file_sha256(path: Option<&Path>) -> Result<Option<String>> {
-    let Some(path) = path else {
-        return Ok(None);
-    };
-    let bytes = fs::read(path)?;
-    Ok(Some(hex::encode(sha2::Sha256::digest(bytes))))
-}
-
-fn optional_pem_chain(path: Option<&Path>) -> Result<Vec<String>> {
-    let Some(path) = path else {
-        return Ok(Vec::new());
-    };
-    let pem = fs::read_to_string(path)?;
-    Ok(vec![pem])
-}
-
-fn load_ed25519_signing_key(pem: &str, key_id: &str) -> Result<SigningKey> {
-    let info = PrivateKeyInfoOwned::from_pkcs8_pem(pem)
-        .map_err(|err| StarmetalError::Config(format!("invalid signing key {key_id}: {err}")))?;
-    validate_ed25519_oid(info.algorithm.oid, key_id)?;
-    let private_key = extract_ed25519_private_key(info.private_key.as_bytes(), key_id)?;
-    Ok(SigningKey::from_bytes(&private_key))
-}
-
-fn load_ed25519_verifying_key(pem: &str, key_id: &str) -> Result<VerifyingKey> {
-    let info = SubjectPublicKeyInfoOwned::from_pem(pem)
-        .map_err(|err| StarmetalError::Config(format!("invalid verification key {key_id}: {err}")))?;
-    validate_ed25519_oid(info.algorithm.oid, key_id)?;
-    let bytes = info.subject_public_key.as_bytes().ok_or_else(|| {
-        StarmetalError::Config(format!(
-            "invalid verification key {key_id}: public key must be byte-aligned"
-        ))
-    })?;
-    let public_key = bytes.try_into().map_err(|_| {
-        StarmetalError::Config(format!(
-            "invalid verification key {key_id}: public key must be {ED25519_KEY_BYTES} bytes"
-        ))
-    })?;
-    VerifyingKey::from_bytes(public_key)
-        .map_err(|err| StarmetalError::Config(format!("invalid verification key {key_id}: {err}")))
-}
-
-fn validate_ed25519_oid(oid: ObjectIdentifier, key_id: &str) -> Result<()> {
-    if oid.to_string() == ED25519_OID {
-        return Ok(());
-    }
-    Err(StarmetalError::Config(format!(
-        "invalid signing key {key_id}: expected ed25519 key algorithm"
-    )))
-}
-
-fn extract_ed25519_private_key(bytes: &[u8], key_id: &str) -> Result<[u8; ED25519_KEY_BYTES]> {
-    if let Ok(key) = bytes.try_into() {
-        return Ok(key);
-    }
-    if let Ok(inner) = <&OctetStringRef>::from_der(bytes)
-        && let Ok(key) = inner.as_bytes().try_into()
-    {
-        return Ok(key);
-    }
-    Err(StarmetalError::Config(format!(
-        "invalid signing key {key_id}: private key must be {ED25519_KEY_BYTES} bytes"
-    )))
-}
-
-fn validate_private_key_permissions(path: &Path) -> Result<()> {
-    let metadata = fs::metadata(path)?;
-    #[cfg(unix)]
-    {
-        let mode = metadata.permissions().mode();
-        if mode & 0o077 != 0 {
-            return Err(StarmetalError::Config(format!(
-                "signing private key {} must not be group/world-readable or writable",
-                path.display()
-            )));
-        }
-    }
-    Ok(())
 }
 
 fn verify_hex_digest(algorithm: &str, expected: &str, actual: &str) -> Result<()> {
@@ -2323,11 +1514,20 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::sync::Mutex;
 
-    use super::*;
+    #[cfg(unix)]
+    use ed25519_dalek::SigningKey;
     use starmetal_core::package::ArtifactDigest;
     use starmetal_core::publishing::PublishedArtifact;
     #[cfg(unix)]
-    use starmetal_core::signing::{SigningKeyConfig, SigningMode};
+    use starmetal_core::signing::{SigningAlgorithm, SigningConfig, SigningKeyConfig, SigningKeyStatus, SigningMode};
+    use starmetal_core::supply_chain::{
+        PolicyDecision, PolicyReason, QuarantineReview, QuarantineState, RecorrelationReport, SbomIndex,
+        SupplyChainMaintenance, VerificationTarget,
+    };
+
+    #[cfg(unix)]
+    use super::signing::ED25519_KEY_BYTES;
+    use super::*;
 
     struct MockStorage {
         data: Mutex<AHashMap<String, Bytes>>,
