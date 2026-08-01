@@ -554,6 +554,51 @@ impl CachingPackageService {
         lock.lock_owned().await
     }
 
+    /// Vulnerability gate (ADR-0024) for a publish request: when a scanner is attached, scan each
+    /// artifact and reject the publish with a `PolicyViolation` if a finding exceeds
+    /// `policy.max_vuln_severity`. A scan that cannot complete (transport failure) propagates as an
+    /// error — the publish fails closed. Returns an empty `Vec` when no scanner is attached.
+    ///
+    /// `digests` must be index-aligned with `request.artifacts` (the caller's precomputed blake3
+    /// hashes), so each passing report is paired with its digest without re-hashing the artifact.
+    async fn scan_artifacts_for_publish(
+        &self,
+        request: &PublishRequest,
+        digests: &[String],
+    ) -> Result<Vec<(String, PersistedScanReport)>> {
+        let Some(scanner) = &self.scanner else {
+            return Ok(Vec::new());
+        };
+
+        let mut scan_reports = Vec::with_capacity(request.artifacts.len());
+        for (artifact, blake3) in request.artifacts.iter().zip(digests) {
+            let artifact_id = ArtifactId {
+                ecosystem: request.ecosystem,
+                name: request.name.clone(),
+                version: request.version.clone(),
+                filename: artifact.filename.clone(),
+            };
+            let report = scanner.scan(ScanTarget::new(&artifact_id, &artifact.data)).await?;
+            let decision = evaluate_scan_report(&report, self.policy.max_vuln_severity);
+            if decision.blocks_serving() {
+                return Err(StarmetalError::PolicyViolation(
+                    decision
+                        .reason()
+                        .unwrap_or("vulnerability policy violation")
+                        .to_string(),
+                ));
+            }
+            scan_reports.push((
+                blake3.clone(),
+                PersistedScanReport {
+                    artifact: artifact_id,
+                    report,
+                },
+            ));
+        }
+        Ok(scan_reports)
+    }
+
     async fn store_content_model(
         &self,
         content_store: &dyn ContentStore,
@@ -1117,6 +1162,15 @@ impl PublishingService for CachingPackageService {
             ));
         }
 
+        // Hashed once and reused (index-aligned with `request.artifacts`) across digest
+        // construction, the vulnerability gate, and the transactional write loop below, instead of
+        // re-hashing the same bytes three times.
+        let blake3_digests: Vec<String> = request
+            .artifacts
+            .iter()
+            .map(|artifact| integrity::blake3_hex(&artifact.data))
+            .collect();
+
         // Serializes concurrent publishes targeting the same ecosystem/name/version coordinate;
         // held for the remainder of this function.
         let _publish_guard = self
@@ -1143,7 +1197,7 @@ impl PublishingService for CachingPackageService {
 
         let mut staged_keys = Vec::new();
         let mut digests = Vec::with_capacity(request.artifacts.len());
-        for artifact in &request.artifacts {
+        for (artifact, blake3) in request.artifacts.iter().zip(&blake3_digests) {
             if artifact.filename.trim().is_empty() {
                 return Err(StarmetalError::Publish(
                     "artifact filename must not be empty".to_string(),
@@ -1156,8 +1210,7 @@ impl PublishingService for CachingPackageService {
                 filename: artifact.filename.clone(),
             };
             let _ = artifact_id.validated_storage_key()?;
-            let blake3 = integrity::blake3_hex(&artifact.data);
-            digests.push(artifact.digest(blake3));
+            digests.push(artifact.digest(blake3.clone()));
         }
 
         let mut metadata = request.metadata(digests.clone());
@@ -1181,40 +1234,10 @@ impl PublishingService for CachingPackageService {
         }
         self.policy.check(&metadata)?;
 
-        // Vulnerability gate (ADR-0024): when a scanner is attached, scan each artifact and reject
-        // the publish before any bytes are written if a finding exceeds `policy.max_vuln_severity`.
-        // Runs before the transactional block so a denied artifact leaves no staged writes. A scan
-        // that cannot complete (transport failure) propagates as an error — the publish fails closed.
-        // Passing reports are carried into the transactional block and stored (digest-keyed) so the
-        // serve-time gate finds them without re-scanning.
-        let mut scan_reports: Vec<(String, PersistedScanReport)> = Vec::new();
-        if let Some(scanner) = &self.scanner {
-            for artifact in &request.artifacts {
-                let artifact_id = ArtifactId {
-                    ecosystem: request.ecosystem,
-                    name: request.name.clone(),
-                    version: request.version.clone(),
-                    filename: artifact.filename.clone(),
-                };
-                let report = scanner.scan(ScanTarget::new(&artifact_id, &artifact.data)).await?;
-                let decision = evaluate_scan_report(&report, self.policy.max_vuln_severity);
-                if decision.blocks_serving() {
-                    return Err(StarmetalError::PolicyViolation(
-                        decision
-                            .reason()
-                            .unwrap_or("vulnerability policy violation")
-                            .to_string(),
-                    ));
-                }
-                scan_reports.push((
-                    integrity::blake3_hex(&artifact.data),
-                    PersistedScanReport {
-                        artifact: artifact_id,
-                        report,
-                    },
-                ));
-            }
-        }
+        // Vulnerability gate (ADR-0024): runs before the transactional block so a denied artifact
+        // leaves no staged writes. Passing reports are carried into the transactional block and
+        // stored (digest-keyed) so the serve-time gate finds them without re-scanning.
+        let scan_reports = self.scan_artifacts_for_publish(&request, &blake3_digests).await?;
 
         let result = async {
             for (blake3, persisted) in &scan_reports {
@@ -1225,7 +1248,7 @@ impl PublishingService for CachingPackageService {
                 )
                 .await?;
             }
-            for artifact in &request.artifacts {
+            for (artifact, blake3) in request.artifacts.iter().zip(&blake3_digests) {
                 let artifact_id = ArtifactId {
                     ecosystem: request.ecosystem,
                     name: request.name.clone(),
@@ -1233,7 +1256,6 @@ impl PublishingService for CachingPackageService {
                     filename: artifact.filename.clone(),
                 };
                 let key = artifact_id.validated_storage_key()?.into_string();
-                let blake3 = integrity::blake3_hex(&artifact.data);
                 self.put_and_track(&format!("{key}.blake3"), Bytes::from(blake3.clone()), &mut staged_keys)
                     .await?;
                 self.put_and_track(&key, artifact.data.clone(), &mut staged_keys)
@@ -1250,7 +1272,7 @@ impl PublishingService for CachingPackageService {
                             filename: Some(artifact.filename.clone()),
                             storage_key: key.clone(),
                             size: artifact.data.len() as u64,
-                            blake3,
+                            blake3: blake3.clone(),
                             upstream_hashes: artifact.upstream_hashes.clone(),
                             source: SignatureSource::Local,
                         })
