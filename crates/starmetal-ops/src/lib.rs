@@ -122,7 +122,9 @@ fn attach_scanner(service: CachingPackageService, config: &Config) -> CachingPac
             None => OsvScanner::new(),
         },
     };
-    service.with_scanner(Arc::new(scanner))
+    service
+        .with_scanner(Arc::new(scanner))
+        .enforce_scan_on_serve(config.supply_chain.enforce_on_serve)
 }
 
 impl StarmetalRuntime {

@@ -36,7 +36,7 @@ use starmetal_core::signing::{
     SigningConfig, SigningKeyStatus, SigningMode,
 };
 use starmetal_core::statistics::{EcosystemStatistics, StatisticsSnapshot};
-use starmetal_core::supply_chain::{ScanTarget, Scanner, evaluate_scan_report};
+use starmetal_core::supply_chain::{ScanReport, ScanTarget, Scanner, evaluate_scan_report};
 use zeroize::Zeroizing;
 
 const DSSE_PAE_PREFIX: &str = "DSSEv1";
@@ -302,6 +302,10 @@ pub struct CachingPackageService {
     /// Optional vulnerability scanner (ADR-0024). When present, publishes are gated at ingest:
     /// each artifact is scanned and denied when a finding exceeds `policy.max_vuln_severity`.
     scanner: Option<Arc<dyn Scanner>>,
+    /// When true (and a scanner is attached), the same vulnerability gate is enforced at serve:
+    /// `get_artifact` loads the artifact's stored scan report (scanning on demand and caching it
+    /// when absent) and denies serving when a finding exceeds `policy.max_vuln_severity`.
+    enforce_on_serve: bool,
     /// Named per-coordinate locks serializing concurrent publishes of the same
     /// `ecosystem/name/version`. Entries are not pruned yet: the map is bounded by the number of
     /// distinct coordinates published in-process. A future improvement can prune an entry once its
@@ -338,6 +342,7 @@ impl CachingPackageService {
             statistics: Mutex::new(StatisticsSnapshot::default()),
             content_store: None,
             scanner: None,
+            enforce_on_serve: false,
             publish_locks: Mutex::new(AHashMap::new()),
         }
     }
@@ -356,6 +361,7 @@ impl CachingPackageService {
             statistics: Mutex::new(StatisticsSnapshot::default()),
             content_store: None,
             scanner: None,
+            enforce_on_serve: false,
             publish_locks: Mutex::new(AHashMap::new()),
         }
     }
@@ -373,6 +379,58 @@ impl CachingPackageService {
     pub fn with_scanner(mut self, scanner: Arc<dyn Scanner>) -> Self {
         self.scanner = Some(scanner);
         self
+    }
+
+    /// Enable (or disable) serve-time vulnerability enforcement. When enabled and a scanner is
+    /// attached, `get_artifact` consults each artifact's stored scan report — scanning on demand and
+    /// caching the report when absent — and denies serving a finding that exceeds the threshold.
+    /// Off by default, so serving is unchanged until an operator opts in.
+    pub fn enforce_scan_on_serve(mut self, enabled: bool) -> Self {
+        self.enforce_on_serve = enabled;
+        self
+    }
+
+    /// Storage key for an artifact's cached scan report, addressed by the artifact's blake3 digest so
+    /// identical bytes (across ecosystems/coordinates) share a single report ("scan once").
+    fn scan_report_key(blake3: &str) -> String {
+        format!("_starmetal/scans/{blake3}.json")
+    }
+
+    /// Enforce the serve-time vulnerability gate for one artifact's bytes. A no-op unless a scanner is
+    /// attached and serve enforcement is enabled. Loads the digest-keyed scan report, scanning on
+    /// demand and caching it when absent, then denies with a `PolicyViolation` when the report exceeds
+    /// `policy.max_vuln_severity`. A scan that cannot complete fails the serve closed.
+    async fn enforce_serve_scan(&self, artifact_id: &ArtifactId, blake3: &str, data: &Bytes) -> Result<()> {
+        let Some(scanner) = &self.scanner else {
+            return Ok(());
+        };
+        if !self.enforce_on_serve {
+            return Ok(());
+        }
+
+        let report_key = Self::scan_report_key(blake3);
+        let report = match self.storage.get(&report_key).await? {
+            Some(bytes) => serde_json::from_slice::<ScanReport>(&bytes)?,
+            None => {
+                let report = scanner.scan(ScanTarget::new(artifact_id, data)).await?;
+                // Cache the report so subsequent serves of the same bytes skip the upstream scan.
+                self.storage
+                    .put(&report_key, Bytes::from(serde_json::to_vec(&report)?))
+                    .await?;
+                report
+            }
+        };
+
+        let decision = evaluate_scan_report(&report, self.policy.max_vuln_severity);
+        if decision.blocks_serving() {
+            return Err(StarmetalError::PolicyViolation(
+                decision
+                    .reason()
+                    .unwrap_or("vulnerability policy violation")
+                    .to_string(),
+            ));
+        }
+        Ok(())
     }
 
     /// Acquire an owned lock scoped to a single `ecosystem/name/version` publish coordinate,
@@ -851,6 +909,7 @@ impl PackageService for CachingPackageService {
             if self.verify_on_read() {
                 self.verify_artifact_signature(artifact_id, &key, &cached).await?;
             }
+            self.enforce_serve_scan(artifact_id, expected, &cached).await?;
             return Ok(cached);
         }
 
@@ -894,7 +953,7 @@ impl PackageService for CachingPackageService {
                 self.sign_and_store_statement(statement, &sidecar_key, &bundle_key, &mut staged_writes)
                     .await?;
             }
-            self.put_and_track(&hash_key, Bytes::from(hash), &mut staged_writes)
+            self.put_and_track(&hash_key, Bytes::from(hash.clone()), &mut staged_writes)
                 .await?;
             self.put_and_track(&key, data.clone(), &mut staged_writes).await
         }
@@ -903,6 +962,7 @@ impl PackageService for CachingPackageService {
             self.rollback_staged_writes(&staged_writes).await;
             return Err(err);
         }
+        self.enforce_serve_scan(artifact_id, &hash, &data).await?;
         self.record_statistics(artifact_id.ecosystem, |stats| {
             stats.bytes_served = stats.bytes_served.saturating_add(data.len() as u64);
         });
@@ -1021,6 +1081,9 @@ impl PublishingService for CachingPackageService {
         // the publish before any bytes are written if a finding exceeds `policy.max_vuln_severity`.
         // Runs before the transactional block so a denied artifact leaves no staged writes. A scan
         // that cannot complete (transport failure) propagates as an error — the publish fails closed.
+        // Passing reports are carried into the transactional block and stored (digest-keyed) so the
+        // serve-time gate finds them without re-scanning.
+        let mut scan_reports: Vec<(String, ScanReport)> = Vec::new();
         if let Some(scanner) = &self.scanner {
             for artifact in &request.artifacts {
                 let artifact_id = ArtifactId {
@@ -1039,10 +1102,19 @@ impl PublishingService for CachingPackageService {
                             .to_string(),
                     ));
                 }
+                scan_reports.push((integrity::blake3_hex(&artifact.data), report));
             }
         }
 
         let result = async {
+            for (blake3, report) in &scan_reports {
+                self.put_and_track(
+                    &Self::scan_report_key(blake3),
+                    Bytes::from(serde_json::to_vec(report)?),
+                    &mut staged_keys,
+                )
+                .await?;
+            }
             for artifact in &request.artifacts {
                 let artifact_id = ArtifactId {
                     ecosystem: request.ecosystem,
@@ -2121,6 +2193,111 @@ mod tests {
             matches!(error, StarmetalError::Upstream(_)),
             "an unavailable scanner must fail the publish closed, got: {error}"
         );
+    }
+
+    fn sample_artifact_id() -> ArtifactId {
+        ArtifactId {
+            ecosystem: Ecosystem::PyPI,
+            name: PackageName::new("sample"),
+            version: "1.0.0".to_string(),
+            filename: "sample-1.0.0.tar.gz".to_string(),
+        }
+    }
+
+    #[tokio::test]
+    async fn publish_stores_a_digest_keyed_scan_report_for_serve_time_reuse() {
+        let storage = Arc::new(MockStorage::new());
+        let service = CachingPackageService::new(storage.clone(), AHashMap::new(), PolicyConfig::default())
+            .with_scanner(Arc::new(FakeScanner {
+                severity: Some(starmetal_core::policy::VulnSeverity::Low),
+            }));
+        let request = scan_gate_request();
+        let blake3 = integrity::blake3_hex(&request.artifacts[0].data);
+        service.publish_package(request).await.unwrap();
+
+        let stored = storage
+            .get(&format!("_starmetal/scans/{blake3}.json"))
+            .await
+            .unwrap()
+            .expect("a scan report is stored at ingest, keyed by the artifact digest");
+        let report: starmetal_core::supply_chain::ScanReport = serde_json::from_slice(&stored).unwrap();
+        assert_eq!(report.vulnerabilities.len(), 1);
+        assert_eq!(
+            report.vulnerabilities[0].severity,
+            starmetal_core::policy::VulnSeverity::Low
+        );
+    }
+
+    #[tokio::test]
+    async fn serve_denies_when_a_scan_on_demand_exceeds_the_threshold() {
+        let storage = Arc::new(MockStorage::new());
+        // Publish without a scanner so no report is stored: the serve gate must scan on demand.
+        let publisher = CachingPackageService::new(storage.clone(), AHashMap::new(), PolicyConfig::default());
+        publisher.publish_package(scan_gate_request()).await.unwrap();
+
+        let policy = PolicyConfig {
+            max_vuln_severity: starmetal_core::policy::VulnSeverity::High,
+            ..PolicyConfig::default()
+        };
+        let server = CachingPackageService::new(storage.clone(), AHashMap::new(), policy)
+            .with_scanner(Arc::new(FakeScanner {
+                severity: Some(starmetal_core::policy::VulnSeverity::Critical),
+            }))
+            .enforce_scan_on_serve(true);
+
+        let error = server.get_artifact(&sample_artifact_id()).await.unwrap_err();
+        assert!(
+            matches!(error, StarmetalError::PolicyViolation(_)),
+            "the serve gate must deny an over-threshold artifact, got: {error}"
+        );
+
+        // The scan-on-demand report is cached for subsequent serves.
+        let blake3 = integrity::blake3_hex(b"scanned artifact");
+        assert!(
+            storage
+                .get(&format!("_starmetal/scans/{blake3}.json"))
+                .await
+                .unwrap()
+                .is_some(),
+            "a scan-on-demand report is cached at serve"
+        );
+    }
+
+    #[tokio::test]
+    async fn serve_allows_when_the_finding_is_within_the_threshold() {
+        let storage = Arc::new(MockStorage::new());
+        let publisher = CachingPackageService::new(storage.clone(), AHashMap::new(), PolicyConfig::default());
+        publisher.publish_package(scan_gate_request()).await.unwrap();
+
+        // Default (Critical) threshold tolerates a Critical finding.
+        let server = CachingPackageService::new(storage.clone(), AHashMap::new(), PolicyConfig::default())
+            .with_scanner(Arc::new(FakeScanner {
+                severity: Some(starmetal_core::policy::VulnSeverity::Critical),
+            }))
+            .enforce_scan_on_serve(true);
+
+        let served = server.get_artifact(&sample_artifact_id()).await.unwrap();
+        assert_eq!(served, Bytes::from_static(b"scanned artifact"));
+    }
+
+    #[tokio::test]
+    async fn serve_is_unenforced_unless_opted_in() {
+        let storage = Arc::new(MockStorage::new());
+        let publisher = CachingPackageService::new(storage.clone(), AHashMap::new(), PolicyConfig::default());
+        publisher.publish_package(scan_gate_request()).await.unwrap();
+
+        // A scanner is attached and the finding exceeds the threshold, but serve enforcement is off.
+        let policy = PolicyConfig {
+            max_vuln_severity: starmetal_core::policy::VulnSeverity::High,
+            ..PolicyConfig::default()
+        };
+        let server =
+            CachingPackageService::new(storage.clone(), AHashMap::new(), policy).with_scanner(Arc::new(FakeScanner {
+                severity: Some(starmetal_core::policy::VulnSeverity::Critical),
+            }));
+
+        let served = server.get_artifact(&sample_artifact_id()).await.unwrap();
+        assert_eq!(served, Bytes::from_static(b"scanned artifact"));
     }
 
     #[cfg(unix)]

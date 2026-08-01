@@ -447,6 +447,11 @@
           "default": false,
           "type": "boolean"
         },
+        "enforce_on_serve": {
+          "default": false,
+          "description": "Also enforce the vulnerability gate at serve: `get_artifact` consults each artifact's stored\nscan report (scanning on demand and caching it when absent) and refuses to serve a finding\nthat exceeds `policies.max_vuln_severity`. Off by default — ingest gating only.",
+          "type": "boolean"
+        },
         "osv_endpoint": {
           "default": null,
           "description": "Override the OSV endpoint base URL (defaults to the public `https://api.osv.dev`). Useful for\na self-hosted OSV mirror.",
@@ -594,6 +599,7 @@
       "$ref": "#/$defs/SupplyChainConfig",
       "default": {
         "enabled": false,
+        "enforce_on_serve": false,
         "osv_endpoint": null,
         "scanner": "osv"
       }

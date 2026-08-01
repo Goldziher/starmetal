@@ -345,8 +345,13 @@ Disabled by default. When enabled, Starmetal scans each artifact at publish (ing
 the publish when a finding's severity exceeds `policies.max_vuln_severity`. Because that threshold
 defaults to `critical` (the top of the scale), enabling the scanner is non-breaking until an operator
 lowers the bound — nothing exceeds `critical`. A scan that cannot complete fails the publish closed.
-Requires the `scanner-osv` build feature (included in `full`). Serve-time enforcement and scan-report
-persistence are not yet wired.
+Requires the `scanner-osv` build feature (included in `full`).
+
+Each passing artifact's scan report is persisted keyed by its blake3 digest (identical bytes share one
+report). With `enforce_on_serve` enabled, the same gate runs at serve: `get_artifact` consults the
+stored report — scanning on demand and caching it when absent — and refuses to serve a finding that
+exceeds the threshold, so a proxy-cached artifact that was never published is still gated on first
+read. Scheduled re-correlation against refreshed advisory feeds is not yet wired.
 
 The OSV backend queries the [OSV.dev](https://osv.dev) API by package coordinate; no CVE database is
 vendored. Point `osv_endpoint` at a self-hosted OSV mirror to avoid the public API.
@@ -356,14 +361,16 @@ vendored. Point `osv_endpoint` at a self-hosted OSV mirror to avoid the public A
 | `supply_chain.enabled` | `false` | Enables the ingest vulnerability gate. |
 | `supply_chain.scanner` | `"osv"` | Scanner backend. Only `osv` is available today. |
 | `supply_chain.osv_endpoint` | `null` | Override the OSV base URL (defaults to `https://api.osv.dev`). |
+| `supply_chain.enforce_on_serve` | `false` | Also gate at serve time, scanning cached artifacts on demand. |
 
 ```toml
 [supply_chain]
 enabled = true
 scanner = "osv"
+enforce_on_serve = true  # gate reads as well as publishes
 
 [policies]
-max_vuln_severity = "high"  # deny publishes carrying a critical-severity advisory
+max_vuln_severity = "high"  # deny a critical-severity advisory at both ingest and serve
 ```
 
 ## PQ Readiness

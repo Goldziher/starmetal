@@ -295,6 +295,11 @@ pub struct SupplyChainConfig {
     /// a self-hosted OSV mirror.
     #[serde(default)]
     pub osv_endpoint: Option<String>,
+    /// Also enforce the vulnerability gate at serve: `get_artifact` consults each artifact's stored
+    /// scan report (scanning on demand and caching it when absent) and refuses to serve a finding
+    /// that exceeds `policies.max_vuln_severity`. Off by default — ingest gating only.
+    #[serde(default)]
+    pub enforce_on_serve: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -1286,6 +1291,7 @@ certificate_file = "/etc/starmetal/trust/internal-ca.pem"
         assert!(!supply_chain.enabled);
         assert_eq!(supply_chain.scanner, ScannerKind::Osv);
         assert!(supply_chain.osv_endpoint.is_none());
+        assert!(!supply_chain.enforce_on_serve);
     }
 
     #[test]
