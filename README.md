@@ -106,6 +106,10 @@ task ci
 # Install the local sm binary from this checkout
 cargo install --path crates/starmetal-cli --bin sm
 
+# Or install the prebuilt sm binary from the latest GitHub release via cargo-binstall
+# (starmetal-cli is not on crates.io, so point binstall at the git repo)
+cargo binstall --git https://github.com/Goldziher/starmetal starmetal-cli
+
 # Start Starmetal with defaults on 127.0.0.1:8080
 sm serve
 
