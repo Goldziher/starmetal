@@ -14,6 +14,12 @@ use starmetal_core::supply_chain::{ScanReport, ScanTarget, Scanner, ScannerCapab
 /// Default OSV.dev API base URL.
 const DEFAULT_OSV_BASE_URL: &str = "https://api.osv.dev";
 
+/// TCP connect timeout for OSV query requests.
+const OSV_CONNECT_TIMEOUT_SECS: u64 = 30;
+
+/// Overall request timeout (connect + response) for OSV query requests.
+const OSV_REQUEST_TIMEOUT_SECS: u64 = 60;
+
 /// A [`Scanner`] backed by the OSV.dev query API.
 pub struct OsvScanner {
     client: reqwest::Client,
@@ -30,8 +36,8 @@ impl OsvScanner {
     /// for tests).
     pub fn with_endpoint(base_url: impl Into<String>) -> Self {
         let client = reqwest::Client::builder()
-            .connect_timeout(std::time::Duration::from_secs(30))
-            .timeout(std::time::Duration::from_secs(60))
+            .connect_timeout(std::time::Duration::from_secs(OSV_CONNECT_TIMEOUT_SECS))
+            .timeout(std::time::Duration::from_secs(OSV_REQUEST_TIMEOUT_SECS))
             .build()
             .unwrap_or_else(|_| reqwest::Client::new());
         Self {

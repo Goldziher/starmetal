@@ -83,8 +83,10 @@ pub struct StarmetalRuntime {
     /// Handle for scheduled supply-chain re-correlation (ADR-0024). `Some` only when a scanner is
     /// attached (`supply_chain.enabled` under the scanner feature); drives the background sweep.
     pub maintenance: Option<Arc<dyn SupplyChainMaintenance>>,
-    /// Handle for the quarantine review workflow (ADR-0024). `Some` only when a scanner is attached;
-    /// backs the admin promote/reject/list endpoints.
+    /// Handle for the quarantine review workflow (ADR-0024). `Some` exactly when
+    /// `supply_chain.enabled` is set — the same condition under which `attach_scanner` attaches a
+    /// scanner to the service — so this is `Some` iff a scanner is actually attached. Backs the admin
+    /// promote/reject/list endpoints.
     pub quarantine: Option<Arc<dyn QuarantineReview>>,
 }
 

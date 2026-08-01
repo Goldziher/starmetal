@@ -195,7 +195,8 @@ fn validate_quarantine_digest(digest: &str) -> Result<(), (StatusCode, String)> 
     }
 }
 
-/// The quarantine review handle, or a 404 when no scanner is attached (the workflow is inactive).
+/// The quarantine review handle, or a 404 when `supply_chain.enabled` is unset (no scanner is
+/// attached and the workflow is inactive).
 fn quarantine_handle(state: &AppState) -> Result<&std::sync::Arc<dyn QuarantineReview>, (StatusCode, String)> {
     state.quarantine.as_ref().ok_or((
         StatusCode::NOT_FOUND,

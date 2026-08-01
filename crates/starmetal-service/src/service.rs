@@ -314,9 +314,9 @@ pub struct CachingPackageService {
     /// operator promote/reject) instead of a terminal deny. Off by default (blocks are hard denials).
     quarantine: bool,
     /// Named per-coordinate locks serializing concurrent publishes of the same
-    /// `ecosystem/name/version`. Entries are not pruned yet: the map is bounded by the number of
-    /// distinct coordinates published in-process. A future improvement can prune an entry once its
-    /// last held guard drops.
+    /// `ecosystem/name/version`. `publish_package` prunes an entry once its guard drops and no other
+    /// publish still holds a clone of the lock (see `prune_publish_lock`), so the map only grows with
+    /// coordinates that are currently being published, not with every coordinate ever published.
     publish_locks: Mutex<AHashMap<String, Arc<tokio::sync::Mutex<()>>>>,
 }
 
@@ -366,6 +366,26 @@ impl RecorrelationOutcome {
         failed: false,
         newly_blocking: None,
     };
+}
+
+/// RAII guard holding a publish coordinate's lock. On drop it releases the lock and prunes the
+/// coordinate's entry from `publish_locks`, so the map is cleaned up on *every* exit path of
+/// `publish_package` — success or early-return error — not just the happy path. Without this, a
+/// publish that fails after acquiring the lock (duplicate version, refused shadowing, a blocking
+/// scan, a rollback) would leak its map entry, reintroducing the unbounded growth this prunes.
+struct PublishLockGuard<'a> {
+    service: &'a CachingPackageService,
+    key: String,
+    guard: Option<tokio::sync::OwnedMutexGuard<()>>,
+}
+
+impl Drop for PublishLockGuard<'_> {
+    fn drop(&mut self) {
+        // Release the coordinate lock first so this guard's `Arc` clone is gone before the strong-count
+        // check; `prune_publish_lock` then removes the entry iff the map is its sole remaining holder.
+        self.guard = None;
+        self.service.prune_publish_lock(&self.key);
+    }
 }
 
 /// On-disk envelope for a persisted scan report.
@@ -554,6 +574,13 @@ impl CachingPackageService {
         )))
     }
 
+    /// The `publish_locks` map key for a single `ecosystem/name/version` publish coordinate. Shared
+    /// by `acquire_publish_lock` (to find-or-insert the coordinate's lock) and `prune_publish_lock`
+    /// (to remove it once uncontended), so both agree on identity for the same coordinate.
+    fn publish_lock_key(ecosystem: Ecosystem, name: &PackageName, version: &str) -> String {
+        format!("{ecosystem}/{}/{version}", name.as_str())
+    }
+
     /// Acquire an owned lock scoped to a single `ecosystem/name/version` publish coordinate,
     /// serializing concurrent publishes that target the same version.
     async fn acquire_publish_lock(
@@ -561,8 +588,8 @@ impl CachingPackageService {
         ecosystem: Ecosystem,
         name: &PackageName,
         version: &str,
-    ) -> tokio::sync::OwnedMutexGuard<()> {
-        let key = format!("{ecosystem}/{}/{version}", name.as_str());
+    ) -> PublishLockGuard<'_> {
+        let key = Self::publish_lock_key(ecosystem, name, version);
         let lock = {
             // A poisoned lock only means some other publish panicked while holding it; the guarded
             // value is just the per-coordinate lock map, so recovering it is safe (matches the
@@ -573,11 +600,37 @@ impl CachingPackageService {
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
             Arc::clone(
                 locks
-                    .entry(key)
+                    .entry(key.clone())
                     .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(()))),
             )
         };
-        lock.lock_owned().await
+        let guard = lock.lock_owned().await;
+        PublishLockGuard {
+            service: self,
+            key,
+            guard: Some(guard),
+        }
+    }
+
+    /// Remove a coordinate's publish lock from the map once it is no longer contended.
+    ///
+    /// Race-free by construction: the emptiness check (`Arc::strong_count(&lock) == 1`) and the
+    /// removal both happen while holding the same `std::sync::Mutex` that guards the map, and
+    /// `acquire_publish_lock` only ever clones the `Arc` out of the map while holding that same
+    /// mutex. So if the strong count is 1 here, no other task can be mid-clone of this entry — the
+    /// map is provably the sole remaining holder — and the removal cannot race a concurrent publish
+    /// that is about to reuse the coordinate (it would either see the entry before this removal, or
+    /// find it absent and insert a fresh lock after).
+    fn prune_publish_lock(&self, key: &str) {
+        let mut locks = self
+            .publish_locks
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(lock) = locks.get(key)
+            && Arc::strong_count(lock) == 1
+        {
+            locks.remove(key);
+        }
     }
 
     /// Vulnerability gate (ADR-0024) for a publish request: when a scanner is attached, scan each
@@ -1254,7 +1307,8 @@ impl PublishingService for CachingPackageService {
             .collect();
 
         // Serializes concurrent publishes targeting the same ecosystem/name/version coordinate;
-        // held for the remainder of this function.
+        // held until this function returns. The guard prunes its `publish_locks` entry on drop, so
+        // the map is cleaned up on every exit path (success or early-return error), not just success.
         let _publish_guard = self
             .acquire_publish_lock(request.ecosystem, &request.name, &request.version)
             .await;
@@ -2366,6 +2420,82 @@ mod tests {
         assert_eq!(record.source, PublishSource::Local);
         assert!(!record.yanked);
         assert!(record.listed);
+    }
+
+    #[tokio::test]
+    async fn publishing_the_same_coordinate_repeatedly_does_not_grow_the_lock_map() {
+        let storage = Arc::new(MockStorage::new());
+        let service = CachingPackageService::new(storage, AHashMap::new(), PolicyConfig::default());
+
+        let request = |allow_overwrite: bool| PublishRequest {
+            ecosystem: Ecosystem::PyPI,
+            name: PackageName::new("sample"),
+            version: "1.0.0".to_string(),
+            license: None,
+            yanked: false,
+            listed: true,
+            artifacts: vec![PublishedArtifact {
+                filename: "sample-1.0.0.tar.gz".to_string(),
+                data: Bytes::from_static(b"published artifact"),
+                upstream_hashes: AHashMap::new(),
+            }],
+            protocol_metadata: ProtocolMetadata::default_for(Ecosystem::PyPI),
+            allow_overwrite,
+            allow_shadowing: false,
+        };
+
+        service.publish_package(request(false)).await.unwrap();
+        assert_eq!(
+            service.publish_locks.lock().unwrap().len(),
+            0,
+            "the coordinate's lock should be pruned once the publish completes"
+        );
+
+        // Re-publishing the same coordinate must reuse (not accumulate) map entries.
+        service.publish_package(request(true)).await.unwrap();
+        assert_eq!(
+            service.publish_locks.lock().unwrap().len(),
+            0,
+            "repeated publishes of the same coordinate must not grow the lock map"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_failed_publish_still_prunes_its_lock_map_entry() {
+        let storage = Arc::new(MockStorage::new());
+        let service = CachingPackageService::new(storage, AHashMap::new(), PolicyConfig::default());
+
+        let request = |allow_overwrite: bool| PublishRequest {
+            ecosystem: Ecosystem::PyPI,
+            name: PackageName::new("sample"),
+            version: "1.0.0".to_string(),
+            license: None,
+            yanked: false,
+            listed: true,
+            artifacts: vec![PublishedArtifact {
+                filename: "sample-1.0.0.tar.gz".to_string(),
+                data: Bytes::from_static(b"published artifact"),
+                upstream_hashes: AHashMap::new(),
+            }],
+            protocol_metadata: ProtocolMetadata::default_for(Ecosystem::PyPI),
+            allow_overwrite,
+            allow_shadowing: false,
+        };
+
+        service.publish_package(request(false)).await.unwrap();
+        // Publishing the same version again without overwrite fails *after* acquiring the lock.
+        service
+            .publish_package(request(false))
+            .await
+            .expect_err("a duplicate version must be rejected");
+
+        // The RAII guard must have pruned the entry on the error path too — a failed publish must not
+        // leak a lock into the map.
+        assert_eq!(
+            service.publish_locks.lock().unwrap().len(),
+            0,
+            "a failed publish must still prune its lock map entry"
+        );
     }
 
     /// A [`Scanner`] test double (a fake for our own port — not a mock of an external service):
