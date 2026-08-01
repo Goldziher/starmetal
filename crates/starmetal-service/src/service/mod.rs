@@ -1,4 +1,5 @@
 mod gate;
+mod quota;
 mod signing;
 
 use std::sync::{Arc, Mutex};
@@ -12,6 +13,7 @@ use bytes::Bytes;
 use chrono::{SecondsFormat, Utc};
 use sha2::Digest;
 use starmetal_core::attestation;
+use starmetal_core::config::QuotaConfig;
 use starmetal_core::content::{Asset, AssetRef, Blob, BlobDigest, Component, ComponentRef, ContentStore};
 use starmetal_core::error::{Result, StarmetalError};
 use starmetal_core::integrity;
@@ -34,6 +36,7 @@ use starmetal_core::supply_chain::{
 };
 
 use gate::{PersistedScanReport, QUARANTINE_PREFIX, SBOM_PREFIX, SCAN_REPORT_PREFIX};
+use quota::QuotaLedger;
 pub use signing::SigningService;
 use signing::StatementInput;
 
@@ -89,6 +92,12 @@ pub struct CachingPackageService {
     /// publish still holds a clone of the lock (see `prune_publish_lock`), so the map only grows with
     /// coordinates that are currently being published, not with every coordinate ever published.
     publish_locks: Mutex<AHashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+    /// Publish quota controls (ADR-0021). `None` disables quota enforcement entirely (the default);
+    /// `Some` carries the resolved per-ecosystem/default limits consulted by `reserve_quota`.
+    quota: Option<QuotaConfig>,
+    /// The in-memory publish quota ledger (ADR-0021): committed and in-flight-reserved usage per
+    /// `(ecosystem, namespace)` coordinate. See `quota::reserve_quota` for the concurrency argument.
+    quota_ledger: QuotaLedger,
 }
 
 struct StoredObjectSignatureCheck<'a> {
@@ -201,6 +210,8 @@ impl CachingPackageService {
             emit_provenance: false,
             verifier: None,
             publish_locks: Mutex::new(AHashMap::new()),
+            quota: None,
+            quota_ledger: Mutex::new(AHashMap::new()),
         }
     }
 
@@ -227,6 +238,8 @@ impl CachingPackageService {
             emit_provenance: false,
             verifier: None,
             publish_locks: Mutex::new(AHashMap::new()),
+            quota: None,
+            quota_ledger: Mutex::new(AHashMap::new()),
         }
     }
 
@@ -268,6 +281,15 @@ impl CachingPackageService {
     /// blocked publish is denied unless an operator opts in.
     pub fn with_ingest_quarantine(mut self, enabled: bool) -> Self {
         self.ingest_quarantine = enabled;
+        self
+    }
+
+    /// Attach publish quota enforcement (ADR-0021): a reserve/reconcile ceiling on published version
+    /// count and cumulative artifact bytes per `(ecosystem, namespace)` coordinate, backed by a
+    /// process-local in-memory ledger (see the `quota` submodule). Absent by default, in which case
+    /// `publish_package`'s quota gate is a no-op.
+    pub fn with_quota(mut self, quota: QuotaConfig) -> Self {
+        self.quota = Some(quota);
         self
     }
 
@@ -1243,6 +1265,19 @@ impl PublishingService for CachingPackageService {
             }
         };
 
+        // Publish quota gate (ADR-0021): reserve this publish's version and byte delta against the
+        // `(ecosystem, namespace)` ledger before any staged write begins, so a denial leaves nothing
+        // to roll back. `quota_guard` is held across the transactional block below and reconciled
+        // into committed usage on its success; every other exit — this `?`, and the rollback branch
+        // after the block — releases the reservation via `Drop` instead, so it is never leaked.
+        let quota_namespace = request.name.publish_namespace(request.ecosystem);
+        let quota_bytes: u64 = request
+            .artifacts
+            .iter()
+            .map(|artifact| artifact.data.len() as u64)
+            .sum();
+        let quota_guard = self.reserve_quota(request.ecosystem, quota_namespace, 1, quota_bytes)?;
+
         // One RFC3339 timestamp for every accessory this publish emits (SBOM documents, provenance
         // attestations), so they agree on a single build time.
         let publish_timestamp = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
@@ -1411,6 +1446,11 @@ impl PublishingService for CachingPackageService {
                 return Err(err);
             }
         };
+
+        // The transactional block committed: fold the reservation into committed quota usage.
+        if let Some(guard) = quota_guard {
+            guard.reconcile();
+        }
 
         self.record_statistics(request.ecosystem, |stats| {
             stats.publishes = stats.publishes.saturating_add(1);
@@ -4844,5 +4884,289 @@ mod tests {
         let result = service.get_artifact(&artifact_id).await;
         assert!(result.is_err(), "license policy should block artifact");
         assert!(result.unwrap_err().to_string().contains("has no license"));
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Publish quota reserve/reconcile (ADR-0021)
+    // -----------------------------------------------------------------------------------------
+
+    use starmetal_core::config::{QuotaConfig, QuotaLimits};
+
+    /// A [`StoragePort`] that fails the first `failures` `put` calls to one specific key, then
+    /// behaves like a normal [`MockStorage`] for every other call. Used to force `publish_package`'s
+    /// transactional block to fail *after* the quota gate has already reserved usage, so a test can
+    /// verify the reservation is released (not leaked) on rollback.
+    struct FlakyStorage {
+        inner: MockStorage,
+        fail_key: String,
+        remaining_failures: Mutex<u32>,
+    }
+
+    impl FlakyStorage {
+        fn new(fail_key: impl Into<String>, failures: u32) -> Self {
+            Self {
+                inner: MockStorage::new(),
+                fail_key: fail_key.into(),
+                remaining_failures: Mutex::new(failures),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl StoragePort for FlakyStorage {
+        async fn get(&self, key: &str) -> Result<Option<Bytes>> {
+            self.inner.get(key).await
+        }
+
+        async fn put(&self, key: &str, data: Bytes) -> Result<()> {
+            if key == self.fail_key {
+                let mut remaining = self.remaining_failures.lock().unwrap();
+                if *remaining > 0 {
+                    *remaining -= 1;
+                    return Err(StarmetalError::Storage("simulated storage failure".to_string()));
+                }
+            }
+            self.inner.put(key, data).await
+        }
+
+        async fn exists(&self, key: &str) -> Result<bool> {
+            self.inner.exists(key).await
+        }
+
+        async fn delete(&self, key: &str) -> Result<()> {
+            self.inner.delete(key).await
+        }
+
+        async fn list_prefix(&self, prefix: &str) -> Result<Vec<String>> {
+            self.inner.list_prefix(prefix).await
+        }
+    }
+
+    /// A single-artifact publish request for `ecosystem/name@version`, parameterized by ecosystem so
+    /// quota tests can target distinct `(ecosystem, namespace)` coordinates.
+    fn quota_request(ecosystem: Ecosystem, name: &str, version: &str, data: &'static [u8]) -> PublishRequest {
+        PublishRequest {
+            ecosystem,
+            name: PackageName::new(name),
+            version: version.to_string(),
+            license: Some("MIT".to_string()),
+            yanked: false,
+            listed: true,
+            artifacts: vec![PublishedArtifact {
+                filename: format!("{name}-{version}.tgz"),
+                data: Bytes::from_static(data),
+                upstream_hashes: AHashMap::new(),
+            }],
+            protocol_metadata: ProtocolMetadata::default_for(ecosystem),
+            allow_overwrite: false,
+            allow_shadowing: false,
+        }
+    }
+
+    #[tokio::test]
+    async fn publish_succeeds_under_quota_and_increments_committed_usage() {
+        let storage = Arc::new(MockStorage::new());
+        let quota = QuotaConfig {
+            enabled: true,
+            per_ecosystem: std::collections::HashMap::new(),
+            default_limits: Some(QuotaLimits {
+                max_versions: Some(1),
+                max_bytes: None,
+            }),
+        };
+        let service = CachingPackageService::new(storage, AHashMap::new(), PolicyConfig::default()).with_quota(quota);
+
+        service
+            .publish_package(quota_request(Ecosystem::PyPI, "alpha", "1.0.0", b"alpha bytes"))
+            .await
+            .unwrap();
+
+        // Both packages share the same (PyPI, None) coordinate (PyPI has no namespace concept), so
+        // this second, distinct package's publish would push the coordinate to 2 versions. It must be
+        // denied by the max_versions = 1 ceiling, which only holds if the first publish's reservation
+        // was reconciled into *committed* usage rather than discarded once the guard dropped.
+        let err = service
+            .publish_package(quota_request(Ecosystem::PyPI, "beta", "1.0.0", b"beta bytes"))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, StarmetalError::PolicyViolation(_)));
+        assert!(err.to_string().contains(PolicyReason::QuotaExceeded.as_str()));
+    }
+
+    #[tokio::test]
+    async fn publish_denied_and_writes_nothing_when_it_would_exceed_max_versions() {
+        let storage = Arc::new(MockStorage::new());
+        let quota = QuotaConfig {
+            enabled: true,
+            per_ecosystem: std::collections::HashMap::new(),
+            default_limits: Some(QuotaLimits {
+                max_versions: Some(0),
+                max_bytes: None,
+            }),
+        };
+        let service = CachingPackageService::new(storage, AHashMap::new(), PolicyConfig::default()).with_quota(quota);
+
+        let err = service
+            .publish_package(quota_request(Ecosystem::PyPI, "gamma", "1.0.0", b"gamma bytes"))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, StarmetalError::PolicyViolation(_)));
+        assert!(err.to_string().contains(PolicyReason::QuotaExceeded.as_str()));
+
+        let name = PackageName::new("gamma");
+        assert!(
+            service
+                .get_version_metadata(Ecosystem::PyPI, &name, "1.0.0")
+                .await
+                .is_err(),
+            "a quota-denied publish must leave no metadata behind"
+        );
+    }
+
+    #[tokio::test]
+    async fn publish_denied_when_it_would_exceed_max_bytes() {
+        let storage = Arc::new(MockStorage::new());
+        let data: &'static [u8] = b"this payload is more than four bytes long";
+        let quota = QuotaConfig {
+            enabled: true,
+            per_ecosystem: std::collections::HashMap::new(),
+            default_limits: Some(QuotaLimits {
+                max_versions: None,
+                max_bytes: Some(4),
+            }),
+        };
+        let service = CachingPackageService::new(storage, AHashMap::new(), PolicyConfig::default()).with_quota(quota);
+
+        let err = service
+            .publish_package(quota_request(Ecosystem::PyPI, "delta", "1.0.0", data))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, StarmetalError::PolicyViolation(_)));
+        assert!(err.to_string().contains(PolicyReason::QuotaExceeded.as_str()));
+    }
+
+    #[tokio::test]
+    async fn quota_reservation_is_released_when_the_transactional_block_rolls_back() {
+        let package_name = PackageName::new("epsilon");
+        let fail_key = CachingPackageService::versions_key(Ecosystem::PyPI, &package_name).unwrap();
+        let storage = Arc::new(FlakyStorage::new(fail_key, 1));
+        let quota = QuotaConfig {
+            enabled: true,
+            per_ecosystem: std::collections::HashMap::new(),
+            default_limits: Some(QuotaLimits {
+                max_versions: Some(1),
+                max_bytes: None,
+            }),
+        };
+        let service = CachingPackageService::new(storage, AHashMap::new(), PolicyConfig::default()).with_quota(quota);
+
+        // The first attempt reserves successfully (0 committed + 0 reserved + 1 <= 1) but the
+        // transactional block fails while persisting the versions index, so it rolls back.
+        let error = service
+            .publish_package(quota_request(Ecosystem::PyPI, "epsilon", "1.0.0", b"epsilon bytes"))
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(error, StarmetalError::Storage(_)),
+            "expected the simulated storage failure, got: {error}"
+        );
+        assert!(
+            service
+                .get_version_metadata(Ecosystem::PyPI, &package_name, "1.0.0")
+                .await
+                .is_err(),
+            "a rolled-back publish must leave no metadata behind"
+        );
+
+        // If the failed attempt's reservation had leaked instead of being released on rollback, this
+        // second publish — still under the same max_versions = 1 ceiling — would be wrongly denied.
+        service
+            .publish_package(quota_request(Ecosystem::PyPI, "epsilon", "2.0.0", b"epsilon bytes v2"))
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn concurrent_publishes_to_the_same_coordinate_allow_exactly_one_over_the_ceiling() {
+        let storage = Arc::new(MockStorage::new());
+        let quota = QuotaConfig {
+            enabled: true,
+            per_ecosystem: std::collections::HashMap::new(),
+            default_limits: Some(QuotaLimits {
+                max_versions: Some(1),
+                max_bytes: None,
+            }),
+        };
+        let service =
+            Arc::new(CachingPackageService::new(storage, AHashMap::new(), PolicyConfig::default()).with_quota(quota));
+
+        // Two distinct packages sharing the same (PyPI, None) coordinate: individually each fits under
+        // max_versions = 1, but together they would push the coordinate to 2. Racing them via
+        // `tokio::join!` (rather than awaiting sequentially) exercises the reserve's atomicity: the
+        // check-then-increment must happen inside one critical section so neither task can observe
+        // room for both.
+        let first = service.clone();
+        let second = service.clone();
+        let (result_a, result_b) = tokio::join!(
+            first.publish_package(quota_request(Ecosystem::PyPI, "zeta-a", "1.0.0", b"zeta a bytes")),
+            second.publish_package(quota_request(Ecosystem::PyPI, "zeta-b", "1.0.0", b"zeta b bytes")),
+        );
+
+        let outcomes = [&result_a, &result_b];
+        let successes = outcomes.iter().filter(|result| result.is_ok()).count();
+        let denials = outcomes
+            .iter()
+            .filter(|result| matches!(result, Err(StarmetalError::PolicyViolation(_))))
+            .count();
+        assert_eq!(successes, 1, "exactly one of the two racing publishes must succeed");
+        assert_eq!(
+            denials, 1,
+            "exactly one of the two racing publishes must be denied by the quota gate"
+        );
+    }
+
+    #[tokio::test]
+    async fn per_ecosystem_quota_limit_does_not_constrain_a_different_ecosystem() {
+        let storage = Arc::new(MockStorage::new());
+        let mut per_ecosystem = std::collections::HashMap::new();
+        per_ecosystem.insert(
+            Ecosystem::Npm.to_string(),
+            QuotaLimits {
+                max_versions: Some(10),
+                max_bytes: None,
+            },
+        );
+        let quota = QuotaConfig {
+            enabled: true,
+            per_ecosystem,
+            default_limits: Some(QuotaLimits {
+                max_versions: Some(1),
+                max_bytes: None,
+            }),
+        };
+        let service = CachingPackageService::new(storage, AHashMap::new(), PolicyConfig::default()).with_quota(quota);
+
+        // PyPI has no per-ecosystem override, so it falls back to `default_limits` (max_versions = 1):
+        // the first PyPI publish succeeds, a second distinct package is denied.
+        service
+            .publish_package(quota_request(Ecosystem::PyPI, "eta-one", "1.0.0", b"eta one bytes"))
+            .await
+            .unwrap();
+        let denied = service
+            .publish_package(quota_request(Ecosystem::PyPI, "eta-two", "1.0.0", b"eta two bytes"))
+            .await
+            .unwrap_err();
+        assert!(matches!(denied, StarmetalError::PolicyViolation(_)));
+
+        // npm has its own, more generous per-ecosystem limit (max_versions = 10): two npm publishes
+        // both fit, proving the restrictive PyPI-affecting default did not leak into npm's resolution.
+        service
+            .publish_package(quota_request(Ecosystem::Npm, "theta-one", "1.0.0", b"theta one bytes"))
+            .await
+            .unwrap();
+        service
+            .publish_package(quota_request(Ecosystem::Npm, "theta-two", "1.0.0", b"theta two bytes"))
+            .await
+            .unwrap();
     }
 }

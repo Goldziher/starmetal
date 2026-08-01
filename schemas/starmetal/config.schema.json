@@ -225,6 +225,57 @@
       },
       "type": "object"
     },
+    "QuotaConfig": {
+      "description": "Publish quota controls (ADR-0021). When enabled, a hosted publish that would push its\n`(ecosystem, namespace)` coordinate over its resolved [`QuotaLimits`] is denied with\n[`crate::supply_chain::PolicyReason::QuotaExceeded`]. The namespace is the component's grouping\n(npm scope, Maven group id; see [`crate::package::PackageName::publish_namespace`]) — `None` for\necosystems without one. Off by default so it is inert until an operator configures a limit; the\nreserve/reconcile ledger itself is process-local and lives in `starmetal-service`.",
+      "properties": {
+        "default_limits": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/QuotaLimits"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Fallback limits applied to any ecosystem without a `per_ecosystem` entry. `None` leaves an\nunlisted ecosystem unlimited."
+        },
+        "enabled": {
+          "default": false,
+          "description": "Enable publish quota enforcement. Off by default.",
+          "type": "boolean"
+        },
+        "per_ecosystem": {
+          "additionalProperties": {
+            "$ref": "#/$defs/QuotaLimits"
+          },
+          "default": {},
+          "description": "Quota limits for a specific ecosystem, keyed by its config name (`\"pypi\"`, `\"npm\"`, `\"cargo\"`,\n`\"hex\"`, `\"maven\"`, `\"rubygems\"`, `\"nuget\"`, `\"pub\"`). Takes precedence over `default_limits`\nfor a matching ecosystem.",
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "QuotaLimits": {
+      "description": "One quota ceiling pair (ADR-0021) for a `(ecosystem, namespace)` coordinate. Each dimension is\nindependently optional; `None` leaves that dimension unlimited.",
+      "properties": {
+        "max_bytes": {
+          "default": null,
+          "description": "Maximum cumulative artifact bytes for the coordinate. `None` is unlimited.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": ["integer", "null"]
+        },
+        "max_versions": {
+          "default": null,
+          "description": "Maximum number of published versions for the coordinate. `None` is unlimited.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": ["integer", "null"]
+        }
+      },
+      "type": "object"
+    },
     "RepositoryConfig": {
       "description": "A declared repository (ADR-0019): a `(kind, ecosystem)` surface mounted under\nits own URL segment.\n\nWhen [`Config::repositories`] is empty, Starmetal derives one `proxy`\nrepository per enabled `[upstream]` ecosystem (see\n[`Config::resolved_repositories`]), preserving the historical proxy-only\nbehavior. Only `proxy` repositories are supported today; `hosted` and `group`\nare reserved for later stages and rejected by [`Config::validate_mvp`].",
       "properties": {
@@ -629,6 +680,15 @@
           "description": "Hold a serve-time gate block as a recoverable quarantine record (an operator can promote or\nreject it via the admin API) instead of a terminal deny. Off by default — blocks are hard\ndenials. Only effective with `enforce_on_serve` and a scanner attached.",
           "type": "boolean"
         },
+        "quota": {
+          "$ref": "#/$defs/QuotaConfig",
+          "default": {
+            "default_limits": null,
+            "enabled": false,
+            "per_ecosystem": {}
+          },
+          "description": "Publish quota reserve/reconcile controls (ADR-0021): a ceiling on published version count\nand/or cumulative artifact bytes per `(ecosystem, namespace)` coordinate, enforced by an\nin-memory ledger around the publish path. Off by default."
+        },
         "recorrelation_interval_secs": {
           "default": 0,
           "description": "Interval in seconds between scheduled re-correlation sweeps. Each sweep re-scans every stored\nscan report against the (refreshed) advisory feed and rewrites it, so an artifact that was\nclean when first scanned is re-evaluated as new advisories land (\"scan once, then monitor\").\n`0` (the default) disables the scheduler. Only effective when a scanner is attached.",
@@ -806,6 +866,11 @@
         "ingest_quarantine": false,
         "osv_endpoint": null,
         "quarantine": false,
+        "quota": {
+          "default_limits": null,
+          "enabled": false,
+          "per_ecosystem": {}
+        },
         "recorrelation_interval_secs": 0,
         "require_provenance": false,
         "require_signature": false,

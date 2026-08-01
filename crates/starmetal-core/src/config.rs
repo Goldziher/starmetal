@@ -357,6 +357,45 @@ pub struct SupplyChainConfig {
     /// signing to be configured. Off by default.
     #[serde(default)]
     pub require_provenance: bool,
+    /// Publish quota reserve/reconcile controls (ADR-0021): a ceiling on published version count
+    /// and/or cumulative artifact bytes per `(ecosystem, namespace)` coordinate, enforced by an
+    /// in-memory ledger around the publish path. Off by default.
+    #[serde(default)]
+    pub quota: QuotaConfig,
+}
+
+/// Publish quota controls (ADR-0021). When enabled, a hosted publish that would push its
+/// `(ecosystem, namespace)` coordinate over its resolved [`QuotaLimits`] is denied with
+/// [`crate::supply_chain::PolicyReason::QuotaExceeded`]. The namespace is the component's grouping
+/// (npm scope, Maven group id; see [`crate::package::PackageName::publish_namespace`]) — `None` for
+/// ecosystems without one. Off by default so it is inert until an operator configures a limit; the
+/// reserve/reconcile ledger itself is process-local and lives in `starmetal-service`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct QuotaConfig {
+    /// Enable publish quota enforcement. Off by default.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Quota limits for a specific ecosystem, keyed by its config name (`"pypi"`, `"npm"`, `"cargo"`,
+    /// `"hex"`, `"maven"`, `"rubygems"`, `"nuget"`, `"pub"`). Takes precedence over `default_limits`
+    /// for a matching ecosystem.
+    #[serde(default)]
+    pub per_ecosystem: HashMap<String, QuotaLimits>,
+    /// Fallback limits applied to any ecosystem without a `per_ecosystem` entry. `None` leaves an
+    /// unlisted ecosystem unlimited.
+    #[serde(default)]
+    pub default_limits: Option<QuotaLimits>,
+}
+
+/// One quota ceiling pair (ADR-0021) for a `(ecosystem, namespace)` coordinate. Each dimension is
+/// independently optional; `None` leaves that dimension unlimited.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct QuotaLimits {
+    /// Maximum number of published versions for the coordinate. `None` is unlimited.
+    #[serde(default)]
+    pub max_versions: Option<u64>,
+    /// Maximum cumulative artifact bytes for the coordinate. `None` is unlimited.
+    #[serde(default)]
+    pub max_bytes: Option<u64>,
 }
 
 /// SBOM generation controls (ADR-0024). Independent of the scanner: SBOMs are generated from the
@@ -1329,6 +1368,15 @@ certificate_file = "/etc/starmetal/trust/internal-ca.pem"
         assert!(
             !supply_chain.require_provenance,
             "provenance gate is off by default (fail-open guard)"
+        );
+        assert!(!supply_chain.quota.enabled, "publish quota is off by default");
+        assert!(
+            supply_chain.quota.per_ecosystem.is_empty(),
+            "no per-ecosystem quota limits by default"
+        );
+        assert!(
+            supply_chain.quota.default_limits.is_none(),
+            "no fallback quota limits by default"
         );
     }
 

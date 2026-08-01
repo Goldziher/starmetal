@@ -422,6 +422,14 @@ vendored. Point `osv_endpoint` at a self-hosted OSV mirror to avoid the public A
 | `supply_chain.sbom.formats` | `["cyclonedx", "spdx"]` | Formats to emit for each artifact. |
 | `supply_chain.require_signature` | `false` | Require a valid Starmetal DSSE signature to serve/publish; else deny (`missing-signature`). |
 | `supply_chain.require_provenance` | `false` | Require a valid Starmetal in-toto/SLSA provenance attestation; else deny (`failing-provenance`). |
+| `supply_chain.quota` | — | Publish quota reserve/reconcile controls (ADR-0021, independent of the scanner). |
+| `supply_chain.quota.enabled` | `false` | Enables publish quota enforcement. |
+| `supply_chain.quota.per_ecosystem` | `{}` | Quota limits for a specific ecosystem, keyed by its config name (e.g. `npm`, `maven`); takes precedence over `default_limits`. |
+| `supply_chain.quota.per_ecosystem.*.max_versions` | `null` | Maximum published version count for the ecosystem's coordinates. `null` is unlimited. |
+| `supply_chain.quota.per_ecosystem.*.max_bytes` | `null` | Maximum cumulative artifact bytes for the ecosystem's coordinates. `null` is unlimited. |
+| `supply_chain.quota.default_limits` | `null` | Fallback limits for any ecosystem without a `per_ecosystem` entry. `null` leaves unlisted ecosystems unlimited. |
+| `supply_chain.quota.default_limits.max_versions` | `null` | Fallback maximum published version count. `null` is unlimited. |
+| `supply_chain.quota.default_limits.max_bytes` | `null` | Fallback maximum cumulative artifact bytes. `null` is unlimited. |
 
 `supply_chain.require_signature` and `require_provenance` gate serving and publishing on Starmetal's own
 signature/provenance graph (ADR-0024). Both require `[signing]` to be configured (Starmetal signs with
@@ -453,6 +461,30 @@ formats = ["cyclonedx", "spdx"]
 
 [policies]
 max_vuln_severity = "high"  # deny a critical-severity advisory at both ingest and serve
+```
+
+With `supply_chain.quota.enabled` set, a hosted publish that would push its `(ecosystem, namespace)`
+coordinate over a configured version-count or byte ceiling is denied (`quota-exceeded`) before any
+bytes are written. The namespace is the coordinate's grouping — an npm scope or a Maven group id —
+and `null` for ecosystems without one, so unscoped packages in the same ecosystem share one ceiling.
+Resolution per publish picks a `per_ecosystem` entry for that ecosystem if present, else
+`default_limits`, else the ecosystem is unlimited; `max_versions` and `max_bytes` are independently
+optional within either. Enforcement is a reserve/reconcile ledger held in memory by the running
+process (not persisted, not shared across replicas in this increment): a publish reserves its
+version-count and byte delta before its transactional writes begin and reconciles the reservation
+into committed usage only once the publish succeeds, so a denied or rolled-back publish never
+consumes quota. Off by default, so it is inert until configured.
+
+```toml
+[supply_chain.quota]
+enabled = true
+
+[supply_chain.quota.default_limits]
+max_versions = 500
+
+[supply_chain.quota.per_ecosystem.npm]
+max_versions = 5000
+max_bytes = 10_737_418_240  # 10 GiB
 ```
 
 ## PQ Readiness

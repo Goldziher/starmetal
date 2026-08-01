@@ -220,6 +220,14 @@ impl StarmetalRuntime {
         } else {
             service
         };
+        // Publish quota gate (ADR-0021): a process-local in-memory ledger enforcing a per-ecosystem/
+        // namespace ceiling on published version count and bytes. Independent of the scanner and of
+        // signing — no build feature is required.
+        let service = if config.supply_chain.quota.enabled {
+            service.with_quota(config.supply_chain.quota.clone())
+        } else {
+            service
+        };
         // Signature/provenance gate (ADR-0024): enable the built-in own-graph verification and (for
         // provenance) attestation emission on publish/cache-fill. Requiring either without
         // `[signing]` configured is a startup misconfiguration.

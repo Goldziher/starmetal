@@ -119,6 +119,29 @@ impl PackageName {
             }
         }
     }
+
+    /// The grouping namespace for `ecosystem`, if that ecosystem has a namespace concept: an npm
+    /// scope (`@scope/name`) or a Maven group id (`group:artifact`). `None` for every other
+    /// ecosystem, and for an npm/Maven name that carries no scope/group.
+    ///
+    /// Mirrors the same npm-scope and Maven-groupId splits used elsewhere for this name shape (the
+    /// purl builder in [`crate::sbom`] and the Maven upstream client), so callers that need a
+    /// coordinate's grouping — e.g. the publish quota ledger (ADR-0021) — agree on one definition.
+    pub fn publish_namespace(&self, ecosystem: Ecosystem) -> Option<String> {
+        match ecosystem {
+            Ecosystem::Npm => match self.0.split_once('/') {
+                Some((scope, _name)) if scope.starts_with('@') => Some(scope.to_string()),
+                _ => None,
+            },
+            Ecosystem::Maven => self.0.rsplit_once(':').map(|(group, _artifact)| group.to_string()),
+            Ecosystem::PyPI
+            | Ecosystem::Cargo
+            | Ecosystem::Hex
+            | Ecosystem::RubyGems
+            | Ecosystem::NuGet
+            | Ecosystem::Pub => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
@@ -396,6 +419,45 @@ mod tests {
                 expected,
                 "fixture '{}'",
                 fix["name"].as_str().unwrap_or("?")
+            );
+        }
+    }
+
+    #[test]
+    fn should_derive_npm_scope_as_publish_namespace() {
+        let scoped = PackageName::new("@angular/core");
+        assert_eq!(scoped.publish_namespace(Ecosystem::Npm), Some("@angular".to_string()));
+
+        let unscoped = PackageName::new("left-pad");
+        assert_eq!(unscoped.publish_namespace(Ecosystem::Npm), None);
+    }
+
+    #[test]
+    fn should_derive_maven_group_id_as_publish_namespace() {
+        let coordinate = PackageName::new("org.apache.commons:commons-lang3");
+        assert_eq!(
+            coordinate.publish_namespace(Ecosystem::Maven),
+            Some("org.apache.commons".to_string())
+        );
+
+        let no_group = PackageName::new("commons-lang3");
+        assert_eq!(no_group.publish_namespace(Ecosystem::Maven), None);
+    }
+
+    #[test]
+    fn should_have_no_publish_namespace_for_ecosystems_without_grouping() {
+        for ecosystem in [
+            Ecosystem::PyPI,
+            Ecosystem::Cargo,
+            Ecosystem::Hex,
+            Ecosystem::RubyGems,
+            Ecosystem::NuGet,
+            Ecosystem::Pub,
+        ] {
+            assert_eq!(
+                PackageName::new("some/oddly-formed-name").publish_namespace(ecosystem),
+                None,
+                "{ecosystem} has no namespace concept"
             );
         }
     }
