@@ -11,9 +11,10 @@ use starmetal_core::error::{Result, StarmetalError};
 use starmetal_core::package::{ArtifactId, Ecosystem, PackageName, VersionMetadata};
 use starmetal_core::ports::{PackageService, PublishingService, StatisticsService, StoragePort, UpstreamClient};
 use starmetal_core::publishing::{ProtocolMetadata, PublishRequest, PublishedArtifact, YankRequest};
+use starmetal_core::repository::{HostedFacet, ProxyFacet, RecipeRegistry, RepositoryKind};
 use starmetal_core::supply_chain::{IngestQuarantine, QuarantineReview, SbomIndex, SupplyChainMaintenance};
 use starmetal_server::state::{AppState, UpstreamClients};
-use starmetal_service::{CachingPackageService, SigningService};
+use starmetal_service::{CachingPackageService, ProxyRecipe, SigningService};
 use starmetal_storage::OpenDalStorage;
 
 #[derive(Debug, Clone, Default)]
@@ -80,6 +81,10 @@ pub struct StarmetalRuntime {
     pub package_service: Arc<dyn PackageService>,
     pub publishing_service: Arc<dyn PublishingService>,
     pub statistics_service: Arc<dyn StatisticsService>,
+    /// Facet recipes keyed by `(ecosystem, kind)` (ADR-0019). Built at assembly with one proxy
+    /// recipe per resolved proxy repository, exposing the shared caching service as its proxy and
+    /// hosted facets. Consulted by `build_app` to drive per-repository mounting.
+    pub recipe_registry: Arc<RecipeRegistry>,
     pub upstreams: UpstreamClients,
     /// Handle for scheduled supply-chain re-correlation (ADR-0024). `Some` only when a scanner is
     /// attached (`supply_chain.enabled` under the scanner feature); drives the background sweep.
@@ -248,6 +253,21 @@ impl StarmetalRuntime {
         };
         let service = Arc::new(service);
 
+        // Facet recipe registry (ADR-0019): register one proxy recipe per resolved proxy repository,
+        // exposing the shared caching service as both its proxy and hosted facet. Only proxy kinds
+        // are wired end-to-end (validate_mvp rejects others), so only proxy recipes are registered.
+        let mut recipe_registry = RecipeRegistry::new();
+        for repository in config.resolved_repositories() {
+            if repository.kind == RepositoryKind::Proxy {
+                recipe_registry.register(Arc::new(ProxyRecipe::new(
+                    repository.ecosystem,
+                    service.clone() as Arc<dyn ProxyFacet>,
+                    service.clone() as Arc<dyn HostedFacet>,
+                )));
+            }
+        }
+        let recipe_registry = Arc::new(recipe_registry);
+
         // Expose the supply-chain handles (re-correlation + quarantine review) only when a scanner is
         // actually attached, so a build without the scanner feature (or with supply-chain disabled)
         // carries neither.
@@ -305,6 +325,7 @@ impl StarmetalRuntime {
             package_service: service.clone(),
             publishing_service: service.clone(),
             statistics_service: service,
+            recipe_registry,
             upstreams,
             maintenance,
             quarantine,
@@ -417,6 +438,7 @@ impl StarmetalRuntime {
             self.statistics_service.clone(),
             self.upstreams.clone(),
         )
+        .with_recipe_registry(self.recipe_registry.clone())
         .with_quarantine(self.quarantine.clone())
         .with_ingest_quarantine(self.ingest_quarantine.clone())
         .with_content_maintenance(self.content_maintenance.clone())

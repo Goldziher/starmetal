@@ -7,12 +7,17 @@ use starmetal_core::config::Config;
 use starmetal_core::content::{ContentBrowse, ContentMaintenance};
 use starmetal_core::package::{Ecosystem, PackageName};
 use starmetal_core::ports::{PackageService, PublishingService, StatisticsService};
+use starmetal_core::repository::RecipeRegistry;
 use starmetal_core::supply_chain::{IngestQuarantine, QuarantineReview, SbomIndex};
 
 /// Shared application state, passed to all handlers via axum's State extractor.
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<Config>,
+    /// Facet recipes keyed by `(ecosystem, kind)` (ADR-0019). Consulted by `build_app` to decide
+    /// what to mount per resolved repository: a proxy recipe drives the historical proxy mount.
+    /// Empty when an `AppState` is constructed without one (`build_app` then mounts nothing).
+    pub recipe_registry: Arc<RecipeRegistry>,
     pub package_service: Arc<dyn PackageService>,
     pub publishing_service: Arc<dyn PublishingService>,
     pub statistics_service: Arc<dyn StatisticsService>,
@@ -78,6 +83,7 @@ impl AppState {
         let authorizer = Arc::new(LocalAuthorizer::from_config(&config));
         Self {
             config: Arc::new(config),
+            recipe_registry: Arc::new(RecipeRegistry::new()),
             package_service,
             publishing_service,
             statistics_service,
@@ -89,6 +95,14 @@ impl AppState {
             content_browse: None,
             sbom: None,
         }
+    }
+
+    /// Attach the facet recipe registry (ADR-0019) built by the runtime. Empty by default, in which
+    /// case `build_app` mounts no repository routes; the runtime populates one proxy recipe per
+    /// resolved proxy repository so the historical proxy routes mount unchanged.
+    pub fn with_recipe_registry(mut self, recipe_registry: Arc<RecipeRegistry>) -> Self {
+        self.recipe_registry = recipe_registry;
+        self
     }
 
     /// Attach the quarantine review handle (ADR-0024) built by the runtime. Absent by default so the

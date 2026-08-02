@@ -14,8 +14,9 @@ use starmetal_core::config::Config;
 use starmetal_core::package::Ecosystem;
 use starmetal_core::policy::PolicyConfig;
 use starmetal_core::ports::UpstreamClient;
+use starmetal_core::repository::{HostedFacet, ProxyFacet, RecipeRegistry, RepositoryKind};
 use starmetal_server::state::{AppState, UpstreamClients};
-use starmetal_service::CachingPackageService;
+use starmetal_service::{CachingPackageService, ProxyRecipe};
 use starmetal_storage::OpenDalStorage;
 
 /// A running starmetal test server with in-memory storage.
@@ -147,7 +148,20 @@ impl TestServer {
             nuget_upstream: nuget_client,
             pub_upstream: pub_client,
         };
-        let state = AppState::new(config, service.clone(), service.clone(), service, upstreams);
+        // Populate the facet recipe registry the same way the runtime does, so `build_app`'s
+        // registry-driven mounting produces the historical proxy routes (ADR-0019).
+        let mut recipe_registry = RecipeRegistry::new();
+        for repository in config.resolved_repositories() {
+            if repository.kind == RepositoryKind::Proxy {
+                recipe_registry.register(Arc::new(ProxyRecipe::new(
+                    repository.ecosystem,
+                    service.clone() as Arc<dyn ProxyFacet>,
+                    service.clone() as Arc<dyn HostedFacet>,
+                )));
+            }
+        }
+        let state = AppState::new(config, service.clone(), service.clone(), service, upstreams)
+            .with_recipe_registry(Arc::new(recipe_registry));
         let app = starmetal_server::app::build_app(state);
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")

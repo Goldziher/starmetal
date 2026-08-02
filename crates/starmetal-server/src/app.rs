@@ -5,7 +5,7 @@ use axum::http::header;
 use axum::middleware;
 use axum::routing::get;
 use starmetal_core::package::Ecosystem;
-use starmetal_core::repository::RepositoryKind;
+use starmetal_core::repository::RecipeKey;
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::limit::RequestBodyLimitLayer;
@@ -19,11 +19,17 @@ pub fn build_app(state: AppState) -> Router {
     #[allow(unused_mut)]
     let mut app: Router<AppState> = Router::new().route("/healthz", get(healthz));
 
-    // Mount one adapter per resolved repository (ADR-0019). The repository set is
-    // derived from config: proxy repositories per enabled upstream by default, or
-    // the explicit `[[repositories]]` list. Only the proxy kind is wired today.
+    // Mount one adapter per resolved repository (ADR-0019), driven by the recipe registry. For each
+    // resolved repository we look up the `(ecosystem, kind)` recipe; a recipe exposing a proxy facet
+    // drives the historical proxy mount (behavior-identical to the pre-registry match). Kinds without
+    // a wired mount (hosted/group) are rejected by `validate_mvp`, so a validated deployment never
+    // resolves one here; an unrecognized/absent recipe mounts nothing.
     for repository in state.config.resolved_repositories() {
-        if repository.kind == RepositoryKind::Proxy {
+        let key = RecipeKey::new(repository.ecosystem, repository.kind);
+        let Some(recipe) = state.recipe_registry.get(&key) else {
+            continue;
+        };
+        if recipe.proxy_facet().is_some() {
             app = mount_proxy(app, &repository.name, repository.ecosystem);
         }
     }
