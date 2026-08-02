@@ -298,9 +298,24 @@ fn not_found(identifier: &str, version: &str) -> (StatusCode, String) {
     })
 }
 
+/// The JSON response `Content-Type` for the list-releases and release-metadata endpoints.
+///
+/// SE-0292 nominally specifies `application/vnd.swift.registry.v1+json` here. Tried it and
+/// reverted: against the real Swift 6.3.1 toolchain (`swift package resolve`), the response is
+/// rejected outright — `error: invalid registry response content type '', expected
+/// 'application/json'` — SwiftPM's registry client does not recognize the versioned `+json` media
+/// type as JSON at all, despite advertising `Accept: application/vnd.swift.registry.v1+json` on the
+/// request. `application/json` is what the live toolchain actually requires, confirmed via the
+/// `swift package resolve`/`swift build` end-to-end test in `tests/integration/tests/swift.rs`.
+const SWIFT_REGISTRY_JSON_MEDIA_TYPE: &str = "application/json";
+
 fn json_response<T: serde::Serialize>(body: &T) -> Result<Response, (StatusCode, String)> {
     let bytes = serde_json::to_vec(body).map_err(|err| map_error(&StarmetalError::from(err)))?;
-    Ok(([(header::CONTENT_TYPE, "application/json")], Body::from(bytes)).into_response())
+    Ok((
+        [(header::CONTENT_TYPE, SWIFT_REGISTRY_JSON_MEDIA_TYPE)],
+        Body::from(bytes),
+    )
+        .into_response())
 }
 
 fn map_error(err: &StarmetalError) -> (StatusCode, String) {

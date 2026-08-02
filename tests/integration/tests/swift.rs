@@ -105,6 +105,9 @@ async fn swift_proxy_lists_the_tagged_release() {
             .headers()
             .get(reqwest::header::CONTENT_TYPE)
             .and_then(|value| value.to_str().ok()),
+        // SE-0292 nominally specifies `application/vnd.swift.registry.v1+json`; kept as plain
+        // `application/json` because the real Swift 6.3.1 toolchain rejects the versioned media type
+        // outright (see the `SWIFT_REGISTRY_JSON_MEDIA_TYPE` doc comment in `swift/mod.rs`).
         Some("application/json")
     );
     assert_eq!(
