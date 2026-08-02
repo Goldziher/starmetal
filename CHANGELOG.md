@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `starmetal-oidc` crate: an offline static-JWKS OIDC bearer validator (ADR-0022) that proves the
+  `Authenticator` port is a clean seam for a second identity backend. `OidcAuthenticator` verifies JWT
+  bearer tokens (RS256/ES256 only — `alg: none` and HMAC algorithms are rejected as an
+  algorithm-confusion defense) against a static JWKS from `[oidc]` config, checking `exp`/`iss`/`aud`
+  and mapping a configurable claim (`oidc.principal_claim`, default `sub`) to a principal. It is
+  composed ahead of the flat-token authenticator via the core `CompositeAuthenticator`, so a JWT
+  authenticates via OIDC while an unchanged flat token still authenticates via the fallback;
+  authorization stays on `LocalAuthorizer`. Off by default and gated behind the `oidc` build feature
+  (included in `full`). Deliberately offline — no JWKS-URL fetch, OIDC discovery, or token refresh
+  (a live-IdP backend is a later stage).
+
 - `starmetal-metadata` crate: an optional Postgres-backed content model (ADR-0020) that dual-writes a
   `Component → Asset → Blob` graph alongside the flat object store on publish. Blobs are addressed by
   blake3 digest, so identical bytes published across ecosystems share one stored blob (dedup), and

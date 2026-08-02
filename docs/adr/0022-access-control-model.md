@@ -44,12 +44,23 @@ services but implemented outside the domain.
 - `LocalAuthorizer` implements the core `Authorizer` port (with a separate `Authenticator` port for
   identity), deny-by-default, migrating the flat `auth`/`admin`/`publishing` tokens (ADR-0011) into the
   grant model. It is wired into the publish path across all eight adapters and into the admin API.
+- A second identity backend proves the `Authenticator` port is a clean seam: `starmetal-oidc`'s
+  `OidcAuthenticator` validates OIDC JWT bearer tokens (RS256/ES256, rejecting `alg: none` and HMAC
+  algorithms as an algorithm-confusion defense) against a **static** JWKS from config, and is composed
+  ahead of the flat-token authenticator via the core `CompositeAuthenticator`. A JWT authenticates via
+  OIDC while an unchanged flat token still authenticates via the fallback; authorization (grant
+  evaluation) stays on `LocalAuthorizer`. Off by default and gated behind the `oidc` feature, so the
+  server behaves exactly as before when unconfigured.
+  - **Explicitly out of scope for this stage:** a live IdP integration — no JWKS-URL fetch, OIDC
+    discovery, or token refresh. The validator takes a static JWKS from config and performs no network
+    I/O. A live-IdP backend slots behind the same `Authenticator` port later.
 
 ## Deferred
 
 - Migrating the read-path middleware (`require_bearer_token`) off the legacy `Config::authorize_*`
   path onto the `Authorizer` port — read-gating still uses the old scheme.
-- OIDC/SAML/LDAP delegated identity backends (design the port for them now; implement later).
+- Live-IdP OIDC (JWKS-URL fetch, OIDC discovery, token refresh) and SAML/LDAP delegated identity
+  backends. The offline static-JWKS OIDC backend above lands the port; these extend it.
 - Forge-delegated identity integration (the standalone-vs-embedded swap) — enabled by this port, not
   built here.
 - Content-selector expressions compiled to a pushed-down query predicate (ADR-0020).

@@ -279,6 +279,7 @@ service/core boundary.
 | `starmetal-adapters` | Feature-gated protocol routers and upstream clients |
 | `starmetal-server` | Axum app assembly and Tower middleware |
 | `starmetal-authz` | `LocalAuthorizer`: deny-by-default `Authorizer`/`Authenticator` implementation migrating flat auth/admin/publishing tokens into a grant model (ADR-0022) |
+| `starmetal-oidc` | `OidcAuthenticator`: offline static-JWKS OIDC bearer validator behind the `Authenticator` port, composed ahead of the flat-token backend (ADR-0022) |
 | `starmetal-metadata` | Postgres-backed content model: component/asset/blob, blake3 dedup, garbage collection, retention (ADR-0020) |
 | `starmetal-ops` | Shared local operator API used by CLI and MCP |
 | `starmetal-cli` | Clap CLI and stdio MCP server |
