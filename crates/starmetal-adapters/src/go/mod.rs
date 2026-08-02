@@ -205,8 +205,16 @@ async fn zip(
         .await
         .map_err(|err| map_error(&err))?;
     // `build_module_zip` enforces `max_zip_bytes` itself, fail-fast, before the whole tree is
-    // materialized — see its doc comment.
-    let module_zip = build_module_zip(module_path, version, &source, max_zip_bytes).map_err(|err| map_error(&err))?;
+    // materialized — see its doc comment. The inflate/deflate build itself is CPU-bound, so run it on
+    // a blocking thread rather than the async worker.
+    let module_path_owned = module_path.to_string();
+    let version_owned = version.to_string();
+    let module_zip = tokio::task::spawn_blocking(move || {
+        build_module_zip(&module_path_owned, &version_owned, &source, max_zip_bytes)
+    })
+    .await
+    .map_err(map_join_error)?
+    .map_err(|err| map_error(&err))?;
     Ok(([(header::CONTENT_TYPE, "application/zip")], Body::from(module_zip)).into_response())
 }
 
@@ -253,6 +261,15 @@ fn format_rfc3339(seconds: i64) -> String {
 fn map_error(err: &StarmetalError) -> (StatusCode, String) {
     tracing::warn!(error = %err, "Go module proxy request failed");
     crate::map_public_error(err)
+}
+
+/// Map a `tokio::task::spawn_blocking` join error (the blocking module-zip build task panicked or
+/// was cancelled) to the same `StarmetalError::Upstream` (-> 502) convention used for every other
+/// upstream failure in this adapter.
+fn map_join_error(err: tokio::task::JoinError) -> (StatusCode, String) {
+    map_error(&StarmetalError::Upstream(format!(
+        "Go module zip build task failed: {err}"
+    )))
 }
 
 #[cfg(test)]

@@ -225,8 +225,16 @@ async fn release_metadata(
     let source = archive_zip(mirror, git_url, &tag)
         .await
         .map_err(|err| map_error(&err))?;
-    let registry_zip = build_registry_zip(name, &source, max_archive_bytes).map_err(|err| map_error(&err))?;
-    let checksum = upstream::sha256_hex(&registry_zip);
+    // The inflate/deflate zip build and the SHA-256 hash are both CPU-bound; run them on a blocking
+    // thread so a large source tree doesn't hold up the async worker.
+    let name = name.to_string();
+    let checksum = tokio::task::spawn_blocking(move || {
+        let registry_zip = build_registry_zip(&name, &source, max_archive_bytes)?;
+        Ok::<_, StarmetalError>(upstream::sha256_hex(&registry_zip))
+    })
+    .await
+    .map_err(map_join_error)?
+    .map_err(|err| map_error(&err))?;
 
     json_response(&ReleaseMetadata {
         id: identifier.to_string(),
@@ -267,10 +275,19 @@ async fn archive(
         .await
         .map_err(|err| map_error(&err))?;
     // `build_registry_zip` enforces `max_archive_bytes` itself, fail-fast, before the whole tree is
-    // materialized — see its doc comment — so no separate post-build size check is needed here.
-    let registry_zip = build_registry_zip(name, &source, max_archive_bytes).map_err(|err| map_error(&err))?;
+    // materialized — see its doc comment — so no separate post-build size check is needed here. The
+    // inflate/deflate build and the SHA-256 hash are both CPU-bound; run them on a blocking thread so
+    // a large source tree doesn't hold up the async worker.
+    let name_owned = name.to_string();
+    let (registry_zip, digest_value) = tokio::task::spawn_blocking(move || {
+        let registry_zip = build_registry_zip(&name_owned, &source, max_archive_bytes)?;
+        let digest_value = format!("sha-256={}", upstream::sha256_base64(&registry_zip));
+        Ok::<_, StarmetalError>((registry_zip, digest_value))
+    })
+    .await
+    .map_err(map_join_error)?
+    .map_err(|err| map_error(&err))?;
 
-    let digest_value = format!("sha-256={}", upstream::sha256_base64(&registry_zip));
     let disposition_value = format!("attachment; filename=\"{name}-{version}.zip\"");
     let headers = [
         (header::CONTENT_TYPE, HeaderValue::from_static("application/zip")),
@@ -302,6 +319,15 @@ fn json_response<T: serde::Serialize>(body: &T) -> Result<Response, (StatusCode,
 fn map_error(err: &StarmetalError) -> (StatusCode, String) {
     tracing::warn!(error = %err, "Swift Package Registry proxy request failed");
     crate::map_public_error(err)
+}
+
+/// Map a `tokio::task::spawn_blocking` join error (the blocking archive-build task panicked or was
+/// cancelled) to the same `StarmetalError::Upstream` (-> 502) convention used for every other
+/// upstream failure in this adapter.
+fn map_join_error(err: tokio::task::JoinError) -> (StatusCode, String) {
+    map_error(&StarmetalError::Upstream(format!(
+        "Swift registry archive build task failed: {err}"
+    )))
 }
 
 #[cfg(test)]
