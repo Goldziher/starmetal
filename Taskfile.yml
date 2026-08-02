@@ -272,6 +272,11 @@ tasks:
     cmds:
       - cargo test -p starmetal-integration-tests --test pubdev -- --ignored --test-threads=1
 
+  test:e2e:go:
+    desc: Run live Go module proxy (go get/go mod download) E2E tests
+    cmds:
+      - cargo test -p starmetal-integration-tests --test go -- --ignored --test-threads=1
+
   fmt:check:
     desc: Check Rust formatting
     cmds:
@@ -299,6 +304,7 @@ tasks:
       - cargo check -p starmetal-cli --no-default-features --features rubygems,backend-memory
       - cargo check -p starmetal-cli --no-default-features --features nuget,backend-memory
       - cargo check -p starmetal-cli --no-default-features --features pub,backend-memory
+      - cargo check -p starmetal-cli --no-default-features --features go,backend-memory
       - cargo check -p starmetal-cli --no-default-features --features signing-x509,backend-memory
       - cargo check -p starmetal-cli --no-default-features --features pq,backend-memory
       - cargo check -p starmetal-cli --no-default-features --features metadata,backend-memory

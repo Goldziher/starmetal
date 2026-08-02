@@ -5306,6 +5306,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing-subscriber",
+ "zip",
 ]
 
 [[package]]
