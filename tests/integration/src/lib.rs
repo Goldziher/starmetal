@@ -26,6 +26,8 @@ pub struct TestServer {
     shutdown: tokio::sync::oneshot::Sender<()>,
     // Kept alive for the server's lifetime: the Go module proxy's git-mirror cache lives here.
     _go_mirror_cache: tempfile::TempDir,
+    // Kept alive for the server's lifetime: the Zig tarball proxy's git-mirror cache lives here.
+    _zig_mirror_cache: tempfile::TempDir,
 }
 
 impl TestServer {
@@ -132,6 +134,14 @@ impl TestServer {
             std::time::Duration::from_secs(300),
         ));
 
+        // Zig, like Go, is never registered into `upstream_clients`/`CachingPackageService`
+        // (ADR-0023): the tarball proxy reads through this mirror handle directly.
+        let zig_mirror_cache = tempfile::tempdir().expect("zig mirror cache tempdir");
+        let zig_mirror: Arc<dyn starmetal_git::GitMirror> = Arc::new(GixMirror::new(
+            zig_mirror_cache.path(),
+            std::time::Duration::from_secs(300),
+        ));
+
         let service = Arc::new(CachingPackageService::new(
             Arc::new(storage),
             upstream_clients,
@@ -148,6 +158,7 @@ impl TestServer {
                     .enabled = true;
             }
             config.go.enabled = true;
+            config.zig.enabled = true;
         }
         configure(&mut config);
         let upstreams = UpstreamClients {
@@ -160,13 +171,17 @@ impl TestServer {
             nuget_upstream: nuget_client,
             pub_upstream: pub_client,
             go_mirror,
+            zig_mirror,
         };
         // Populate the facet recipe registry the same way the runtime does, so `build_app`'s
-        // registry-driven mounting produces the historical proxy routes (ADR-0019). Go has no
-        // ProxyFacet recipe (ADR-0023) — `build_app` mounts it unconditionally instead.
+        // registry-driven mounting produces the historical proxy routes (ADR-0019). Go and Zig
+        // have no ProxyFacet recipe (ADR-0023) — `build_app` mounts each unconditionally instead.
         let mut recipe_registry = RecipeRegistry::new();
         for repository in config.resolved_repositories() {
-            if repository.kind == RepositoryKind::Proxy && repository.ecosystem != Ecosystem::Go {
+            if repository.kind == RepositoryKind::Proxy
+                && repository.ecosystem != Ecosystem::Go
+                && repository.ecosystem != Ecosystem::Zig
+            {
                 recipe_registry.register(Arc::new(ProxyRecipe::new(
                     repository.ecosystem,
                     service.clone() as Arc<dyn ProxyFacet>,
@@ -198,6 +213,7 @@ impl TestServer {
             addr,
             shutdown: shutdown_tx,
             _go_mirror_cache: go_mirror_cache,
+            _zig_mirror_cache: zig_mirror_cache,
         }
     }
 
@@ -249,6 +265,11 @@ impl TestServer {
     /// Go module proxy URL for `GOPROXY`.
     pub fn go_proxy_url(&self) -> String {
         format!("{}/go", self.base_url())
+    }
+
+    /// Zig tarball proxy base URL, mounted at `/zig`.
+    pub fn zig_proxy_url(&self) -> String {
+        format!("{}/zig", self.base_url())
     }
 
     /// Shutdown the server.

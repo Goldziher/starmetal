@@ -21,6 +21,8 @@ pub = ["starmetal-adapters/pub"]
 # Only the `GitMirror` port is needed here (to type the state's mirror handle) — the concrete
 # gitoxide backend is selected in `starmetal-ops`.
 go = ["starmetal-adapters/go", "dep:starmetal-git"]
+# Same shape as `go` — only the `GitMirror` port is needed here.
+zig = ["starmetal-adapters/zig", "dep:starmetal-git"]
 
 [dependencies]
 axum.workspace = true

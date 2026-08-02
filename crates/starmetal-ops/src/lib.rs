@@ -247,6 +247,10 @@ impl StarmetalRuntime {
         // GOPROXY adapter reads through this mirror handle directly, never through PackageService.
         #[cfg(feature = "go")]
         let go_mirror = build_go_mirror(&config);
+        // Zig, like Go, is never registered into `clients`/`CachingPackageService` (ADR-0023): the
+        // tarball proxy reads through this mirror handle directly.
+        #[cfg(feature = "zig")]
+        let zig_mirror = build_zig_mirror(&config);
 
         let signing = SigningService::from_config(&config.signing)?;
         let service =
@@ -298,10 +302,13 @@ impl StarmetalRuntime {
         // are wired end-to-end (validate_mvp rejects others), so only proxy recipes are registered.
         let mut recipe_registry = RecipeRegistry::new();
         for repository in config.resolved_repositories() {
-            // Go has no ProxyFacet recipe (ADR-0023): `build_app` mounts it unconditionally as a
-            // proxy repository instead of consulting the recipe registry, since its GOPROXY
-            // translation never goes through `CachingPackageService`.
-            if repository.kind == RepositoryKind::Proxy && repository.ecosystem != Ecosystem::Go {
+            // Go and Zig have no ProxyFacet recipe (ADR-0023): `build_app` mounts each
+            // unconditionally as a proxy repository instead of consulting the recipe registry,
+            // since neither's translation goes through `CachingPackageService`.
+            if repository.kind == RepositoryKind::Proxy
+                && repository.ecosystem != Ecosystem::Go
+                && repository.ecosystem != Ecosystem::Zig
+            {
                 recipe_registry.register(Arc::new(ProxyRecipe::new(
                     repository.ecosystem,
                     service.clone() as Arc<dyn ProxyFacet>,
@@ -388,6 +395,8 @@ impl StarmetalRuntime {
             pub_upstream,
             #[cfg(feature = "go")]
             go_mirror,
+            #[cfg(feature = "zig")]
+            zig_mirror,
         };
 
         Ok(Self {
@@ -770,6 +779,15 @@ fn registry_statuses(config: &Config) -> Vec<RegistryStatus> {
         url: None,
         artifact_url: None,
     });
+    // Zig, like Go, has no `[upstream]` entry; its status comes from `[zig]`.
+    statuses.push(RegistryStatus {
+        ecosystem: Ecosystem::Zig,
+        configured: true,
+        enabled: config.zig.enabled,
+        compiled: cfg!(feature = "zig"),
+        url: None,
+        artifact_url: None,
+    });
     statuses
 }
 
@@ -783,6 +801,18 @@ fn build_go_mirror(config: &Config) -> Arc<dyn starmetal_git::GitMirror> {
     Arc::new(starmetal_git::GixMirror::new(
         config.go.mirror_cache_dir.clone(),
         std::time::Duration::from_secs(config.go.mirror_refresh_interval_secs),
+    ))
+}
+
+/// Construct the gitoxide-backed [`starmetal_git::GitMirror`] backing the Zig tarball proxy.
+///
+/// Same shape as [`build_go_mirror`]: built unconditionally whenever the `zig` feature is compiled
+/// in; `config.zig.enabled` only governs whether the route reaches it.
+#[cfg(feature = "zig")]
+fn build_zig_mirror(config: &Config) -> Arc<dyn starmetal_git::GitMirror> {
+    Arc::new(starmetal_git::GixMirror::new(
+        config.zig.mirror_cache_dir.clone(),
+        std::time::Duration::from_secs(config.zig.mirror_refresh_interval_secs),
     ))
 }
 

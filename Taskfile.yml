@@ -305,6 +305,7 @@ tasks:
       - cargo check -p starmetal-cli --no-default-features --features nuget,backend-memory
       - cargo check -p starmetal-cli --no-default-features --features pub,backend-memory
       - cargo check -p starmetal-cli --no-default-features --features go,backend-memory
+      - cargo check -p starmetal-cli --no-default-features --features zig,backend-memory
       - cargo check -p starmetal-cli --no-default-features --features signing-x509,backend-memory
       - cargo check -p starmetal-cli --no-default-features --features pq,backend-memory
       - cargo check -p starmetal-cli --no-default-features --features metadata,backend-memory

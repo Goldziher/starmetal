@@ -32,6 +32,7 @@ full = [
   "nuget",
   "pub",
   "go",
+  "zig",
   "backend-fs",
   "update",
   "metadata",
@@ -58,6 +59,7 @@ rubygems = ["starmetal-adapters/rubygems", "starmetal-ops/rubygems", "starmetal-
 nuget = ["starmetal-adapters/nuget", "starmetal-ops/nuget", "starmetal-server/nuget"]
 pub = ["starmetal-adapters/pub", "starmetal-ops/pub", "starmetal-server/pub"]
 go = ["starmetal-adapters/go", "starmetal-ops/go", "starmetal-server/go"]
+zig = ["starmetal-adapters/zig", "starmetal-ops/zig", "starmetal-server/zig"]
 backend-fs = ["starmetal-ops/backend-fs", "starmetal-storage/backend-fs"]
 backend-memory = ["starmetal-ops/backend-memory", "starmetal-storage/backend-memory"]
 backend-s3 = ["starmetal-ops/backend-s3", "starmetal-storage/backend-s3"]

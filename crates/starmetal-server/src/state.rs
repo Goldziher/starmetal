@@ -103,6 +103,11 @@ pub struct UpstreamClients {
     /// neither this crate nor `starmetal-adapters` depends on a git library.
     #[cfg(feature = "go")]
     pub go_mirror: Arc<dyn starmetal_git::GitMirror>,
+    /// Git-mirror handle backing the Zig tarball proxy (ADR-0023). Same shape as
+    /// [`UpstreamClients::go_mirror`] — a port trait object, with the concrete gitoxide-backed
+    /// implementation selected in `starmetal-ops`.
+    #[cfg(feature = "zig")]
+    pub zig_mirror: Arc<dyn starmetal_git::GitMirror>,
 }
 
 impl AppState {
@@ -504,6 +509,17 @@ impl starmetal_adapters::go::HasGoState for AppState {
 
     fn git_mirror(&self) -> &Arc<dyn starmetal_git::GitMirror> {
         &self.upstreams.go_mirror
+    }
+}
+
+#[cfg(feature = "zig")]
+impl starmetal_adapters::zig::HasZigState for AppState {
+    fn config(&self) -> &Arc<Config> {
+        &self.config
+    }
+
+    fn git_mirror(&self) -> &Arc<dyn starmetal_git::GitMirror> {
+        &self.upstreams.zig_mirror
     }
 }
 
