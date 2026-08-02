@@ -27,7 +27,7 @@ use starmetal_adapters::rubygems::upstream::RubyGemsUpstreamClient;
 #[cfg(feature = "oidc")]
 use starmetal_core::authz::{Authenticator, CompositeAuthenticator};
 use starmetal_core::config::Config;
-use starmetal_core::content::ContentBrowse;
+use starmetal_core::content::{ContentBrowse, ContentMaintenance, ContentStore};
 use starmetal_core::package::Ecosystem;
 use starmetal_core::ports::{PackageService, UpstreamClient};
 use starmetal_core::publishing::{PublishTokenConfig, TokenScope};
@@ -203,6 +203,17 @@ pub struct TestServerBuilder {
     signing_key: Option<TestSigningKey>,
     group_members: HashMap<String, Vec<Arc<dyn PackageService>>>,
     content_browse: Option<Arc<dyn ContentBrowse>>,
+    content_store: Option<ContentStoreHandles>,
+}
+
+/// The three content-model port handles a real store supplies, injected together via
+/// [`TestServerBuilder::with_content_store`]: the store the publishing service dual-writes into, and
+/// the browse/maintenance views `AppState` exposes to the `/api/v1/components` and admin GC/retention
+/// routes.
+pub struct ContentStoreHandles {
+    store: Arc<dyn ContentStore>,
+    browse: Arc<dyn ContentBrowse>,
+    maintenance: Arc<dyn ContentMaintenance>,
 }
 
 impl TestServerBuilder {
@@ -215,6 +226,7 @@ impl TestServerBuilder {
             signing_key: None,
             group_members: HashMap::new(),
             content_browse: None,
+            content_store: None,
         }
     }
 
@@ -263,6 +275,27 @@ impl TestServerBuilder {
         self
     }
 
+    /// Attach a real content store (ADR-0020), wiring the full metadata path production runs: the
+    /// publishing service dual-writes the content model on every publish (via
+    /// `CachingPackageService::with_content_store`), and `AppState` exposes the store's `browse` view
+    /// to `GET /api/v1/components` and the `maintenance` view to the admin GC/retention routes.
+    /// Supersedes any [`with_content_browse`](Self::with_content_browse) fake. The caller constructs
+    /// the store (e.g. a `PostgresContentStore` over a testcontainer) and its maintenance wrapper, so
+    /// this stays a core-trait seam with no metadata dependency of its own.
+    pub fn with_content_store(
+        mut self,
+        store: Arc<dyn ContentStore>,
+        browse: Arc<dyn ContentBrowse>,
+        maintenance: Arc<dyn ContentMaintenance>,
+    ) -> Self {
+        self.content_store = Some(ContentStoreHandles {
+            store,
+            browse,
+            maintenance,
+        });
+        self
+    }
+
     /// Inject a publish signing key (ADR-0004/ADR-0024), wiring `config.signing` so the real
     /// `SigningService::from_config` path loads it (private-key-permission check included). Applied
     /// before the `configure` closure runs, so a test can further customize `config.signing` (e.g.
@@ -296,6 +329,7 @@ impl TestServerBuilder {
             signing_key,
             mut group_members,
             content_browse,
+            content_store,
         } = self;
 
         let storage = OpenDalStorage::memory().expect("failed to create memory storage");
@@ -445,6 +479,11 @@ impl TestServerBuilder {
         if let Some(verifier) = verifier {
             service_builder = service_builder.with_verifier(verifier);
         }
+        // Real content store (ADR-0020): attach to the service so every publish dual-writes the
+        // content model, before the single `Arc::new` so every AppState handle observes it.
+        if let Some(handles) = &content_store {
+            service_builder = service_builder.with_content_store(handles.store.clone());
+        }
         let service = Arc::new(service_builder);
 
         // Populate the facet recipe registry the same way the runtime does, so `build_app`'s
@@ -521,17 +560,23 @@ impl TestServerBuilder {
             swift_archive_cache,
         };
 
+        // A real content store supplies both the browse and maintenance views; otherwise fall back to
+        // any in-memory browse fake (`with_content_browse`) and no maintenance handle.
+        let (content_browse, content_maintenance) = match content_store {
+            Some(handles) => (Some(handles.browse), Some(handles.maintenance)),
+            None => (content_browse, None),
+        };
         let state = AppState::new(config, service.clone(), service.clone(), service, upstreams)
             .with_recipe_registry(Arc::new(recipe_registry))
             .with_group_mounts(Arc::new(group_mounts))
             .with_quarantine(quarantine)
             .with_ingest_quarantine(ingest_quarantine)
             .with_sbom(sbom)
-            // In-memory browse handle (ADR-0022) when a test opted in via `with_content_browse`, so
-            // `GET /api/v1/components` reaches the authorizer instead of the content-model-absent 404.
-            .with_content_browse(content_browse);
-        // The Postgres-backed content store (ADR-0020) that also drives `content_maintenance` is
-        // deferred to milestone M5; `content_maintenance` stays at the `AppState` default of `None`.
+            // Browse handle (ADR-0022) so `GET /api/v1/components` reaches the authorizer instead of
+            // the content-model-absent 404; maintenance handle (ADR-0020) so the admin GC/retention
+            // routes reach a real store instead of reporting the workflow disabled.
+            .with_content_browse(content_browse)
+            .with_content_maintenance(content_maintenance);
 
         // Compose the OIDC backend ahead of the flat-token authenticator (ADR-0022), mirroring
         // `starmetal-ops`'s `app_state` (~:545-555), using the inline `config.oidc.jwks` only — no

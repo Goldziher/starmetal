@@ -7,6 +7,11 @@ license.workspace = true
 publish = false
 
 [features]
+# Off by default: pulls the Postgres content store (ADR-0020) plus testcontainers so a test can drive
+# a real store through `TestServerBuilder::with_content_store`. Kept behind a feature so the default
+# integration suite stays offline and Docker-free (the metadata tests are `#[ignore]`d, like the
+# metadata crate's own suite).
+metadata = ["dep:starmetal-metadata", "dep:testcontainers", "dep:testcontainers-modules"]
 # Off by default: fronts the flat-token authorizer with a static-JWKS OIDC `CompositeAuthenticator`
 # (ADR-0022) when `config.oidc.enabled`, mirroring `starmetal-ops`'s `oidc` feature.
 oidc = ["dep:starmetal-oidc"]
@@ -34,6 +39,7 @@ starmetal-adapters = { workspace = true, features = [
 ] }
 starmetal-core = { workspace = true, features = ["test-support"] }
 starmetal-git = { workspace = true, features = ["gix-backend"] }
+starmetal-metadata = { workspace = true, optional = true }
 starmetal-oidc = { workspace = true, optional = true }
 starmetal-server = { workspace = true, features = [
   "cargo-registry",
@@ -51,6 +57,8 @@ starmetal-server = { workspace = true, features = [
 starmetal-service.workspace = true
 starmetal-storage = { workspace = true, features = ["backend-memory"] }
 tempfile.workspace = true
+testcontainers = { workspace = true, optional = true }
+testcontainers-modules = { workspace = true, optional = true }
 tokio.workspace = true
 
 [dev-dependencies]

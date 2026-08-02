@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - "crates/starmetal-metadata/**"
+      - "crates/starmetal-service/**"
+      - "crates/starmetal-server/**"
+      - "tests/integration/**"
       - "scythe.toml"
       - ".github/workflows/ci-metadata.yaml"
   push:
@@ -11,6 +14,9 @@ on:
       - main
     paths:
       - "crates/starmetal-metadata/**"
+      - "crates/starmetal-service/**"
+      - "crates/starmetal-server/**"
+      - "tests/integration/**"
       - "scythe.toml"
       - ".github/workflows/ci-metadata.yaml"
 
@@ -52,4 +58,4 @@ jobs:
             git diff crates/starmetal-metadata/src/generated/
             exit 1
           fi
-      - run: task test:metadata
+      - run: task test:content-store

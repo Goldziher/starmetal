@@ -222,6 +222,13 @@ tasks:
     cmds:
       - cargo test -p starmetal-metadata -- --ignored --test-threads=1
 
+  test:content-store:
+    desc: Run the full Postgres-backed content-store surface across crates (requires Docker)
+    cmds:
+      - task: test:metadata
+      - cargo test -p starmetal-service --test content_publish -- --ignored --test-threads=1
+      - cargo test -p starmetal-integration-tests --features metadata --test content_store_http -- --ignored --test-threads=1
+
   conformance:
     desc: Run fixture-based registry conformance tests
     cmds:
