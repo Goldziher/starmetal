@@ -27,9 +27,10 @@ use starmetal_core::authz::{Authenticator, CompositeAuthenticator};
 use starmetal_core::config::Config;
 use starmetal_core::package::Ecosystem;
 use starmetal_core::ports::{PackageService, UpstreamClient};
+use starmetal_core::publishing::{PublishTokenConfig, TokenScope};
 use starmetal_core::repository::{HostedFacet, ProxyFacet, RecipeRegistry, RepositoryKind};
 use starmetal_core::signing::{SigningAlgorithm, SigningConfig, SigningKeyConfig, SigningKeyStatus, SigningMode};
-use starmetal_core::supply_chain::{IngestQuarantine, QuarantineReview, SbomIndex, Scanner};
+use starmetal_core::supply_chain::{IngestQuarantine, QuarantineReview, SbomIndex, Scanner, Verifier};
 use starmetal_git::GixMirror;
 use starmetal_server::state::{AppState, GroupMount, UpstreamClients};
 use starmetal_service::{CachingPackageService, GroupPackageService, ProxyRecipe, SigningService};
@@ -195,6 +196,7 @@ pub struct TestServerBuilder {
     enable_all: bool,
     configure: Box<dyn FnOnce(&mut Config)>,
     scanner: Option<Arc<dyn Scanner>>,
+    verifier: Option<Arc<dyn Verifier>>,
     signing_key: Option<TestSigningKey>,
     group_members: HashMap<String, Vec<Arc<dyn PackageService>>>,
 }
@@ -205,6 +207,7 @@ impl TestServerBuilder {
             enable_all: false,
             configure: Box::new(|_| {}),
             scanner: None,
+            verifier: None,
             signing_key: None,
             group_members: HashMap::new(),
         }
@@ -229,6 +232,18 @@ impl TestServerBuilder {
     /// admin quarantine/ingest-quarantine handles are attached to `AppState`.
     pub fn with_scanner(mut self, scanner: Arc<dyn Scanner>) -> Self {
         self.scanner = Some(scanner);
+        self
+    }
+
+    /// Attach an external signature/provenance [`Verifier`] (ADR-0024). Unlike [`with_scanner`], this
+    /// has no `starmetal-ops` equivalent — production wires only the built-in own-graph gate — so it is
+    /// a pure test seam: when attached it *replaces* the built-in signature/provenance checks on every
+    /// ingest and serve (see `CachingPackageService::enforce_verification`), letting a test drive a
+    /// deterministic `Allow`/`Deny` decision (e.g. `StubVerifier`) through the real HTTP gate without
+    /// needing signed fixtures. Takes effect unconditionally when set, independent of
+    /// `supply_chain.enabled`.
+    pub fn with_verifier(mut self, verifier: Arc<dyn Verifier>) -> Self {
+        self.verifier = Some(verifier);
         self
     }
 
@@ -261,6 +276,7 @@ impl TestServerBuilder {
             enable_all,
             configure,
             scanner,
+            verifier,
             signing_key,
             mut group_members,
         } = self;
@@ -406,6 +422,11 @@ impl TestServerBuilder {
                 .require_signature(config.supply_chain.require_signature)
                 .require_provenance(config.supply_chain.require_provenance)
                 .emit_provenance(config.supply_chain.require_provenance);
+        }
+        // External verifier seam (test-only, no ops equivalent): replaces the built-in checks on every
+        // ingest/serve. Attached last and unconditionally, still before the single `Arc::new`.
+        if let Some(verifier) = verifier {
+            service_builder = service_builder.with_verifier(verifier);
         }
         let service = Arc::new(service_builder);
 
@@ -623,4 +644,47 @@ fn generate_ed25519_secret() -> [u8; 32] {
         .unwrap_or_default();
     let seed = format!("starmetal-test-signing-key-{count}-{nanos}");
     *blake3::hash(seed.as_bytes()).as_bytes()
+}
+
+/// Enable local publishing with a single publish-scoped bearer token allowed for every ecosystem and
+/// package, mirroring a `[[publishing.tokens]]` declaration. Call inside a
+/// [`TestServerBuilder::configure`] closure; the caller reuses `token` as the `Authorization: Bearer`
+/// value when uploading (see [`publish_pypi_legacy`]).
+pub fn enable_publishing(config: &mut Config, token: &str) {
+    config.publishing.enabled = true;
+    config.publishing.tokens.push(PublishTokenConfig {
+        token: token.to_string(),
+        scopes: vec![TokenScope::Publish],
+        ecosystems: Vec::new(),
+        packages: Vec::new(),
+    });
+}
+
+/// Publish an artifact through the real PyPI legacy upload route (`POST /pypi/legacy/`) — the simplest
+/// multipart path into `PublishingService`. Returns the raw response so the caller asserts status and
+/// body (e.g. `200` on success, `413` for a quota breach, `403` for a blocked scan or verifier deny).
+/// `token` must be a publish-scoped bearer (see [`enable_publishing`]).
+pub async fn publish_pypi_legacy(
+    client: &reqwest::Client,
+    base_url: &str,
+    token: &str,
+    name: &str,
+    version: &str,
+    filename: &str,
+    data: &[u8],
+) -> reqwest::Response {
+    let form = reqwest::multipart::Form::new()
+        .text("name", name.to_string())
+        .text("version", version.to_string())
+        .part(
+            "content",
+            reqwest::multipart::Part::bytes(data.to_vec()).file_name(filename.to_string()),
+        );
+    client
+        .post(format!("{base_url}/pypi/legacy/"))
+        .bearer_auth(token)
+        .multipart(form)
+        .send()
+        .await
+        .expect("pypi legacy upload request")
 }

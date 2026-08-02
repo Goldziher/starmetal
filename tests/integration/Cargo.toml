@@ -17,6 +17,7 @@ axum.workspace = true
 blake3.workspace = true
 ed25519-dalek = { workspace = true, features = ["alloc"] }
 pkcs8.workspace = true
+reqwest = { workspace = true, features = ["multipart"] }
 starmetal-adapters = { workspace = true, features = [
   "cargo-registry",
   "go",
@@ -55,7 +56,6 @@ tokio.workspace = true
 bytes.workspace = true
 flate2.workspace = true
 hex.workspace = true
-reqwest.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 tar.workspace = true
