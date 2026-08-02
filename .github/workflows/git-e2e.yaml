@@ -13,6 +13,8 @@ on:
       - "crates/starmetal-adapters/**"
       - "crates/starmetal-server/**"
       - "tests/integration/**"
+      - "docker/git-e2e/**"
+      - "Dockerfile"
       - "Taskfile.yml"
       - ".github/workflows/git-e2e.yaml"
   push:
@@ -23,6 +25,8 @@ on:
       - "crates/starmetal-adapters/**"
       - "crates/starmetal-server/**"
       - "tests/integration/**"
+      - "docker/git-e2e/**"
+      - "Dockerfile"
       - "Taskfile.yml"
       - ".github/workflows/git-e2e.yaml"
 
@@ -62,3 +66,25 @@ jobs:
         with:
           version: 3.51.1
       - run: task test:e2e:git
+
+  git-docker-e2e:
+    name: git-as-source Docker E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: go-task/setup-task@v2
+        with:
+          version: 3.51.1
+      - name: Run deterministic Docker git-as-source E2E
+        run: task docker:git:e2e
+        env:
+          SM_GIT_E2E_ARTIFACTS: .artifacts/docker-git-e2e
+      - name: Upload Docker git E2E logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-git-e2e-logs
+          path: .artifacts/docker-git-e2e
+          if-no-files-found: ignore

@@ -105,6 +105,12 @@ tasks:
     cmds:
       - ./docker/proxy-e2e/run.sh --pnpm
 
+  docker:git:e2e:
+    desc: Run the deterministic Docker git-as-source E2E (Go/Zig/Swift, file:// upstream, offline flip)
+    cmds:
+      - task: docker:build
+      - STARMETAL_GIT_E2E_SKIP_BUILD=1 ./docker/git-e2e/run.sh
+
   docker:publish:e2e:
     desc: Run deterministic Docker publish E2E tests currently supported by local npm/pnpm
     cmds:
