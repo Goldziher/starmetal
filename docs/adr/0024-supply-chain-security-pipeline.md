@@ -62,12 +62,24 @@ enforced by ordered middleware on both push and pull paths, with pluggable scann
   the `StoragePort`, re-correlated on a schedule (`SupplyChainMaintenance`).
 - Serve-time quarantine and promotion (`_starmetal/quarantine/<digest>.json`), with admin endpoints to
   inspect and promote quarantined artifacts.
+- Centralized, reason-aware policy-decision surfacing (Stage N9): a single `PolicyReason` → HTTP
+  status mapping (`PolicyReason::http_status` / `http_status_for_message` in
+  `starmetal-core::supply_chain`) applied uniformly by every protocol adapter and the admin API, so a
+  given policy denial surfaces the same HTTP status no matter which surface produced it. This
+  realizes this ADR's "ordered policy layer" as a shared surfacing seam rather than a re-checking
+  Tower pipeline — see ADR-0025 for the full decision→status table and the argument against
+  double-enforcement.
 
 ## Deferred
 
-- The ordered Tower-layer pipeline assembly described in this ADR's Decision. Enforcement today is
-  **imperative in-service gating** inside `CachingPackageService`, not a composed Tower layer stack —
-  ADR-0025 records the as-built enforcement architecture and the reasoning for this divergence.
+- The ordered Tower-layer *enforcement* pipeline assembly described in this ADR's Decision — express-
+  ing each gate as an independent Tower layer in the request path — remains deferred. Enforcement
+  today is still **imperative in-service gating** inside `CachingPackageService`, not a composed Tower
+  layer stack. What Stage N9 implements instead (see Implemented, above, and ADR-0025) is the
+  pipeline's outward-facing seam: one canonical mapping from each gate's `PolicyReason` to an HTTP
+  status, applied uniformly across proxy, hosted, and admin paths, without re-running policy checks
+  in a middleware layer. ADR-0025 records the as-built enforcement architecture and the reasoning for
+  this divergence.
 - Ingest-time quarantine: ingest currently hard-denies failing artifacts rather than holding them for
   approval.
 - SBOM generation (CycloneDX/SPDX types exist; no generator).
