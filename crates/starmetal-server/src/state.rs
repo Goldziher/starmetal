@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use starmetal_adapters::PublishAuthorization;
@@ -48,6 +49,27 @@ pub struct AppState {
     /// SBOM retrieval handle (ADR-0024), `Some` when `supply_chain.sbom.enabled`. Backs the admin
     /// SBOM list/fetch endpoints; `None` makes them report SBOM generation disabled.
     pub sbom: Option<Arc<dyn SbomIndex>>,
+    /// Per-repository backing services for `group` repositories (ADR-0019), keyed by repository name.
+    /// Empty when no group is declared. `build_app` looks a group's mount up here and nests its
+    /// ecosystem adapter with a per-repository state whose services come from this entry, so a group
+    /// serves its merged members while proxy mounts keep using the shared service.
+    pub group_mounts: Arc<HashMap<String, GroupMount>>,
+}
+
+/// The backing services for one `group` repository mount (ADR-0019).
+///
+/// A group needs a different `PackageService` (and read-only publishing) from the shared proxy
+/// service, so the runtime builds one of these per declared group and `build_app` swaps it into a
+/// per-repository [`AppState`] via [`AppState::for_group_mount`]. All three handles are normally the
+/// same underlying `GroupPackageService` viewed through its three port traits.
+#[derive(Clone)]
+pub struct GroupMount {
+    /// The group's merged read service (union version listings, first-match artifacts).
+    pub package_service: Arc<dyn PackageService>,
+    /// The group's publishing service — rejects every write, since a group is read-only.
+    pub publishing_service: Arc<dyn PublishingService>,
+    /// The group's statistics service (a group keeps no counters of its own).
+    pub statistics_service: Arc<dyn StatisticsService>,
 }
 
 /// Feature-gated upstream clients used by protocol adapters.
@@ -94,7 +116,27 @@ impl AppState {
             content_maintenance: None,
             content_browse: None,
             sbom: None,
+            group_mounts: Arc::new(HashMap::new()),
         }
+    }
+
+    /// Attach the per-repository group backing services (ADR-0019) built by the runtime. Empty by
+    /// default, in which case `build_app` mounts no group repositories.
+    pub fn with_group_mounts(mut self, group_mounts: Arc<HashMap<String, GroupMount>>) -> Self {
+        self.group_mounts = group_mounts;
+        self
+    }
+
+    /// Derive a per-repository state for a `group` mount (ADR-0019): the shared state with its read,
+    /// publishing, and statistics services replaced by the group's. Config, authorizer, upstream
+    /// clients, and every other handle are preserved, so the group's ecosystem adapter behaves
+    /// exactly like a proxy mount except that its service is the merged group service.
+    pub fn for_group_mount(&self, mount: &GroupMount) -> AppState {
+        let mut state = self.clone();
+        state.package_service = mount.package_service.clone();
+        state.publishing_service = mount.publishing_service.clone();
+        state.statistics_service = mount.statistics_service.clone();
+        state
     }
 
     /// Attach the facet recipe registry (ADR-0019) built by the runtime. Empty by default, in which

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -13,8 +14,8 @@ use starmetal_core::ports::{PackageService, PublishingService, StatisticsService
 use starmetal_core::publishing::{ProtocolMetadata, PublishRequest, PublishedArtifact, YankRequest};
 use starmetal_core::repository::{HostedFacet, ProxyFacet, RecipeRegistry, RepositoryKind};
 use starmetal_core::supply_chain::{IngestQuarantine, QuarantineReview, SbomIndex, SupplyChainMaintenance};
-use starmetal_server::state::{AppState, UpstreamClients};
-use starmetal_service::{CachingPackageService, ProxyRecipe, SigningService};
+use starmetal_server::state::{AppState, GroupMount, UpstreamClients};
+use starmetal_service::{CachingPackageService, GroupPackageService, ProxyRecipe, SigningService};
 use starmetal_storage::OpenDalStorage;
 
 #[derive(Debug, Clone, Default)]
@@ -85,6 +86,10 @@ pub struct StarmetalRuntime {
     /// recipe per resolved proxy repository, exposing the shared caching service as its proxy and
     /// hosted facets. Consulted by `build_app` to drive per-repository mounting.
     pub recipe_registry: Arc<RecipeRegistry>,
+    /// Per-repository backing services for declared `group` repositories (ADR-0019), keyed by
+    /// repository name. Empty when no group is declared; consumed by `app_state` so `build_app`
+    /// mounts each group's ecosystem adapter with its merged group service.
+    pub group_mounts: Arc<HashMap<String, GroupMount>>,
     pub upstreams: UpstreamClients,
     /// Handle for scheduled supply-chain re-correlation (ADR-0024). `Some` only when a scanner is
     /// attached (`supply_chain.enabled` under the scanner feature); drives the background sweep.
@@ -268,6 +273,32 @@ impl StarmetalRuntime {
         }
         let recipe_registry = Arc::new(recipe_registry);
 
+        // Group backing services (ADR-0019): build one read-only GroupPackageService per declared
+        // group, keyed by repository name for `build_app`'s per-repository mount. Every proxy of one
+        // ecosystem shares the single caching service today, so a group's same-ecosystem members all
+        // resolve to that shared service — the group is a read-only virtual view over its members.
+        let mut group_mounts: HashMap<String, GroupMount> = HashMap::new();
+        for repository in config.resolved_repositories() {
+            if repository.kind != RepositoryKind::Group {
+                continue;
+            }
+            let members: Vec<Arc<dyn PackageService>> = repository
+                .members
+                .iter()
+                .map(|_member| service.clone() as Arc<dyn PackageService>)
+                .collect();
+            let group = Arc::new(GroupPackageService::new(repository.ecosystem, members));
+            group_mounts.insert(
+                repository.name.clone(),
+                GroupMount {
+                    package_service: group.clone(),
+                    publishing_service: group.clone(),
+                    statistics_service: group,
+                },
+            );
+        }
+        let group_mounts = Arc::new(group_mounts);
+
         // Expose the supply-chain handles (re-correlation + quarantine review) only when a scanner is
         // actually attached, so a build without the scanner feature (or with supply-chain disabled)
         // carries neither.
@@ -326,6 +357,7 @@ impl StarmetalRuntime {
             publishing_service: service.clone(),
             statistics_service: service,
             recipe_registry,
+            group_mounts,
             upstreams,
             maintenance,
             quarantine,
@@ -439,6 +471,7 @@ impl StarmetalRuntime {
             self.upstreams.clone(),
         )
         .with_recipe_registry(self.recipe_registry.clone())
+        .with_group_mounts(self.group_mounts.clone())
         .with_quarantine(self.quarantine.clone())
         .with_ingest_quarantine(self.ingest_quarantine.clone())
         .with_content_maintenance(self.content_maintenance.clone())

@@ -5,7 +5,7 @@ use axum::http::header;
 use axum::middleware;
 use axum::routing::get;
 use starmetal_core::package::Ecosystem;
-use starmetal_core::repository::RecipeKey;
+use starmetal_core::repository::{RecipeKey, RepositoryKind};
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::limit::RequestBodyLimitLayer;
@@ -19,18 +19,31 @@ pub fn build_app(state: AppState) -> Router {
     #[allow(unused_mut)]
     let mut app: Router<AppState> = Router::new().route("/healthz", get(healthz));
 
-    // Mount one adapter per resolved repository (ADR-0019), driven by the recipe registry. For each
-    // resolved repository we look up the `(ecosystem, kind)` recipe; a recipe exposing a proxy facet
-    // drives the historical proxy mount (behavior-identical to the pre-registry match). Kinds without
-    // a wired mount (hosted/group) are rejected by `validate_mvp`, so a validated deployment never
-    // resolves one here; an unrecognized/absent recipe mounts nothing.
+    // Mount one adapter per resolved repository (ADR-0019). A `proxy` is driven by the recipe
+    // registry: its `(ecosystem, kind)` recipe exposing a proxy facet drives the historical proxy
+    // mount (behavior-identical to the pre-registry match), using the shared service. A `group` is
+    // driven by its per-repository entry in `group_mounts`: the same ecosystem adapter is mounted
+    // with a per-repository state whose service is the merged group service. `hosted` is rejected by
+    // `validate_mvp`, so a validated deployment never resolves one here.
     for repository in state.config.resolved_repositories() {
-        let key = RecipeKey::new(repository.ecosystem, repository.kind);
-        let Some(recipe) = state.recipe_registry.get(&key) else {
-            continue;
-        };
-        if recipe.proxy_facet().is_some() {
-            app = mount_proxy(app, &repository.name, repository.ecosystem);
+        match repository.kind {
+            RepositoryKind::Proxy => {
+                let key = RecipeKey::new(repository.ecosystem, repository.kind);
+                if state
+                    .recipe_registry
+                    .get(&key)
+                    .is_some_and(|recipe| recipe.proxy_facet().is_some())
+                {
+                    app = mount_proxy(app, &repository.name, repository.ecosystem);
+                }
+            }
+            RepositoryKind::Group => {
+                if let Some(mount) = state.group_mounts.get(&repository.name) {
+                    let group_state = state.for_group_mount(mount);
+                    app = mount_group(app, &repository.name, repository.ecosystem, group_state);
+                }
+            }
+            RepositoryKind::Hosted => {}
         }
     }
 
@@ -55,33 +68,54 @@ pub fn build_app(state: AppState) -> Router {
         .with_state(state)
 }
 
-/// Mount the proxy adapter for `ecosystem` under `/{name}`.
+/// The axum router for `ecosystem`'s protocol adapter, or `None` when that adapter's feature is not
+/// compiled in.
 ///
-/// The `(kind, ecosystem)` dispatch is the recipe seam (ADR-0019): adding a
-/// repository kind extends this match rather than the mount loop. Ecosystems
-/// whose feature is not compiled fall through unmounted.
-fn mount_proxy(app: Router<AppState>, name: &str, ecosystem: Ecosystem) -> Router<AppState> {
-    let path = format!("/{name}");
+/// This is the recipe seam (ADR-0019): both proxy and group mounts resolve their adapter here, so
+/// adding a repository kind reuses one dispatch. The returned router is unstated (`Router<AppState>`);
+/// the caller decides whether to nest it against the shared state (proxy) or bake a per-repository
+/// state into it (group).
+fn ecosystem_router(ecosystem: Ecosystem) -> Option<Router<AppState>> {
     match ecosystem {
         #[cfg(feature = "pypi")]
-        Ecosystem::PyPI => app.nest(&path, starmetal_adapters::pypi::router()),
+        Ecosystem::PyPI => Some(starmetal_adapters::pypi::router()),
         #[cfg(feature = "npm")]
-        Ecosystem::Npm => app.nest(&path, starmetal_adapters::npm::router()),
+        Ecosystem::Npm => Some(starmetal_adapters::npm::router()),
         #[cfg(feature = "cargo-registry")]
-        Ecosystem::Cargo => app.nest(&path, starmetal_adapters::cargo::router()),
+        Ecosystem::Cargo => Some(starmetal_adapters::cargo::router()),
         #[cfg(feature = "hex")]
-        Ecosystem::Hex => app.nest(&path, starmetal_adapters::hex::router()),
+        Ecosystem::Hex => Some(starmetal_adapters::hex::router()),
         #[cfg(feature = "maven")]
-        Ecosystem::Maven => app.nest(&path, starmetal_adapters::maven::router()),
+        Ecosystem::Maven => Some(starmetal_adapters::maven::router()),
         #[cfg(feature = "rubygems")]
-        Ecosystem::RubyGems => app.nest(&path, starmetal_adapters::rubygems::router()),
+        Ecosystem::RubyGems => Some(starmetal_adapters::rubygems::router()),
         #[cfg(feature = "nuget")]
-        Ecosystem::NuGet => app.nest(&path, starmetal_adapters::nuget::router()),
+        Ecosystem::NuGet => Some(starmetal_adapters::nuget::router()),
         #[cfg(feature = "pub")]
-        Ecosystem::Pub => app.nest(&path, starmetal_adapters::pubdev::router()),
+        Ecosystem::Pub => Some(starmetal_adapters::pubdev::router()),
         // Ecosystems whose adapter feature is not compiled in are not mounted.
         #[allow(unreachable_patterns)]
-        _ => app,
+        _ => None,
+    }
+}
+
+/// Mount the proxy adapter for `ecosystem` under `/{name}`, backed by the shared state applied to
+/// the whole router tree. Ecosystems whose feature is not compiled fall through unmounted.
+fn mount_proxy(app: Router<AppState>, name: &str, ecosystem: Ecosystem) -> Router<AppState> {
+    match ecosystem_router(ecosystem) {
+        Some(router) => app.nest(&format!("/{name}"), router),
+        None => app,
+    }
+}
+
+/// Mount the group adapter for `ecosystem` under `/{name}` (ADR-0019), backed by `group_state`.
+///
+/// `with_state` bakes the per-repository group state into the adapter subtree, so the group serves
+/// its merged members while the outer tree's shared state (applied later) governs every proxy mount.
+fn mount_group(app: Router<AppState>, name: &str, ecosystem: Ecosystem, group_state: AppState) -> Router<AppState> {
+    match ecosystem_router(ecosystem) {
+        Some(router) => app.nest(&format!("/{name}"), router.with_state(group_state)),
+        None => app,
     }
 }
 
