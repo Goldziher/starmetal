@@ -49,6 +49,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26"
+          # No go.sum at the repo root (the E2E fixtures are synthesized), so there is nothing to
+          # cache — disable it to avoid a spurious cache-miss warning on every run.
+          cache: false
       - uses: mlugg/setup-zig@v2
         with:
           version: "0.16.0"
