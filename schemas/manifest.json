@@ -89,7 +89,7 @@
       "validated_by": "crates/starmetal-core/tests/schema_validation.rs; tests/conformance"
     },
     {
-      "blake3": "30b2d7cecce4e7bb4920fadf8ce3ca907394ea86a645330be4176f809692190d",
+      "blake3": "e00d4cb0858984a2239afa5cb33fc568de32745b0ee13823f431990ff6d976b2",
       "generated_by": "starmetal-schema-manager",
       "id": "starmetal-config",
       "path": "starmetal/config.schema.json",
@@ -154,7 +154,7 @@
       "validated_by": "crates/starmetal-core/tests/schema_validation.rs"
     },
     {
-      "blake3": "f6650b084dc7368b0207ecaee54927e9dd23d73bddea0bef97eac6812f6a8eba",
+      "blake3": "83248e9e9a4b24a11154f317e0f5db9540ef2f44d20052d4df80cdff35745729",
       "generated_by": "starmetal-schema-manager",
       "id": "starmetal-lockfile",
       "path": "starmetal/lockfile.schema.json",

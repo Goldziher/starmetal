@@ -34,6 +34,9 @@ pub fn purl_type(ecosystem: Ecosystem) -> &'static str {
         // consistent with the ecosystem's own name, matching Go's read-only/no-publish scope: SBOM
         // generation never runs for Zig since it is never routed through `PackageService`.
         Ecosystem::Zig => "zig",
+        // Unlike Zig, `swift` IS a registered purl-spec type. SBOM generation still never runs for
+        // Swift, since (like Go and Zig) it is never routed through `PackageService`.
+        Ecosystem::Swift => "swift",
     }
 }
 

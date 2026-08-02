@@ -30,6 +30,11 @@ pub enum Ecosystem {
     /// source tarball, so this ecosystem is served as a git-sourced tarball proxy rather than
     /// through a registry protocol.
     Zig,
+    /// Swift packages (ADR-0023): like Go and Zig, resolved from an upstream git repository's
+    /// tagged refs rather than a package-index protocol — the Swift Package Registry (SE-0292)
+    /// protocol is served on top of the repository's tags rather than through a hosted publish
+    /// workflow.
+    Swift,
 }
 
 impl std::fmt::Display for Ecosystem {
@@ -45,6 +50,7 @@ impl std::fmt::Display for Ecosystem {
             Self::Pub => write!(f, "pub"),
             Self::Go => write!(f, "go"),
             Self::Zig => write!(f, "zig"),
+            Self::Swift => write!(f, "swift"),
         }
     }
 }
@@ -64,6 +70,7 @@ impl FromStr for Ecosystem {
             "pub" | "pubdev" | "pub.dev" => Ok(Self::Pub),
             "go" | "golang" => Ok(Self::Go),
             "zig" => Ok(Self::Zig),
+            "swift" => Ok(Self::Swift),
             _ => Err(StarmetalError::Config(format!("unknown ecosystem: {s}"))),
         }
     }
@@ -117,10 +124,11 @@ impl PackageName {
                 }
             }
             Ecosystem::Npm => normalize_npm(&self.0),
-            // Maven group:artifact ids and Go/Zig git-repository paths (`github.com/User/Repo`)
-            // are all case-sensitive identifiers naming an actual upstream coordinate —
-            // lowercasing one would resolve to a different repository, so it is left untouched.
-            Ecosystem::Maven | Ecosystem::Go | Ecosystem::Zig => Cow::Borrowed(&self.0),
+            // Maven group:artifact ids and Go/Zig/Swift git-repository paths
+            // (`github.com/User/Repo`) are all case-sensitive identifiers naming an actual
+            // upstream coordinate — lowercasing one would resolve to a different repository, so
+            // it is left untouched.
+            Ecosystem::Maven | Ecosystem::Go | Ecosystem::Zig | Ecosystem::Swift => Cow::Borrowed(&self.0),
             Ecosystem::Cargo | Ecosystem::Hex | Ecosystem::RubyGems | Ecosystem::NuGet | Ecosystem::Pub => {
                 if self
                     .0
@@ -152,7 +160,7 @@ impl PackageName {
                 _ => None,
             },
             Ecosystem::Maven => self.0.rsplit_once(':').map(|(group, _artifact)| group.to_string()),
-            // Go/Zig git-repository paths (`github.com/user/repo`) have no npm/Maven-style
+            // Go/Zig/Swift git-repository paths (`github.com/user/repo`) have no npm/Maven-style
             // namespace concept distinct from the path itself.
             Ecosystem::PyPI
             | Ecosystem::Cargo
@@ -161,7 +169,8 @@ impl PackageName {
             | Ecosystem::NuGet
             | Ecosystem::Pub
             | Ecosystem::Go
-            | Ecosystem::Zig => None,
+            | Ecosystem::Zig
+            | Ecosystem::Swift => None,
         }
     }
 }
@@ -487,6 +496,7 @@ mod tests {
             Ecosystem::Pub,
             Ecosystem::Go,
             Ecosystem::Zig,
+            Ecosystem::Swift,
         ] {
             assert_eq!(
                 PackageName::new("some/oddly-formed-name").publish_namespace(ecosystem),
@@ -507,6 +517,7 @@ mod tests {
         assert_eq!("go".parse::<Ecosystem>().unwrap(), Ecosystem::Go);
         assert_eq!("golang".parse::<Ecosystem>().unwrap(), Ecosystem::Go);
         assert_eq!("zig".parse::<Ecosystem>().unwrap(), Ecosystem::Zig);
+        assert_eq!("swift".parse::<Ecosystem>().unwrap(), Ecosystem::Swift);
         assert!("unknown".parse::<Ecosystem>().is_err());
     }
 
@@ -520,6 +531,12 @@ mod tests {
     fn zig_repository_path_normalization_preserves_case() {
         let pkg = PackageName::new("github.com/Foo/Bar");
         assert_eq!(pkg.normalized(Ecosystem::Zig).as_ref(), "github.com/Foo/Bar");
+    }
+
+    #[test]
+    fn swift_repository_path_normalization_preserves_case() {
+        let pkg = PackageName::new("github.com/Foo/Bar");
+        assert_eq!(pkg.normalized(Ecosystem::Swift).as_ref(), "github.com/Foo/Bar");
     }
 
     #[test]

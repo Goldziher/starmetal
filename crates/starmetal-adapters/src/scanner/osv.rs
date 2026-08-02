@@ -69,6 +69,10 @@ fn osv_ecosystem(ecosystem: Ecosystem) -> &'static str {
         // Zig is never routed through `CachingPackageService`/the scanner, so this exists purely
         // for match exhaustiveness, mirroring Go's read-only, no-publish scope.
         Ecosystem::Zig => "Zig",
+        // OSV.dev DOES have a registered "Swift" ecosystem (as of this writing). Still unreachable
+        // in practice: Swift, like Go and Zig, is never routed through
+        // `CachingPackageService`/the scanner, so this exists purely for match exhaustiveness.
+        Ecosystem::Swift => "Swift",
     }
 }
 
@@ -328,6 +332,7 @@ mod tests {
             (Ecosystem::Pub, "Pub"),
             (Ecosystem::Go, "Go"),
             (Ecosystem::Zig, "Zig"),
+            (Ecosystem::Swift, "Swift"),
         ];
         for (ecosystem, expected) in cases {
             assert_eq!(osv_ecosystem(ecosystem), expected, "mismatch for {ecosystem:?}");

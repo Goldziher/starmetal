@@ -50,6 +50,10 @@ pub struct Config {
     /// upstream — see [`ZigConfig`].
     #[serde(default)]
     pub zig: ZigConfig,
+    /// Swift Package Registry proxy configuration (ADR-0023). Like Go and Zig, git-sourced rather
+    /// than a single-base-URL upstream — see [`SwiftConfig`].
+    #[serde(default)]
+    pub swift: SwiftConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -296,6 +300,59 @@ fn default_zig_mirror_cache_dir() -> PathBuf {
 
 /// Default mirror refresh TTL: 5 minutes, matching the other upstream caches' TTL convention.
 fn default_zig_mirror_refresh_interval_secs() -> u64 {
+    300
+}
+
+/// Configuration for the Swift Package Registry proxy (ADR-0023, SE-0292): like [`GoConfig`] and
+/// [`ZigConfig`], git-sourced rather than a single base-URL `[upstream]` shape.
+///
+/// **Design difference from Go/Zig:** a Swift registry identifier (`{scope}.{name}`) carries no
+/// host at all — unlike a Go module path or a Zig repository path, there is nothing in the
+/// identifier itself to derive a git remote from. So, unlike [`GoConfig::module_overrides`] and
+/// [`ZigConfig::repo_overrides`], there is no github.com/gitlab.com/bitbucket.org default mapping
+/// here: every package this proxy serves MUST have an explicit [`SwiftConfig::package_overrides`]
+/// entry. This is an honest scope boundary, not an oversight — and it doubles as the trusted
+/// `file://` seam for offline/e2e testing.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct SwiftConfig {
+    /// Whether the Swift Package Registry proxy repository is mounted. `false` by default.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Local directory backing the git-mirror cache (bare repositories + fetch-freshness stamps).
+    #[serde(default = "default_swift_mirror_cache_dir")]
+    pub mirror_cache_dir: PathBuf,
+    /// How long a mirrored repository is considered fresh before a request triggers a re-fetch.
+    #[serde(default = "default_swift_mirror_refresh_interval_secs")]
+    pub mirror_refresh_interval_secs: u64,
+    /// Maximum bytes accepted for a served source archive.
+    #[serde(default = "default_max_upstream_bytes")]
+    pub max_archive_bytes: u64,
+    /// Registry-identifier (`"{scope}.{name}"`) to git-URL overrides. Operator-supplied and
+    /// trusted, so (unlike an inbound registry identifier) a `file://` URL is permitted here —
+    /// this is the intended seam for offline testing, since there is no default host mapping to
+    /// fall back to (see the struct-level scope note).
+    #[serde(default)]
+    pub package_overrides: HashMap<String, String>,
+}
+
+impl Default for SwiftConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            mirror_cache_dir: default_swift_mirror_cache_dir(),
+            mirror_refresh_interval_secs: default_swift_mirror_refresh_interval_secs(),
+            max_archive_bytes: default_max_upstream_bytes(),
+            package_overrides: HashMap::new(),
+        }
+    }
+}
+
+fn default_swift_mirror_cache_dir() -> PathBuf {
+    PathBuf::from("./starmetal-data/git-mirrors")
+}
+
+/// Default mirror refresh TTL: 5 minutes, matching the other upstream caches' TTL convention.
+fn default_swift_mirror_refresh_interval_secs() -> u64 {
     300
 }
 
@@ -762,6 +819,12 @@ impl Config {
             })?;
         }
 
+        for (package, url) in &self.swift.package_overrides {
+            url::Url::parse(url).map_err(|err| {
+                StarmetalError::Config(format!("swift.package_overrides.{package}: invalid URL '{url}': {err}"))
+            })?;
+        }
+
         for (name, upstream) in &self.upstream {
             validate_upstream_url(name, &upstream.url, upstream)?;
             if let Some(artifact_url) = &upstream.artifact_url {
@@ -891,6 +954,16 @@ impl Config {
                     members: Vec::new(),
                 });
             }
+            // Swift, like Go and Zig, has no `[upstream]` entry — derived from `[swift].enabled`
+            // instead.
+            if self.swift.enabled {
+                repositories.push(RepositoryConfig {
+                    name: "swift".to_string(),
+                    kind: RepositoryKind::Proxy,
+                    ecosystem: Ecosystem::Swift,
+                    members: Vec::new(),
+                });
+            }
             repositories
         } else {
             self.repositories.clone()
@@ -954,6 +1027,7 @@ impl Default for Config {
             supply_chain: SupplyChainConfig::default(),
             go: GoConfig::default(),
             zig: ZigConfig::default(),
+            swift: SwiftConfig::default(),
         }
     }
 }

@@ -48,6 +48,11 @@
           "const": "zig",
           "description": "Zig packages (ADR-0023): like Go, resolved from an upstream git repository's tagged refs\nrather than a package-index protocol — `zig fetch` downloads and client-side-hashes a\nsource tarball, so this ecosystem is served as a git-sourced tarball proxy rather than\nthrough a registry protocol.",
           "type": "string"
+        },
+        {
+          "const": "swift",
+          "description": "Swift packages (ADR-0023): like Go and Zig, resolved from an upstream git repository's\ntagged refs rather than a package-index protocol — the Swift Package Registry (SE-0292)\nprotocol is served on top of the repository's tags rather than through a hosted publish\nworkflow.",
+          "type": "string"
         }
       ]
     },
@@ -839,6 +844,44 @@
       },
       "type": "object"
     },
+    "SwiftConfig": {
+      "description": "Configuration for the Swift Package Registry proxy (ADR-0023, SE-0292): like [`GoConfig`] and\n[`ZigConfig`], git-sourced rather than a single base-URL `[upstream]` shape.\n\n**Design difference from Go/Zig:** a Swift registry identifier (`{scope}.{name}`) carries no\nhost at all — unlike a Go module path or a Zig repository path, there is nothing in the\nidentifier itself to derive a git remote from. So, unlike [`GoConfig::module_overrides`] and\n[`ZigConfig::repo_overrides`], there is no github.com/gitlab.com/bitbucket.org default mapping\nhere: every package this proxy serves MUST have an explicit [`SwiftConfig::package_overrides`]\nentry. This is an honest scope boundary, not an oversight — and it doubles as the trusted\n`file://` seam for offline/e2e testing.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Whether the Swift Package Registry proxy repository is mounted. `false` by default.",
+          "type": "boolean"
+        },
+        "max_archive_bytes": {
+          "default": 536870912,
+          "description": "Maximum bytes accepted for a served source archive.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "mirror_cache_dir": {
+          "default": "./starmetal-data/git-mirrors",
+          "description": "Local directory backing the git-mirror cache (bare repositories + fetch-freshness stamps).",
+          "type": "string"
+        },
+        "mirror_refresh_interval_secs": {
+          "default": 300,
+          "description": "How long a mirrored repository is considered fresh before a request triggers a re-fetch.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "package_overrides": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Registry-identifier (`\"{scope}.{name}\"`) to git-URL overrides. Operator-supplied and\ntrusted, so (unlike an inbound registry identifier) a `file://` URL is permitted here —\nthis is the intended seam for offline testing, since there is no default host mapping to\nfall back to (see the struct-level scope note).",
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "TokenScope": {
       "enum": ["read", "publish", "yank", "admin"],
       "type": "string"
@@ -1058,6 +1101,17 @@
         },
         "scanner": "osv"
       }
+    },
+    "swift": {
+      "$ref": "#/$defs/SwiftConfig",
+      "default": {
+        "enabled": false,
+        "max_archive_bytes": 536870912,
+        "mirror_cache_dir": "./starmetal-data/git-mirrors",
+        "mirror_refresh_interval_secs": 300,
+        "package_overrides": {}
+      },
+      "description": "Swift Package Registry proxy configuration (ADR-0023). Like Go and Zig, git-sourced rather\nthan a single-base-URL upstream — see [`SwiftConfig`]."
     },
     "upstream": {
       "additionalProperties": {

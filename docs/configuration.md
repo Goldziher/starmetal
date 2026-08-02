@@ -337,6 +337,36 @@ enabled = true
 "example.com/pkg" = "file:///srv/git-fixtures/example-pkg.git"
 ```
 
+## Swift Package Registry Proxy
+
+Like Go and Zig, Swift packages are resolved from an upstream git repository's tagged refs rather
+than a package-index protocol (ADR-0023), serving the [Swift Package Registry
+protocol](https://github.com/swiftlang/swift-package-manager/blob/main/Documentation/PackageRegistry/Registry.md)
+(SE-0292) on top of them, so `[swift]` is a separate section instead of another `[upstream.*]`
+entry.
+
+Unlike Go and Zig, a Swift registry identifier (`{scope}.{name}`) carries no host at all, so there
+is **no** built-in github.com/gitlab.com/bitbucket.org mapping — every package this proxy serves
+must have an explicit `swift.package_overrides` entry mapping its `{scope}.{name}` identifier to a
+git URL. This is an honest scope boundary: without a host in the identifier itself, there is
+nothing to derive a default mapping from.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `swift.enabled` | `false` | Mounts the Swift Package Registry proxy repository. Off by default. |
+| `swift.mirror_cache_dir` | `./starmetal-data/git-mirrors` | Local directory backing the git-mirror cache (bare repositories and fetch-freshness stamps). |
+| `swift.mirror_refresh_interval_secs` | `300` | How long a mirrored repository is considered fresh before a request triggers a re-fetch. |
+| `swift.max_archive_bytes` | `536870912` | Maximum bytes accepted for a served source archive. |
+| `swift.package_overrides` | `{}` | Registry-identifier (`"{scope}.{name}"`) to git-URL overrides. Required for every package this proxy serves — there is no default host mapping. Trusted operator configuration — `file://` URLs are permitted here for private mirrors or offline testing. |
+
+```toml
+[swift]
+enabled = true
+
+[swift.package_overrides]
+"example.pkg" = "file:///srv/git-fixtures/example-pkg.git"
+```
+
 ## Repositories
 
 Repositories model the `(kind, ecosystem)` composition surface (ADR-0019). When

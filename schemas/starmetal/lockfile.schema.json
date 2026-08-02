@@ -16,6 +16,11 @@
           "const": "zig",
           "description": "Zig packages (ADR-0023): like Go, resolved from an upstream git repository's tagged refs\nrather than a package-index protocol — `zig fetch` downloads and client-side-hashes a\nsource tarball, so this ecosystem is served as a git-sourced tarball proxy rather than\nthrough a registry protocol.",
           "type": "string"
+        },
+        {
+          "const": "swift",
+          "description": "Swift packages (ADR-0023): like Go and Zig, resolved from an upstream git repository's\ntagged refs rather than a package-index protocol — the Swift Package Registry (SE-0292)\nprotocol is served on top of the repository's tags rather than through a hosted publish\nworkflow.",
+          "type": "string"
         }
       ]
     },

@@ -146,6 +146,12 @@ pub enum ProtocolMetadata {
     Zig {
         git_url: String,
     },
+    /// Swift packages (ADR-0023), like Go and Zig, are resolved read-only from an upstream git
+    /// repository's tagged refs — there is no hosted publish workflow, so this variant exists
+    /// purely for match exhaustiveness.
+    Swift {
+        git_url: String,
+    },
 }
 
 impl ProtocolMetadata {
@@ -175,6 +181,7 @@ impl ProtocolMetadata {
             },
             Ecosystem::Go => Self::Go { go_mod: String::new() },
             Ecosystem::Zig => Self::Zig { git_url: String::new() },
+            Ecosystem::Swift => Self::Swift { git_url: String::new() },
         }
     }
 }
