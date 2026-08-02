@@ -28,6 +28,7 @@ tracing.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]
+starmetal-core = { workspace = true, features = ["test-support"] }
 starmetal-metadata.workspace = true
 starmetal-storage = { workspace = true, features = ["backend-memory"] }
 tempfile.workspace = true

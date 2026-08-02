@@ -10,6 +10,10 @@ default = []
 encryption = []
 pq = []
 signing-x509 = ["x509-parser"]
+# Reusable port test doubles (fakes) for downstream test suites. Additive, off by default, and
+# pulls no new dependencies — the fakes are built from core's own types plus the `async-trait` the
+# ports already use.
+test-support = []
 
 [dependencies]
 ahash.workspace = true

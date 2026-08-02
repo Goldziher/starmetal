@@ -15,3 +15,5 @@ pub mod sbom;
 pub mod signing;
 pub mod statistics;
 pub mod supply_chain;
+#[cfg(feature = "test-support")]
+pub mod test_support;
