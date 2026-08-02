@@ -25,7 +25,7 @@ impl ContentBrowse for PostgresContentStore {
         let limit_placeholder = compiled.params.len() + 1;
         let offset_placeholder = compiled.params.len() + 2;
         let sql = format!(
-            "SELECT ecosystem, namespace, name, version, attributes FROM components WHERE {} \
+            "SELECT ecosystem, namespace, name, version, repository, attributes FROM components WHERE {} \
              ORDER BY ecosystem, namespace, name, version LIMIT ${limit_placeholder} OFFSET ${offset_placeholder}",
             compiled.sql,
         );
@@ -48,6 +48,7 @@ fn component_from_row(row: &Row) -> Result<Component> {
     let namespace: String = row.get("namespace");
     let name: String = row.get("name");
     let version: String = row.get("version");
+    let repository: String = row.get("repository");
     let attributes: serde_json::Value = row.get("attributes");
 
     Ok(Component {
@@ -55,6 +56,7 @@ fn component_from_row(row: &Row) -> Result<Component> {
         name: PackageName::new(name),
         version,
         ecosystem: ecosystem.parse::<Ecosystem>()?,
+        repository,
         attributes,
     })
 }

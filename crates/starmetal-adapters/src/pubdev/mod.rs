@@ -78,6 +78,7 @@ async fn publish_archive<S: HasPubState>(
             },
             allow_overwrite: state.config().publishing.allow_overwrite,
             allow_shadowing: state.config().publishing.allow_shadowing,
+            repository: None,
         })
         .await
         .map_err(|err| map_error(&err))?;

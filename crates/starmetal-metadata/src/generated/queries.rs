@@ -92,16 +92,17 @@ pub async fn upsert_component(
     namespace: &str,
     name: &str,
     version: &str,
+    repository: &str,
     attributes: &serde_json::Value,
 ) -> Result<UpsertComponentRow, tokio_postgres::Error> {
     let row = client
         .query_one(
-            r#"INSERT INTO components (ecosystem, namespace, name, version, attributes)
-VALUES ($1, $2, $3, $4, $5)
+            r#"INSERT INTO components (ecosystem, namespace, name, version, repository, attributes)
+VALUES ($1, $2, $3, $4, $5, $6)
 ON CONFLICT (ecosystem, namespace, name, version)
-DO UPDATE SET attributes = EXCLUDED.attributes, updated_at = now()
+DO UPDATE SET attributes = EXCLUDED.attributes, repository = EXCLUDED.repository, updated_at = now()
 RETURNING id"#,
-            &[&ecosystem, &namespace, &name, &version, &attributes],
+            &[&ecosystem, &namespace, &name, &version, &repository, &attributes],
         )
         .await?;
     Ok(UpsertComponentRow::from_row(&row))
@@ -181,6 +182,7 @@ pub struct ListComponentFamiliesRow {
     pub ecosystem: String,
     pub namespace: String,
     pub name: String,
+    pub repository: String,
 }
 
 impl ListComponentFamiliesRow {
@@ -189,6 +191,7 @@ impl ListComponentFamiliesRow {
             ecosystem: row.get("ecosystem"),
             namespace: row.get("namespace"),
             name: row.get("name"),
+            repository: row.get("repository"),
         }
     }
 }
@@ -197,7 +200,10 @@ pub async fn list_component_families(
     client: &(impl tokio_postgres::GenericClient + Sync),
 ) -> Result<Vec<ListComponentFamiliesRow>, tokio_postgres::Error> {
     let rows = client
-        .query(r#"SELECT DISTINCT ecosystem, namespace, name FROM components"#, &[])
+        .query(
+            r#"SELECT DISTINCT ecosystem, namespace, name, repository FROM components"#,
+            &[],
+        )
         .await?;
     Ok(rows.iter().map(ListComponentFamiliesRow::from_row).collect())
 }

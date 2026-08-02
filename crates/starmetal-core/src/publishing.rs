@@ -65,6 +65,10 @@ pub struct PublishRequest {
     pub protocol_metadata: ProtocolMetadata,
     pub allow_overwrite: bool,
     pub allow_shadowing: bool,
+    /// Descriptive repository attribution for the published component (ADR-0020). `None` leaves the
+    /// component unattributed (persisted as the empty string). Adapters pass `None` today; named
+    /// repositories arrive with facets in a later stage.
+    pub repository: Option<String>,
 }
 
 impl PublishRequest {

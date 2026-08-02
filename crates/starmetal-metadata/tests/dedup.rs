@@ -40,6 +40,7 @@ fn component(ecosystem: Ecosystem, name: &str, version: &str) -> Component {
         name: PackageName::new(name),
         version: version.to_string(),
         ecosystem,
+        repository: String::new(),
         attributes: serde_json::json!({}),
     }
 }

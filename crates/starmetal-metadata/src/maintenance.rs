@@ -3,6 +3,7 @@
 //! [`ContentMaintenance`] port, so a runtime scheduler can drive both lifecycles with a single
 //! handle.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -17,25 +18,53 @@ use crate::store::{PostgresContentStore, db_error};
 
 /// Composes the retention engine (Stage 2c) and the GC sweep (Stage 2d) over a shared content
 /// store into one [`ContentMaintenance`] handle.
+///
+/// Retention is resolved per component family with precedence
+/// `per_repository` > `per_ecosystem` > global `retention` (ADR-0020): each family's `repository`
+/// attribution is consulted first, then its ecosystem, then the global fallback.
 pub struct MetadataMaintenance {
     store: Arc<PostgresContentStore>,
     /// Grace window applied to every blob newly soft-deleted by a GC sweep, mirroring
     /// [`crate::gc::GcConfig::grace`].
     grace: Duration,
-    /// The retention policy applied to every known component family on each retention sweep. An
-    /// empty policy (`rules` is empty) is a no-op.
+    /// The global fallback retention policy, applied to a family when neither `per_repository` nor
+    /// `per_ecosystem` matches it. An empty policy (`rules` is empty) is a no-op.
     retention: RetentionPolicy,
+    /// Retention policies keyed by canonical ecosystem name; a family whose ecosystem matches uses
+    /// this in preference to the global `retention`.
+    per_ecosystem: HashMap<String, RetentionPolicy>,
+    /// Retention policies keyed by repository attribution string; a family whose repository matches
+    /// uses this in preference to both `per_ecosystem` and the global `retention`.
+    per_repository: HashMap<String, RetentionPolicy>,
 }
 
 impl MetadataMaintenance {
-    /// Build a maintenance handle over a shared content store, the GC grace window, and the
-    /// retention policy to apply on each sweep.
-    pub fn new(store: Arc<PostgresContentStore>, grace: Duration, retention: RetentionPolicy) -> Self {
+    /// Build a maintenance handle over a shared content store, the GC grace window, the global
+    /// retention policy, and the per-ecosystem and per-repository retention overrides applied on
+    /// each sweep (precedence: per-repository > per-ecosystem > global).
+    pub fn new(
+        store: Arc<PostgresContentStore>,
+        grace: Duration,
+        retention: RetentionPolicy,
+        per_ecosystem: HashMap<String, RetentionPolicy>,
+        per_repository: HashMap<String, RetentionPolicy>,
+    ) -> Self {
         Self {
             store,
             grace,
             retention,
+            per_ecosystem,
+            per_repository,
         }
+    }
+
+    /// Resolve the retention policy for a component family, applying precedence
+    /// per-repository > per-ecosystem > global.
+    fn resolve_policy(&self, ecosystem: &str, repository: &str) -> &RetentionPolicy {
+        self.per_repository
+            .get(repository)
+            .or_else(|| self.per_ecosystem.get(ecosystem))
+            .unwrap_or(&self.retention)
     }
 }
 
@@ -46,8 +75,9 @@ impl ContentMaintenance for MetadataMaintenance {
     }
 
     async fn retention_sweep(&self) -> Result<RetentionOutcome> {
-        // An empty policy selects nothing in every family, so skip the family listing entirely.
-        if self.retention.rules.is_empty() {
+        // With no global policy and no per-ecosystem/per-repository overrides, every family resolves
+        // to an empty policy that selects nothing, so skip the family listing entirely.
+        if self.retention.rules.is_empty() && self.per_ecosystem.is_empty() && self.per_repository.is_empty() {
             return Ok(RetentionOutcome { deleted: Vec::new() });
         }
 
@@ -58,6 +88,12 @@ impl ContentMaintenance for MetadataMaintenance {
 
         let mut deleted = Vec::new();
         for family in families {
+            // Resolve before parsing so the per-ecosystem lookup uses the raw canonical string the
+            // family carries (config keys are validated to be canonical ecosystem names).
+            let policy = self.resolve_policy(&family.ecosystem, &family.repository);
+            if policy.rules.is_empty() {
+                continue;
+            }
             let Ok(ecosystem) = family.ecosystem.parse::<Ecosystem>() else {
                 tracing::warn!(
                     ecosystem = %family.ecosystem,
@@ -72,10 +108,7 @@ impl ContentMaintenance for MetadataMaintenance {
                 Some(family.namespace.as_str())
             };
             let name = PackageName::new(family.name);
-            let outcome = self
-                .store
-                .apply_retention(&self.retention, ecosystem, namespace, &name)
-                .await?;
+            let outcome = self.store.apply_retention(policy, ecosystem, namespace, &name).await?;
             deleted.extend(outcome.deleted);
         }
 

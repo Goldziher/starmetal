@@ -14,6 +14,7 @@ use starmetal_core::package::{Ecosystem, PackageName};
 use starmetal_core::policy::PolicyConfig;
 use starmetal_core::ports::PublishingService;
 use starmetal_core::publishing::{ProtocolMetadata, PublishRequest, PublishedArtifact};
+use starmetal_metadata::generated::queries;
 use starmetal_metadata::{PostgresContentStore, create_pool};
 use starmetal_service::CachingPackageService;
 use starmetal_storage::OpenDalStorage;
@@ -61,6 +62,7 @@ fn publish_request(ecosystem: Ecosystem, name: &str, version: &str, filename: &s
         protocol_metadata: ProtocolMetadata::default_for(ecosystem),
         allow_overwrite: false,
         allow_shadowing: false,
+        repository: None,
     }
 }
 
@@ -150,6 +152,36 @@ async fn publish_records_a_reference_for_the_artifact_blob() {
     assert!(
         !unreferenced.contains(&digest),
         "the newly published artifact's blob is referenced, not a GC candidate"
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires docker"]
+async fn publish_persists_repository_attribution_on_the_component() {
+    let fx = setup().await;
+    let payload = Bytes::from_static(b"repository-attributed package bytes");
+
+    let mut request = publish_request(
+        Ecosystem::PyPI,
+        "attributed",
+        "1.0.0",
+        "attributed-1.0.0.tar.gz",
+        payload,
+    );
+    request.repository = Some("acme-hosted".to_string());
+    fx.service.publish_package(request).await.expect("publish succeeds");
+
+    // Reach through a second pool against the same Postgres to read back the persisted attribution.
+    let port = fx._container.get_host_port_ipv4(5432).await.expect("map postgres port");
+    let url = format!("postgres://postgres:postgres@127.0.0.1:{port}/postgres");
+    let pool = create_pool(&url).await.expect("build pool");
+    let conn = pool.get().await.expect("checkout connection");
+    let families = queries::list_component_families(&*conn).await.expect("list families");
+
+    assert_eq!(families.len(), 1, "one published component family");
+    assert_eq!(
+        families[0].repository, "acme-hosted",
+        "the publish request's repository attribution is persisted on the component"
     );
 }
 

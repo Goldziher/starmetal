@@ -106,6 +106,14 @@ pub struct Component {
     pub version: String,
     /// Ecosystem this component belongs to.
     pub ecosystem: Ecosystem,
+    /// Descriptive repository attribution (ADR-0020): the named repository this component was
+    /// published to, or the empty string when unattributed.
+    ///
+    /// This is *not* part of component identity — the uniqueness key stays
+    /// `(ecosystem, namespace, name, version)` — but it lets the retention sweep resolve a
+    /// per-repository policy for the component's family.
+    #[serde(default)]
+    pub repository: String,
     /// Ecosystem-specific metadata as opaque JSON.
     #[serde(default)]
     pub attributes: Value,

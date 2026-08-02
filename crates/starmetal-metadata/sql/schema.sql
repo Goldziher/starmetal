@@ -28,12 +28,16 @@ CREATE TABLE blobs (
 -- Lifecycle and usage columns (`created_at`, `updated_at`, `last_downloaded_at`,
 -- `download_count`) back the retention engine (Stage 2c): each `RetentionRule`
 -- selects versions to delete by inspecting these columns.
+-- `repository` is a descriptive attribution column (the named repository a component was published
+-- to), NOT part of component identity: the uniqueness key stays (ecosystem, namespace, name,
+-- version). It lets the retention sweep resolve a per-repository policy for a component family.
 CREATE TABLE components (
     id                 BIGSERIAL PRIMARY KEY,
     ecosystem          TEXT NOT NULL,
     namespace          TEXT NOT NULL DEFAULT '',
     name               TEXT NOT NULL,
     version            TEXT NOT NULL,
+    repository         TEXT NOT NULL DEFAULT '',
     attributes         JSONB NOT NULL DEFAULT '{}',
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -41,6 +45,8 @@ CREATE TABLE components (
     download_count     BIGINT NOT NULL DEFAULT 0,
     UNIQUE (ecosystem, namespace, name, version)
 );
+
+CREATE INDEX idx_components_repository ON components (repository);
 
 -- The path level: a named file within a component. Its link to the underlying
 -- blob lives in `asset_blobs`, not here, which is what makes reference-counted GC

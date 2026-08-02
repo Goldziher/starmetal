@@ -2,6 +2,7 @@
 //! ADR-0020 Stages 2c/2d) against a real Postgres. Marked `#[ignore]` so the default `cargo test`
 //! stays offline; run with `cargo test -p starmetal-metadata -- --ignored` (needs Docker).
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -39,12 +40,13 @@ async fn setup() -> Fixture {
     }
 }
 
-fn component(ecosystem: Ecosystem, name: &str, version: &str) -> Component {
+fn component(ecosystem: Ecosystem, name: &str, version: &str, repository: &str) -> Component {
     Component {
         namespace: None,
         name: PackageName::new(name),
         version: version.to_string(),
         ecosystem,
+        repository: repository.to_string(),
         attributes: serde_json::json!({}),
     }
 }
@@ -77,6 +79,19 @@ fn asset_ref(ecosystem: Ecosystem, name: &str, version: &str, path: &str) -> Ass
 /// Register a component + asset and link it to a fresh blob with unique bytes/digest, returning
 /// the digest so callers can assert against it.
 async fn seed_version(fx: &Fixture, ecosystem: Ecosystem, name: &str, version: &str, seed: &str) -> BlobDigest {
+    seed_version_in_repo(fx, ecosystem, name, version, "", seed).await
+}
+
+/// Like [`seed_version`], but attributes the component to a named `repository` so tests can exercise
+/// per-repository retention resolution.
+async fn seed_version_in_repo(
+    fx: &Fixture,
+    ecosystem: Ecosystem,
+    name: &str,
+    version: &str,
+    repository: &str,
+    seed: &str,
+) -> BlobDigest {
     let bytes = Bytes::from(seed.to_string());
     let digest = BlobDigest::new(starmetal_core::integrity::blake3_hex(&bytes));
     let blob = Blob {
@@ -88,7 +103,7 @@ async fn seed_version(fx: &Fixture, ecosystem: Ecosystem, name: &str, version: &
     fx.store.get_or_insert_blob(&blob, bytes).await.unwrap();
 
     fx.store
-        .upsert_component(&component(ecosystem, name, version))
+        .upsert_component(&component(ecosystem, name, version, repository))
         .await
         .unwrap();
     let path = format!("{name}-{version}.tar.gz");
@@ -182,7 +197,13 @@ async fn retention_sweep_deletes_the_union_across_families() {
             RetentionRule::IsPrerelease { prerelease: true },
         ],
     };
-    let maintenance = MetadataMaintenance::new(fx.store.clone(), Duration::from_secs(3600), policy);
+    let maintenance = MetadataMaintenance::new(
+        fx.store.clone(),
+        Duration::from_secs(3600),
+        policy,
+        HashMap::new(),
+        HashMap::new(),
+    );
 
     let outcome = maintenance.retention_sweep().await.expect("retention sweep");
     let mut deleted = outcome.deleted.clone();
@@ -224,7 +245,8 @@ async fn gc_sweep_after_retention_delete_reclaims_only_the_now_unreferenced_blob
         rules: vec![RetentionRule::IsPrerelease { prerelease: true }],
     };
     // Zero grace so the GC sweep both soft-deletes and reclaims in one pass.
-    let maintenance = MetadataMaintenance::new(fx.store.clone(), Duration::ZERO, policy);
+    let maintenance =
+        MetadataMaintenance::new(fx.store.clone(), Duration::ZERO, policy, HashMap::new(), HashMap::new());
 
     let retention_outcome = maintenance.retention_sweep().await.expect("retention sweep");
     assert_eq!(retention_outcome.deleted, vec!["1.1.0-rc.1"]);
@@ -246,4 +268,190 @@ async fn gc_sweep_after_retention_delete_reclaims_only_the_now_unreferenced_blob
         fx.store.get_blob(&kept_digest).await.unwrap().is_some(),
         "the still-referenced blob survives GC"
     );
+}
+
+/// A `KeepLatest{count}` policy, the retention rule used by the per-family precedence tests.
+fn keep_latest(count: usize) -> RetentionPolicy {
+    RetentionPolicy {
+        rules: vec![RetentionRule::KeepLatest { count }],
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires docker"]
+async fn repository_attribution_round_trips_through_the_family_listing() {
+    let fx = setup().await;
+    seed_version_in_repo(&fx, Ecosystem::PyPI, "widget", "1.0.0", "acme-hosted", &"r".repeat(64)).await;
+
+    let conn = fx.pool.get().await.expect("checkout connection");
+    let families = queries::list_component_families(&*conn).await.expect("list families");
+    assert_eq!(families.len(), 1, "one seeded family");
+    assert_eq!(
+        families[0].repository, "acme-hosted",
+        "the repository attribution round-trips through the components table"
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires docker"]
+async fn per_ecosystem_policy_deletes_only_matching_families() {
+    let fx = setup().await;
+    // A pypi family and an npm family, each with three versions. Only pypi has a policy.
+    for index in 1..=3 {
+        seed_version(
+            &fx,
+            Ecosystem::PyPI,
+            "widget",
+            &format!("1.0.{index}"),
+            &format!("p{:063}", index),
+        )
+        .await;
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    for index in 1..=3 {
+        seed_version(
+            &fx,
+            Ecosystem::Npm,
+            "gadget",
+            &format!("2.0.{index}"),
+            &format!("n{:063}", index),
+        )
+        .await;
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+
+    let per_ecosystem = HashMap::from([(String::from("pypi"), keep_latest(1))]);
+    let maintenance = MetadataMaintenance::new(
+        fx.store.clone(),
+        Duration::from_secs(3600),
+        RetentionPolicy::default(),
+        per_ecosystem,
+        HashMap::new(),
+    );
+
+    let outcome = maintenance.retention_sweep().await.expect("retention sweep");
+    let mut deleted = outcome.deleted.clone();
+    deleted.sort();
+    assert_eq!(
+        deleted,
+        vec!["1.0.1", "1.0.2"],
+        "only the pypi family's two oldest versions are deleted; the npm family (no policy) is untouched"
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires docker"]
+async fn per_repository_policy_overrides_per_ecosystem() {
+    let fx = setup().await;
+    // Two pypi families sharing the ecosystem but attributed to different repositories.
+    for index in 1..=3 {
+        seed_version_in_repo(
+            &fx,
+            Ecosystem::PyPI,
+            "alpha",
+            &format!("1.0.{index}"),
+            "team-a",
+            &format!("a{:063}", index),
+        )
+        .await;
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    for index in 1..=3 {
+        seed_version_in_repo(
+            &fx,
+            Ecosystem::PyPI,
+            "beta",
+            &format!("1.0.{index}"),
+            "team-b",
+            &format!("b{:063}", index),
+        )
+        .await;
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+
+    // The ecosystem policy keeps 2; the team-a repository override keeps only 1 and must win for
+    // team-a while team-b falls back to the ecosystem policy.
+    let per_ecosystem = HashMap::from([(String::from("pypi"), keep_latest(2))]);
+    let per_repository = HashMap::from([(String::from("team-a"), keep_latest(1))]);
+    let maintenance = MetadataMaintenance::new(
+        fx.store.clone(),
+        Duration::from_secs(3600),
+        RetentionPolicy::default(),
+        per_ecosystem,
+        per_repository,
+    );
+
+    let outcome = maintenance.retention_sweep().await.expect("retention sweep");
+    let mut deleted = outcome.deleted.clone();
+    deleted.sort();
+    // alpha (team-a): per-repository KeepLatest{1} deletes the two oldest (1.0.1, 1.0.2).
+    // beta  (team-b): per-ecosystem  KeepLatest{2} deletes only the oldest (1.0.1).
+    assert_eq!(
+        deleted,
+        vec!["1.0.1", "1.0.1", "1.0.2"],
+        "the per-repository policy overrides per-ecosystem for team-a; team-b uses per-ecosystem"
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires docker"]
+async fn global_policy_applies_where_neither_map_matches() {
+    let fx = setup().await;
+    for index in 1..=3 {
+        seed_version(
+            &fx,
+            Ecosystem::Cargo,
+            "crate-a",
+            &format!("1.0.{index}"),
+            &format!("c{:063}", index),
+        )
+        .await;
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+
+    // The overrides target an ecosystem and a repository the cargo family does not match, so the
+    // global policy applies.
+    let per_ecosystem = HashMap::from([(String::from("npm"), keep_latest(5))]);
+    let per_repository = HashMap::from([(String::from("other-repo"), keep_latest(5))]);
+    let maintenance = MetadataMaintenance::new(
+        fx.store.clone(),
+        Duration::from_secs(3600),
+        keep_latest(1),
+        per_ecosystem,
+        per_repository,
+    );
+
+    let outcome = maintenance.retention_sweep().await.expect("retention sweep");
+    let mut deleted = outcome.deleted.clone();
+    deleted.sort();
+    assert_eq!(
+        deleted,
+        vec!["1.0.1", "1.0.2"],
+        "the cargo family falls back to the global policy"
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires docker"]
+async fn all_empty_policies_are_a_noop() {
+    let fx = setup().await;
+    seed_version(&fx, Ecosystem::PyPI, "widget", "1.0.0", &"z".repeat(64)).await;
+
+    let maintenance = MetadataMaintenance::new(
+        fx.store.clone(),
+        Duration::from_secs(3600),
+        RetentionPolicy::default(),
+        HashMap::new(),
+        HashMap::new(),
+    );
+
+    let outcome = maintenance.retention_sweep().await.expect("retention sweep");
+    assert!(
+        outcome.deleted.is_empty(),
+        "an empty global policy with no overrides deletes nothing"
+    );
+
+    let conn = fx.pool.get().await.expect("checkout connection");
+    let families = queries::list_component_families(&*conn).await.expect("list families");
+    assert_eq!(families.len(), 1, "the seeded family survives the no-op sweep");
 }

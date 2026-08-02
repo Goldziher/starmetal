@@ -142,6 +142,7 @@ async fn publish_packument<S: HasNpmState>(
             },
             allow_overwrite: state.config().publishing.allow_overwrite,
             allow_shadowing: state.config().publishing.allow_shadowing,
+            repository: None,
         })
         .await
         .map_err(|err| map_error(&err))?;

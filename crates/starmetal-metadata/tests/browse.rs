@@ -41,6 +41,7 @@ async fn insert(store: &PostgresContentStore, ecosystem: Ecosystem, name: &str, 
             name: PackageName::new(name),
             version: version.to_string(),
             ecosystem,
+            repository: String::new(),
             attributes: serde_json::json!({}),
         })
         .await

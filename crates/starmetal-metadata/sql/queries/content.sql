@@ -18,10 +18,10 @@ WHERE digest = $1;
 
 -- @name UpsertComponent
 -- @returns :one
-INSERT INTO components (ecosystem, namespace, name, version, attributes)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO components (ecosystem, namespace, name, version, repository, attributes)
+VALUES ($1, $2, $3, $4, $5, $6)
 ON CONFLICT (ecosystem, namespace, name, version)
-DO UPDATE SET attributes = EXCLUDED.attributes, updated_at = now()
+DO UPDATE SET attributes = EXCLUDED.attributes, repository = EXCLUDED.repository, updated_at = now()
 RETURNING id;
 
 -- @name GetComponentId
@@ -39,8 +39,11 @@ WHERE ecosystem = $1 AND namespace = $2 AND name = $3;
 
 -- @name ListComponentFamilies
 -- @returns :many
--- Distinct (ecosystem, namespace, name) component families, for the retention sweep.
-SELECT DISTINCT ecosystem, namespace, name FROM components;
+-- Distinct (ecosystem, namespace, name, repository) component families, for the retention sweep.
+-- `repository` is projected so the sweep can resolve a per-repository retention policy; all versions
+-- of a package normally share one repository (if they span repositories, DISTINCT yields one family
+-- row per repository, which is an acceptable edge).
+SELECT DISTINCT ecosystem, namespace, name, repository FROM components;
 
 -- @name DeleteComponent
 -- @returns :exec

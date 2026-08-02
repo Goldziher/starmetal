@@ -143,6 +143,8 @@ async fn attach_content_store(
         content_store.clone(),
         std::time::Duration::from_secs(config.metadata.gc_grace_secs),
         config.metadata.retention.clone(),
+        config.metadata.retention_per_ecosystem.clone(),
+        config.metadata.retention_per_repository.clone(),
     )) as Arc<dyn ContentMaintenance>;
     let browse = content_store.clone() as Arc<dyn ContentBrowse>;
     let service = service.with_content_store(content_store as Arc<dyn ContentStore>);
@@ -510,6 +512,7 @@ impl StarmetalRuntime {
                 protocol_metadata: ProtocolMetadata::default_for(ecosystem),
                 allow_overwrite: self.config.publishing.allow_overwrite,
                 allow_shadowing: self.config.publishing.allow_shadowing,
+                repository: None,
             })
             .await
     }

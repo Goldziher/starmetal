@@ -133,6 +133,7 @@ impl ContentStore for PostgresContentStore {
             namespace(&component.namespace),
             component.name.as_str(),
             &component.version,
+            &component.repository,
             &component.attributes,
         )
         .await

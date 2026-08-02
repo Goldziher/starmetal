@@ -100,6 +100,7 @@ async fn put_path<S: HasMavenState>(
             protocol_metadata: ProtocolMetadata::Maven { path: path.to_string() },
             allow_overwrite: true,
             allow_shadowing: state.config().publishing.allow_shadowing,
+            repository: None,
         })
         .await
         .map_err(|err| map_error(&err))?;

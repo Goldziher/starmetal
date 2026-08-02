@@ -550,6 +550,7 @@ impl CachingPackageService {
                 name: request.name.clone(),
                 version: request.version.clone(),
                 ecosystem: request.ecosystem,
+                repository: request.repository.as_deref().unwrap_or("").to_string(),
                 attributes: serde_json::json!({}),
             })
             .await?;
@@ -1701,6 +1702,7 @@ impl CachingPackageService {
             protocol_metadata: manifest.protocol_metadata.clone(),
             allow_overwrite: manifest.allow_overwrite,
             allow_shadowing: manifest.allow_shadowing,
+            repository: None,
         };
         Ok((manifest, request))
     }
@@ -2364,6 +2366,7 @@ mod tests {
             protocol_metadata: ProtocolMetadata::default_for(Ecosystem::PyPI),
             allow_overwrite: false,
             allow_shadowing: false,
+            repository: None,
         };
 
         let result = service.publish_package(request).await.unwrap();
@@ -2433,6 +2436,7 @@ mod tests {
             protocol_metadata: ProtocolMetadata::default_for(Ecosystem::Npm),
             allow_overwrite: false,
             allow_shadowing: false,
+            repository: None,
         };
         service.publish_package(request).await.unwrap();
 
@@ -2498,6 +2502,7 @@ mod tests {
             protocol_metadata: ProtocolMetadata::default_for(Ecosystem::PyPI),
             allow_overwrite: false,
             allow_shadowing: false,
+            repository: None,
         };
         service.publish_package(request).await.unwrap();
         let artifact_id = ArtifactId {
@@ -2534,6 +2539,7 @@ mod tests {
             protocol_metadata: ProtocolMetadata::default_for(Ecosystem::Npm),
             allow_overwrite: false,
             allow_shadowing: false,
+            repository: None,
         };
 
         // Two distinct coordinates publish byte-identical artifacts with different licenses; the
@@ -2604,6 +2610,7 @@ mod tests {
             protocol_metadata: ProtocolMetadata::default_for(Ecosystem::PyPI),
             allow_overwrite,
             allow_shadowing: false,
+            repository: None,
         };
 
         service.publish_package(request(false)).await.unwrap();
@@ -2642,6 +2649,7 @@ mod tests {
             protocol_metadata: ProtocolMetadata::default_for(Ecosystem::PyPI),
             allow_overwrite,
             allow_shadowing: false,
+            repository: None,
         };
 
         service.publish_package(request(false)).await.unwrap();
@@ -2738,6 +2746,7 @@ mod tests {
             protocol_metadata: ProtocolMetadata::default_for(Ecosystem::PyPI),
             allow_overwrite: false,
             allow_shadowing: false,
+            repository: None,
         }
     }
 
@@ -2760,6 +2769,7 @@ mod tests {
             protocol_metadata: ProtocolMetadata::default_for(Ecosystem::PyPI),
             allow_overwrite: false,
             allow_shadowing: false,
+            repository: None,
         }
     }
 
@@ -3629,6 +3639,7 @@ mod tests {
                 protocol_metadata: ProtocolMetadata::default_for(Ecosystem::PyPI),
                 allow_overwrite: false,
                 allow_shadowing: false,
+                repository: None,
             })
             .await
             .unwrap();
@@ -3713,6 +3724,7 @@ mod tests {
             protocol_metadata: ProtocolMetadata::default_for(Ecosystem::PyPI),
             allow_overwrite: false,
             allow_shadowing: false,
+            repository: None,
         }
     }
 
@@ -4155,6 +4167,7 @@ mod tests {
                 protocol_metadata: ProtocolMetadata::default_for(Ecosystem::PyPI),
                 allow_overwrite: false,
                 allow_shadowing: false,
+                repository: None,
             })
             .await
             .unwrap();
@@ -4292,6 +4305,7 @@ mod tests {
                 protocol_metadata: ProtocolMetadata::default_for(Ecosystem::Npm),
                 allow_overwrite: false,
                 allow_shadowing: false,
+                repository: None,
             })
             .await
             .unwrap();
@@ -4321,6 +4335,7 @@ mod tests {
             protocol_metadata: ProtocolMetadata::default_for(Ecosystem::Npm),
             allow_overwrite: false,
             allow_shadowing: false,
+            repository: None,
         };
 
         service.publish_package(request.clone()).await.unwrap();
@@ -4349,6 +4364,7 @@ mod tests {
             protocol_metadata: ProtocolMetadata::default_for(Ecosystem::Maven),
             allow_overwrite: false,
             allow_shadowing: false,
+            repository: None,
         };
         service.publish_package(base).await.unwrap();
 
@@ -4368,6 +4384,7 @@ mod tests {
                 yanked: false,
                 listed: true,
                 protocol_metadata: ProtocolMetadata::default_for(Ecosystem::Maven),
+                repository: None,
             })
             .await
             .unwrap();
@@ -4412,6 +4429,7 @@ mod tests {
             protocol_metadata: ProtocolMetadata::default_for(Ecosystem::Cargo),
             allow_overwrite: false,
             allow_shadowing: false,
+            repository: None,
         };
 
         let err = service.publish_package(request).await.unwrap_err();
@@ -4441,6 +4459,7 @@ mod tests {
                 protocol_metadata: ProtocolMetadata::default_for(Ecosystem::RubyGems),
                 allow_overwrite: false,
                 allow_shadowing: false,
+                repository: None,
             })
             .await
             .unwrap();
@@ -4968,6 +4987,7 @@ mod tests {
             protocol_metadata: ProtocolMetadata::default_for(ecosystem),
             allow_overwrite: false,
             allow_shadowing: false,
+            repository: None,
         }
     }
 
