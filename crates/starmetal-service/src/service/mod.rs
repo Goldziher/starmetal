@@ -1,3 +1,4 @@
+mod facet_impls;
 mod gate;
 mod quota;
 mod signing;
