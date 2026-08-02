@@ -41,6 +41,9 @@ pub mod go;
 #[cfg(feature = "zig")]
 pub mod zig;
 
+#[cfg(feature = "swift")]
+pub mod swift;
+
 /// The outcome of a publish authorization check (ADR-0022), which each adapter maps to HTTP.
 ///
 /// `Unauthenticated` means no bearer credential was presented (→ 401). A credential that is

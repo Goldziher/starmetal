@@ -39,6 +39,11 @@ go = ["dep:starmetal-git", "dep:chrono", "dep:semver"]
 # No version validation or timestamp document is needed (`zig fetch` hashes the tarball itself), so
 # unlike `go` this feature pulls in neither `chrono` nor `semver`.
 zig = ["dep:starmetal-git"]
+# Swift Package Registry proxy (ADR-0023, SE-0292), backed by the same `starmetal-git` GitMirror
+# port as `go`/`zig`. Needs `semver` for release-version validation (like `go`), but no `chrono`: the
+# registry protocol has no timestamp document. `sha2` and `zip` are already unconditional
+# dependencies of this crate.
+swift = ["dep:starmetal-git", "dep:semver"]
 
 [dependencies]
 ahash.workspace = true
