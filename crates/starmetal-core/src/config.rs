@@ -545,6 +545,7 @@ impl Config {
 
         validate_encryption_config(&self.encryption)?;
         validate_signing_config(&self.signing)?;
+        validate_quota_config(&self.supply_chain.quota)?;
 
         if self.auth.enabled && self.auth.tokens.is_empty() {
             return Err(StarmetalError::Config(
@@ -913,6 +914,31 @@ fn validate_signing_config(config: &SigningConfig) -> Result<()> {
     Ok(())
 }
 
+/// Reject a `supply_chain.quota.per_ecosystem` map keyed by anything other than a canonical ecosystem
+/// name. The quota gate resolves a limit via `ecosystem.to_string()` (the `Display` form), so a key
+/// that is misspelled (`NPM`) or a non-canonical alias (`crates`, which `FromStr` accepts but `Display`
+/// never produces) would silently never match and fail open to `default_limits`/unlimited. Failing
+/// startup instead turns that operator footgun into a loud error.
+fn validate_quota_config(config: &QuotaConfig) -> Result<()> {
+    for key in config.per_ecosystem.keys() {
+        match key.parse::<Ecosystem>() {
+            Ok(ecosystem) if &ecosystem.to_string() == key => {}
+            Ok(ecosystem) => {
+                return Err(StarmetalError::Config(format!(
+                    "supply_chain.quota.per_ecosystem key '{key}' is not the canonical ecosystem name; \
+                     use '{ecosystem}'"
+                )));
+            }
+            Err(_) => {
+                return Err(StarmetalError::Config(format!(
+                    "supply_chain.quota.per_ecosystem key '{key}' is not a known ecosystem"
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn redact_signing_config(value: &mut toml::Value) {
     let Some(signing) = value.get_mut("signing").and_then(toml::Value::as_table_mut) else {
         return;
@@ -1073,6 +1099,29 @@ mod tests {
         let config: Config = toml::from_str("[signing]\nenabled = true\n").unwrap();
         let err = config.validate_mvp().unwrap_err().to_string();
         assert!(err.contains("signing.enabled requires"));
+    }
+
+    #[test]
+    fn startup_validation_rejects_a_noncanonical_quota_ecosystem_key() {
+        let config: Config = toml::from_str("[supply_chain.quota.per_ecosystem.NPM]\nmax_versions = 5\n").unwrap();
+        let err = config.validate_mvp().unwrap_err().to_string();
+        assert!(
+            err.contains("canonical ecosystem name") && err.contains("'npm'"),
+            "expected a canonical-name hint, got: {err}"
+        );
+    }
+
+    #[test]
+    fn startup_validation_rejects_an_unknown_quota_ecosystem_key() {
+        let config: Config = toml::from_str("[supply_chain.quota.per_ecosystem.banana]\nmax_versions = 5\n").unwrap();
+        let err = config.validate_mvp().unwrap_err().to_string();
+        assert!(err.contains("not a known ecosystem"), "got: {err}");
+    }
+
+    #[test]
+    fn startup_validation_accepts_a_canonical_quota_ecosystem_key() {
+        let config: Config = toml::from_str("[supply_chain.quota.per_ecosystem.npm]\nmax_versions = 5\n").unwrap();
+        assert!(config.validate_mvp().is_ok());
     }
 
     #[test]

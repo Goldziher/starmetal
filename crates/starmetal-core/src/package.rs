@@ -129,8 +129,11 @@ impl PackageName {
     /// coordinate's grouping — e.g. the publish quota ledger (ADR-0021) — agree on one definition.
     pub fn publish_namespace(&self, ecosystem: Ecosystem) -> Option<String> {
         match ecosystem {
+            // npm names are case-insensitive, so canonicalize the scope to lower case — otherwise
+            // `@Acme`, `@ACME`, `@acme` would bucket separately and a publisher could cycle casing to
+            // evade a per-namespace quota (the quota key is derived from this value).
             Ecosystem::Npm => match self.0.split_once('/') {
-                Some((scope, _name)) if scope.starts_with('@') => Some(scope.to_string()),
+                Some((scope, _name)) if scope.starts_with('@') => Some(scope.to_ascii_lowercase()),
                 _ => None,
             },
             Ecosystem::Maven => self.0.rsplit_once(':').map(|(group, _artifact)| group.to_string()),
@@ -427,6 +430,16 @@ mod tests {
     fn should_derive_npm_scope_as_publish_namespace() {
         let scoped = PackageName::new("@angular/core");
         assert_eq!(scoped.publish_namespace(Ecosystem::Npm), Some("@angular".to_string()));
+
+        // Case-insensitive: casing variants of one scope must bucket identically so a per-namespace
+        // quota cannot be evaded by cycling casing.
+        for variant in ["@Angular/core", "@ANGULAR/other", "@aNgUlAr/x"] {
+            assert_eq!(
+                PackageName::new(variant).publish_namespace(Ecosystem::Npm),
+                Some("@angular".to_string()),
+                "npm scope must canonicalize to lower case for {variant}"
+            );
+        }
 
         let unscoped = PackageName::new("left-pad");
         assert_eq!(unscoped.publish_namespace(Ecosystem::Npm), None);
