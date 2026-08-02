@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted (partial)
 
 ## Context
 
@@ -46,16 +46,32 @@ shared code.
 
 ## Implemented
 
-- `RepositoryKind` (`Proxy`/`Hosted`/`Group` enum) and `Config::resolved_repositories`, which derives
-  one proxy repository per enabled upstream, are live; registry-driven mounting wires these into
-  `build_app`. `RepositoryKind::Proxy` is the only kind yielded today.
+- `RepositoryKind` (`Proxy`/`Hosted`/`Group`), `RecipeKey`, `Recipe`, and `RecipeRegistry` are live in
+  `starmetal-core::repository`; `ProxyFacet` and `HostedFacet` are implemented on the existing
+  `CachingPackageService` as thin wrappers over its cache/storage/publish engine — no behavior
+  changes, per the Decision.
+- `CompositeGroupFacet` implements `GroupFacet`: first-match artifact resolution and merge-all index
+  union over ordered `(RepositoryId, Arc<dyn ProxyFacet>)` members.
+- `ProxyRecipe` (one per resolved proxy repository) populates the `RecipeRegistry` at assembly;
+  `build_app` mounts proxy repositories through the registry rather than a fixed match.
+- `RepositoryKind::Group` is a usable read-only virtual repository: `GroupPackageService` implements
+  `PackageService` by unioning member `list_versions` (deduplicated, deterministically ordered,
+  earlier-member precedence) and resolving `get_artifact`/`get_version_metadata` first-match across
+  members; publish and yank are rejected. Each group mounts via a per-repository axum state
+  (`AppState::for_group_mount`). `RepositoryConfig.members` is validated at startup: a group needs at
+  least one member, each a declared `proxy` repository of the group's own ecosystem; a `proxy`
+  repository must not declare members.
 
 ## Deferred
 
-- The `ProxyFacet`/`HostedFacet`/`GroupFacet` traits and the recipe registry remain inert scaffolding —
-  no facet composition or recipe-keyed construction exists yet.
-- Extracting the existing `CachingPackageService` pull-through pipeline into the `ProxyFacet` engine.
-- The `Hosted` and `Group` repository kinds and their facets.
+- A true **Hosted** repository (local-only, upload-only, no upstream) and independent per-repository
+  proxy upstreams both require **repository-scoped storage keys**. Storage keys today are
+  ecosystem-scoped (`<ecosystem>/<name>/<version>/<filename>`), so every same-ecosystem proxy shares
+  one `CachingPackageService` and one cache namespace. That is a foundational storage-layer change and
+  its own stage; `validate_repository` still rejects `RepositoryKind::Hosted` outright.
+- Per-ecosystem group index merging in the wire format (maven-metadata.xml, npm packument, PyPI simple
+  index, Cargo index) — `CompositeGroupFacet::merge_index` and `GroupPackageService::list_versions`
+  merge the internal `Vec<VersionInfo>` representation, not the protocol-specific document.
 - Federated/replicated multi-site repositories (Artifactory "federated" equivalent).
 - Per-member routing rules beyond ordered first-match/merge-all.
 - UI for repository composition; configuration is TOML-first initially.

@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted (partial)
 
 ## Context
 
@@ -53,15 +53,36 @@ Add git-as-a-dependency-source as a feature-gated capability, not a forge.
 
 ## Implemented
 
-- Nothing yet. Go, Swift, and Zig are not among the eight current adapters (ADR-0005); they are
-  planned ecosystems introduced by this ADR.
+- The `starmetal-git` crate provides the `GitMirror` port (`ensure_mirror`, `list_refs`, `resolve`,
+  `read_blob`, `archive` with `ArchiveFormat::{TarGz,Zip}`, `commit_time`) with a `gitoxide` (`gix`
+  0.86) backend behind bare-repository mirrors refreshed on a TTL, producing byte-deterministic
+  archives. All git-library dependencies are quarantined to this crate.
+- **Go**: GOPROXY adapter (`@v/list`, `.info`, `.mod`, `.zip`, `@latest`), module zip re-prefixed
+  `{module}@{version}/`; `[go].module_overrides` maps a module path to a git remote. Live `go mod
+  download` E2E coverage.
+- **Zig**: tarball proxy (`GET /zig/{host}/{user}/{repo}/{ref}.tar.gz`), archive served as-is with tag
+  validation; `[zig].repo_overrides`. Live `zig fetch` E2E coverage.
+- **Swift**: Package Registry (SE-0292) — list-releases, release-metadata (SHA-256 checksum),
+  `Package.swift`, and `.zip` endpoints, archive re-prefixed `{name}/`; `[swift].package_overrides`
+  maps `{scope}.{name}` to a git URL with **no host default**, so every package requires an explicit
+  override. Live `swift package resolve` + `build` E2E coverage.
+- Go, Zig, and Swift bypass `CachingPackageService` and the `ProxyFacet` pipeline entirely, reading
+  directly through `Arc<dyn GitMirror>` via a `Has*State` trait; `build_app` mounts them
+  unconditionally once resolved as a `Proxy` repository (still feature-gated at compile time).
 
 ## Deferred
 
+- Smart-HTTP `upload-pack` — proved unnecessary: Go, Zig, and Swift all resolve through their
+  ecosystem's HTTP archive/registry protocol, not the git wire protocol, so no client needs Starmetal
+  to speak git directly.
 - `receive-pack`/push and any write-to-git workflow.
-- SSH git transport (smart-HTTP first; SSH only if a client requires it).
-- Go checksum-database (`sumdb`) proxying beyond preserving and forwarding upstream sums.
-- Swift Package Registry publishing (hosted Swift packages) — read/proxy first.
+- SSH git transport.
+- Go pseudo-versions, `+incompatible` suffixes, nested and `/v2`+ modules, vanity `go-import`
+  resolution, and checksum-database (`sumdb`) proxying beyond preserving upstream sums.
+- Zig `git+https` direct fetch, `build.zig.zon` transitive dependency resolution, and server-side
+  manifest hash verification.
+- Swift's no-host-default: every package requires an explicit `package_overrides` entry; there is no
+  fallback derivation from the package identifier.
 - Any pull-request, issue, CI, or code-hosting UI surface — permanently out of scope (ADR-0018).
 
 ## Consequences

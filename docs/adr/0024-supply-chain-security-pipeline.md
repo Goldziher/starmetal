@@ -69,6 +69,26 @@ enforced by ordered middleware on both push and pull paths, with pluggable scann
   realizes this ADR's "ordered policy layer" as a shared surfacing seam rather than a re-checking
   Tower pipeline — see ADR-0025 for the full decision→status table and the argument against
   double-enforcement.
+- SBOM generation: `starmetal-core::sbom::generate` emits CycloneDX 1.5 and SPDX 2.3 JSON documents
+  per artifact. The service layer (`store_sbom_documents`) stores them as coordinate-keyed sidecars
+  (`_starmetal/sbom/<coordinate>.<format>.json`, not digest-keyed, since an SBOM embeds coordinate
+  identity and license) on publish, staged through the same rollback-safe write path as the artifact
+  itself. `SbomIndex::list_sboms`/`get_sbom_document` expose them for admin retrieval.
+- Signature and provenance gate: `enforce_verification` runs at both ingest (`publish_package`) and
+  serve (`get_artifact`), denying with `PolicyViolation` (fail-closed) on a missing signature or
+  failing provenance. The built-in check is a DSSE-signed in-toto provenance attestation over
+  Starmetal's own signing graph (`verify_provenance`, `starmetal_core::attestation`), gated by
+  `supply_chain.require_signature`/`require_provenance`. An attached external `Verifier` port
+  (`starmetal-core::supply_chain::VerificationTarget`) replaces the built-in check entirely — the
+  cosign/sigstore seam this ADR calls for.
+- Ingest-time quarantine: with `supply_chain.ingest_quarantine` enabled, a publish blocked by the
+  ingest vulnerability gate (`scan_artifacts_for_publish`) is held — both the staged bytes and a
+  `QuarantineRecord` — instead of hard-denied. `IngestQuarantine::promote_ingest`/`reject_ingest`
+  replay the deferred publish or purge the held bytes; promotion is bound to the exact reviewed
+  coordinate, so approving one digest never silently clears the gate for a different package that
+  happens to share bytes.
+- Quota gate (ADR-0021): `reserve_quota` now denies with `PolicyReason::QuotaExceeded` when a
+  publish's version/byte delta would exceed the `(ecosystem, namespace)` ledger limit.
 
 ## Deferred
 
@@ -80,14 +100,14 @@ enforced by ordered middleware on both push and pull paths, with pluggable scann
   status, applied uniformly across proxy, hosted, and admin paths, without re-running policy checks
   in a middleware layer. ADR-0025 records the as-built enforcement architecture and the reasoning for
   this divergence.
-- Ingest-time quarantine: ingest currently hard-denies failing artifacts rather than holding them for
-  approval.
-- SBOM generation (CycloneDX/SPDX types exist; no generator).
-- The signature/provenance gate (Referrer/Attestation types exist; unconsumed).
+- Per-ecosystem dependency enumeration in SBOMs: the generator accepts a dependency list and is
+  dependency-ready, but no adapter yet extracts declared dependencies from protocol metadata to
+  populate it.
 - Bundling a specific scanner beyond OSV; keep scanners external and swappable (no vendored CVE
   database in core).
-- Keyless Sigstore (Fulcio/Rekor) verification and Starmetal-published transparency for re-hosted
-  artifacts — verify supplied signatures first.
+- Live sigstore/cosign/Rekor (keyless) verification and Starmetal-published transparency for re-hosted
+  artifacts: the `Verifier` port is the seam, but no adapter calls out to Sigstore yet — today's
+  built-in gate verifies only Starmetal's own DSSE-signed graph.
 - Protocol-native and post-quantum signing claims remain gated by ADR-0011 until clients verify them
   in deterministic tests.
 

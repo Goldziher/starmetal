@@ -54,17 +54,28 @@ services but implemented outside the domain.
   - **Explicitly out of scope for this stage:** a live IdP integration — no JWKS-URL fetch, OIDC
     discovery, or token refresh. The validator takes a static JWKS from config and performs no network
     I/O. A live-IdP backend slots behind the same `Authenticator` port later.
+- Read-path migration off the legacy scheme: `require_bearer_token` (`starmetal-server`'s auth
+  middleware) now authenticates the bearer to a `Principal` and requires `Action::Read` through
+  `state.authorizer`; the legacy `Config::authorize_bearer_token`/`authorize_admin_token` path it
+  replaced no longer exists in `starmetal-core::config`. Every decision emits a structured `tracing`
+  event on the `starmetal::audit` target (`debug` on allow, `warn` on deny) — read and admin decisions
+  are both audited (OWASP A09).
+- Content-selector push-down: `QueryPredicate` (`starmetal-core::authz`) compiles to a parameterized
+  Postgres `WHERE` fragment (`starmetal-metadata::predicate_sql::compile`, every value bound as `$n`,
+  never interpolated). `GET /api/v1/components` (`starmetal-server::browse`) authorizes `Action::Browse`
+  and pushes the returned predicate into the metadata store, so a scoped principal receives a scoped
+  listing filtered in-query rather than post-filtered.
 
 ## Deferred
 
-- Migrating the read-path middleware (`require_bearer_token`) off the legacy `Config::authorize_*`
-  path onto the `Authorizer` port — read-gating still uses the old scheme.
 - Live-IdP OIDC (JWKS-URL fetch, OIDC discovery, token refresh) and SAML/LDAP delegated identity
   backends. The offline static-JWKS OIDC backend above lands the port; these extend it.
 - Forge-delegated identity integration (the standalone-vs-embedded swap) — enabled by this port, not
   built here.
-- Content-selector expressions compiled to a pushed-down query predicate (ADR-0020).
-- Full audit logging (OWASP logging) beyond security-event emission.
+- A scoped, read-capable download-authorization surface — browse push-down proves the selector model
+  end-to-end at the authorization and database layers, but per-artifact download gating by selector is
+  not wired.
+- Full audit logging (OWASP logging) beyond the structured allow/deny events emitted today.
 - A management UI for roles/permissions; TOML/admin-API configuration first.
 
 ## Consequences

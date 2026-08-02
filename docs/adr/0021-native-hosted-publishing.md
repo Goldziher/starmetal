@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted (partial)
 
 ## Context
 
@@ -45,17 +45,27 @@ Promote hosted publishing to a first-class, per-ecosystem-gated capability built
 
 ## Implemented
 
-- Experimental local-publish substrate for all eight ecosystems (ADR-0009) is the starting point; this
-  ADR restructures it onto the shared SPI and content model.
-- The publish authorization seam is consulted on the publish path across all eight adapters
-  (ADR-0022); publish writes are content-addressed dual-writes into the Stage-2 content store
-  (ADR-0020); a named lock keyed on `(ecosystem, name, version)` serializes concurrent publishes per
-  coordinate.
+- All eight adapters authorize every publish through the `Authenticator`/`Authorizer` port
+  (deny-by-default), replacing the flat `Config::authorize_publish_token` from ADR-0009.
+- Content-addressed dual-write: when `[metadata].enabled`, `publish_package` upserts
+  Component→Asset→Blob (Blake3-keyed, deduplicated, GC- and integrity-tracked) inside the same
+  transactional block as the storage write.
+- A named lock keyed on `(ecosystem, name, version)` (`CachingPackageService::acquire_publish_lock`)
+  serializes concurrent publishes to the same coordinate; the lock map entry is pruned on every exit
+  path once the last holder drops it.
+- Two-phase quota enforcement: opt-in `supply_chain.quota` reserves a per-`(ecosystem, namespace)`
+  version-count and byte ceiling before the write and reconciles it into committed usage after
+  success, denying with `PolicyReason::QuotaExceeded` when a reservation would exceed the ceiling. The
+  reservation is an RAII guard (`QuotaReservationGuard`) that releases on any failure or rollback path.
+  The ledger is a process-local, in-memory `AHashMap`, not persisted or shared across replicas.
+- `HostedFacet` (ADR-0019) is implemented on `CachingPackageService`: `validate_upload` mirrors
+  `publish_package`'s pre-write checks without storing, `store_upload` aliases the full publish
+  pipeline.
 
 ## Deferred
 
-- `HostedFacet` formalization (ADR-0019) — publishing is not yet expressed as a repository facet.
-- Two-phase (reserve-then-reconcile) quota enforcement.
+- The quota ledger is process-local: it resets on restart and is not shared across replicas. A
+  durable, metadata-backed ledger is the follow-up.
 - Native support claims per ecosystem until each meets ADR-0009/ADR-0011 promotion gates, including
   full native publish-then-install/restore E2E coverage.
 - Staging/promotion pipelines between repositories (build-promotion workflows).

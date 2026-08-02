@@ -56,13 +56,24 @@ Adopt a three-level universal content model with content-addressed storage and r
   compact) and retention (`apply_retention`, union-of-rules across the configured policies) are wired
   to scheduled tasks (`metadata.gc_interval_secs`, `metadata.retention_interval_secs`) and to admin
   `POST /gc` and `POST /retention` triggers.
+- Per-repository and per-ecosystem retention policies: `metadata.retention`, `retention_per_ecosystem`,
+  and `retention_per_repository` resolve with precedence per-repository > per-ecosystem > global,
+  applied per component family by `MetadataMaintenance::resolve_policy`. Config validation rejects a
+  `retention_per_ecosystem` key that isn't a canonical ecosystem name (`retention_per_repository` keys
+  are free-form and unvalidated).
+- A `repository TEXT NOT NULL DEFAULT ''` attribution column on `components` (indexed via
+  `idx_components_repository`), explicitly *not* part of the identity/dedup uniqueness key
+  (`ecosystem, namespace, name, version`). `PublishRequest.repository` threads an optional value
+  through to it; no caller populates it yet, so every component stores `''` until named repositories
+  (ADR-0019) supply real values through publish facets.
 
 ## Deferred
 
-- Per-repository or per-ecosystem retention policies — one global `metadata.retention` policy applies
-  today.
 - Physical per-ecosystem table partitioning (Nexus's `${format}_*` optimization) — start with a single
   set of tables discriminated by ecosystem; partition only if scale requires.
+- Per-repository retention has no effect in practice today: the `repository` column is always `''`
+  until publish facets populate real repository names (ADR-0019), so `retention_per_repository` has
+  nothing to match against.
 - An embedded-database option; Postgres is the only backing store today. Prefer an embedded default
   (per Zot's lean posture) over a mandatory external DB.
 - Cross-repository (global) dedup versus per-repository dedup boundary.
