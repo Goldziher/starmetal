@@ -80,7 +80,6 @@ fn to_status_code(status: PolicyHttpStatus) -> StatusCode {
 ///
 /// Non-policy variants are unchanged from before N9: NotFound family → 404, Publish → 409,
 /// Upstream/IntegrityError/SchemaValidation → 502, Adapter/Toml/Json → 400, everything else → 500.
-#[allow(dead_code)]
 pub fn map_public_error(err: &StarmetalError) -> (StatusCode, String) {
     match err {
         StarmetalError::PackageNotFound { .. }
