@@ -257,6 +257,24 @@ async fn swift_proxy_reports_404_for_an_unknown_version() {
 }
 
 #[tokio::test]
+async fn swift_proxy_reports_404_for_a_package_absent_from_overrides() {
+    // A package this registry does not host (no `package_overrides` entry) is 404, not a 400 client
+    // error — SE-0292 clients distinguish the two (404 falls through to other registries / SCM).
+    let fixture = build_fixture();
+    let server = start_server_with_fixture(&fixture).await;
+    let client = reqwest::Client::new();
+
+    let response = client
+        .get(format!("{}/other/unmapped/1.0.0", server.swift_proxy_url()))
+        .send()
+        .await
+        .expect("release metadata request");
+    assert_eq!(response.status(), 404);
+
+    server.shutdown();
+}
+
+#[tokio::test]
 async fn swift_proxy_reports_502_when_the_archive_exceeds_max_archive_bytes() {
     let fixture = build_fixture();
     let git_url = fixture.url.clone();
@@ -296,11 +314,13 @@ async fn require_swift() -> String {
 /// `--security-path` (confirmed empirically to redirect the registry download cache and the
 /// trust-on-first-use fingerprint store respectively; the project-local `registries.json` itself
 /// always lives under `<package-path>/.swiftpm/configuration`, so no `--config-path` override is
-/// needed for that part). This is what keeps the test independent and idempotent across repeated
-/// local runs (ADR-agnostic test-hygiene requirement): without it, SwiftPM's per-user fingerprint
-/// pin for `test.fixture` would persist across runs and reject a later run's differently-timed
-/// commit (the archive's bytes are not reproducible run-to-run, since `starmetal-git` pins entry
-/// mtimes to the commit time, and each fixture build creates a fresh commit).
+/// needed for that part). This keeps the test independent and idempotent across repeated local runs
+/// as plain cache/state hygiene — it must not read or write the developer's shared SwiftPM caches.
+/// Note the *served* archive is byte-deterministic for a fixed upstream tag: `build_registry_zip`
+/// re-zips entries with a fixed timestamp and strips the source mtimes, so even though each fixture
+/// build is a fresh commit (different committer time → different raw gix archive), the metadata
+/// checksum always matches the later-served `.zip`. The isolation is therefore hygiene, not a
+/// workaround for irreproducible bytes.
 async fn configure_registry(swift: &str, project: &Path, cache_path: &Path, security_path: &Path, registry_url: &str) {
     let output = Command::new(swift)
         .args(["package-registry", "set", "--allow-insecure-http"])

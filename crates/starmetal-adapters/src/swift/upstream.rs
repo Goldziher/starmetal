@@ -26,13 +26,19 @@ use starmetal_git::GitMirror;
 ///
 /// There is no default host mapping (see the module doc comment) — the identifier must be listed
 /// verbatim in `overrides`.
+///
+/// An identifier absent from `overrides` is a package this registry does not host, so it maps to
+/// `PackageNotFound` (→ 404), not a client error — SE-0292 clients distinguish 404 (fall through to
+/// other registries / SCM) from 400. The `swift.package_overrides` operator hint is emitted to the
+/// server log by the caller's `map_error`, not leaked to the client.
 pub fn resolve_package_url(identifier: &str, overrides: &HashMap<String, String>) -> Result<String> {
-    overrides.get(identifier).cloned().ok_or_else(|| {
-        StarmetalError::Adapter(format!(
-            "unknown Swift package '{identifier}'; add an entry to swift.package_overrides -- a Swift \
-             registry identifier carries no host to derive a git remote from automatically"
-        ))
-    })
+    overrides
+        .get(identifier)
+        .cloned()
+        .ok_or_else(|| StarmetalError::PackageNotFound {
+            ecosystem: "swift".to_string(),
+            name: identifier.to_string(),
+        })
 }
 
 /// Ensure `git_url` is mirrored and fresh, mapping the port's error at this crate's boundary.
@@ -149,10 +155,14 @@ mod tests {
     }
 
     #[test]
-    fn rejects_an_identifier_without_an_override() {
+    fn rejects_an_identifier_without_an_override_as_not_found() {
         let overrides = HashMap::new();
         let err = resolve_package_url("test.fixture", &overrides).unwrap_err();
-        assert!(err.to_string().contains("package_overrides"));
+        // Absent from overrides ⇒ not hosted ⇒ 404 (PackageNotFound), not a 400 client error.
+        assert!(
+            matches!(&err, StarmetalError::PackageNotFound { ecosystem, name } if ecosystem == "swift" && name == "test.fixture"),
+            "expected PackageNotFound for an unconfigured identifier, got {err:?}"
+        );
     }
 
     fn read_source_zip(entries: &[(&str, &str)]) -> Vec<u8> {
