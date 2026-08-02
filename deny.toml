@@ -31,6 +31,15 @@ include-dev = true
 unused-allowed-license = "deny"
 unused-license-exception = "deny"
 
+# uluru is an unmodified LRU-cache dependency pulled by gix-pack (gitoxide's object
+# database, a non-optional part of the starmetal-git mirror). MPL-2.0 is OSI-approved,
+# FSF-Free, and only weak file-level copyleft: using the crate unmodified imposes no
+# obligation on Starmetal's own sources. Scoped to this one crate rather than allowing
+# MPL-2.0 workspace-wide.
+[[licenses.exceptions]]
+allow = ["MPL-2.0"]
+name = "uluru"
+
 [licenses.private]
 ignore = true
 

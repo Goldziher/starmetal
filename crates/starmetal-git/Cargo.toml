@@ -1,0 +1,38 @@
+[package]
+name = "starmetal-git"
+description = "Feature-gated git-mirror port and gitoxide-backed implementation (ADR-0023 git-as-source foundation)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = []
+# Enables the gitoxide-backed GitMirror implementation and, with it, the git
+# dependency tree. The port trait and its plain types are always available so
+# the workspace builds with this feature off.
+gix-backend = ["dep:blake3", "dep:gix", "dep:gix-archive", "dep:tokio"]
+
+[dependencies]
+async-trait.workspace = true
+blake3 = { workspace = true, optional = true }
+bytes.workspace = true
+gix = { version = "0.86", default-features = false, features = [
+  "blocking-network-client",
+  "max-performance-safe",
+  "revision",
+  "sha1",
+  "worktree-archive",
+  "worktree-stream",
+], optional = true }
+# Direct dependency so gix-archive's tar/zip/gzip container formats are enabled
+# via feature unification; gix itself pulls gix-archive with default-features off.
+gix-archive = { version = "0.35", default-features = false, features = ["tar_gz", "zip"], optional = true }
+thiserror.workspace = true
+tokio = { workspace = true, optional = true }
+
+[dev-dependencies]
+flate2.workspace = true
+tar.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+zip.workspace = true

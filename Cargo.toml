@@ -6,6 +6,7 @@ members = [
   "crates/starmetal-cli",
   "crates/starmetal-core",
   "crates/starmetal-forge",
+  "crates/starmetal-git",
   "crates/starmetal-managers",
   "crates/starmetal-metadata",
   "crates/starmetal-oidc",
