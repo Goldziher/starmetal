@@ -405,48 +405,15 @@ async fn authorize_admin(state: &AppState, headers: &HeaderMap) -> Result<(), (S
     ))
 }
 
+/// Map a `StarmetalError` to an admin API response.
+///
+/// Delegates to [`starmetal_adapters::map_public_error`] — the same canonical, reason-aware
+/// `PolicyReason` → HTTP status mapping every protocol adapter uses (ADR-0024/0025 Stage N9) — so a
+/// policy denial surfaces with the same status whether it came from a proxy/hosted route or the
+/// admin API. This function only adds the admin-specific audit log line on top.
 fn map_admin_error(err: starmetal_core::error::StarmetalError) -> (StatusCode, String) {
     tracing::warn!(error = %err, "admin API request failed");
-    match err {
-        starmetal_core::error::StarmetalError::PackageNotFound { .. }
-        | starmetal_core::error::StarmetalError::VersionNotFound { .. }
-        | starmetal_core::error::StarmetalError::ArtifactNotFound(_) => (StatusCode::NOT_FOUND, err.to_string()),
-        starmetal_core::error::StarmetalError::PolicyViolation(_) => (StatusCode::FORBIDDEN, err.to_string()),
-        starmetal_core::error::StarmetalError::Adapter(_) => (StatusCode::BAD_REQUEST, err.to_string()),
-        starmetal_core::error::StarmetalError::Update(_) => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "update operation failed".to_string())
-        }
-        starmetal_core::error::StarmetalError::Publish(_) => (StatusCode::CONFLICT, err.to_string()),
-        starmetal_core::error::StarmetalError::Upstream(_) => {
-            (StatusCode::BAD_GATEWAY, "upstream registry request failed".to_string())
-        }
-        starmetal_core::error::StarmetalError::Config(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "server configuration error".to_string(),
-        ),
-        starmetal_core::error::StarmetalError::Storage(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "storage operation failed".to_string(),
-        ),
-        starmetal_core::error::StarmetalError::IntegrityError { .. } => (
-            StatusCode::BAD_GATEWAY,
-            "upstream artifact integrity check failed".to_string(),
-        ),
-        starmetal_core::error::StarmetalError::SchemaValidation(_) => (
-            StatusCode::BAD_GATEWAY,
-            "upstream registry response failed validation".to_string(),
-        ),
-        starmetal_core::error::StarmetalError::Lockfile(_)
-        | starmetal_core::error::StarmetalError::ConfigNotFound(_)
-        | starmetal_core::error::StarmetalError::Io(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal starmetal error".to_string(),
-        ),
-        starmetal_core::error::StarmetalError::Toml(_) | starmetal_core::error::StarmetalError::Json(_) => (
-            StatusCode::BAD_REQUEST,
-            "invalid request or registry payload".to_string(),
-        ),
-    }
+    starmetal_adapters::map_public_error(&err)
 }
 
 fn registry_statuses(state: &AppState) -> Vec<RegistryStatus> {
@@ -477,4 +444,45 @@ fn registry_specs() -> Vec<(&'static str, &'static str, bool)> {
         ("nuget", "nuget", cfg!(feature = "nuget")),
         ("pub", "pub", cfg!(feature = "pub")),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use starmetal_core::error::StarmetalError;
+    use starmetal_core::supply_chain::PolicyReason;
+
+    /// The admin API and every protocol adapter must surface a given `PolicyReason` as the same
+    /// HTTP status (ADR-0024/0025 Stage N9's uniformity guarantee). `map_admin_error` now delegates
+    /// to `starmetal_adapters::map_public_error`, so this proves the two call sites cannot drift.
+    #[test]
+    fn should_surface_the_same_status_as_the_adapter_mapper_for_every_policy_reason() {
+        let reasons = [
+            PolicyReason::BlockedCoordinate,
+            PolicyReason::DisallowedLicense,
+            PolicyReason::VulnSeverityExceeded,
+            PolicyReason::MissingSignature,
+            PolicyReason::FailingProvenance,
+            PolicyReason::MissingScanReport,
+            PolicyReason::IncompleteScan,
+            PolicyReason::QuotaExceeded,
+            PolicyReason::ImmutableVersion,
+        ];
+        for reason in reasons {
+            let message = format!("{}: some prose", reason.as_str());
+            let admin_status = map_admin_error(StarmetalError::PolicyViolation(message.clone())).0;
+            let adapter_status = starmetal_adapters::map_public_error(&StarmetalError::PolicyViolation(message)).0;
+            assert_eq!(
+                admin_status, adapter_status,
+                "admin and adapter status diverged for {reason:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn should_map_quota_exceeded_to_413_via_admin_error() {
+        let err = StarmetalError::PolicyViolation("quota-exceeded: storage quota exceeded".to_string());
+        let (status, _) = map_admin_error(err);
+        assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    }
 }
