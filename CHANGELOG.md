@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-02
+
 ### Added
 
 - Git-as-source ecosystems (ADR-0023): a feature-gated `starmetal-git` crate providing a
@@ -85,6 +87,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 
 - Bumped `opendal` to 0.58.
+- The published Docker image now bundles a `git` binary (with its exec-path helpers), required by
+  the Go/Zig/Swift proxies: gix is built without a native transport and shells out to
+  `git upload-pack` for every git fetch, so the previously git-less runtime image returned
+  `502 Bad Gateway` on every git-sourced request. A deterministic Docker E2E
+  (`task docker:git:e2e`) now guards this end to end.
 
 ## [0.3.0] - 2026-07-24
 

@@ -5167,7 +5167,7 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 
 [[package]]
 name = "starmetal-adapters"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "ahash",
  "async-trait",
@@ -5197,7 +5197,7 @@ dependencies = [
 
 [[package]]
 name = "starmetal-authz"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "starmetal-core",
@@ -5207,7 +5207,7 @@ dependencies = [
 
 [[package]]
 name = "starmetal-cli"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "axum",
  "clap",
@@ -5229,7 +5229,7 @@ dependencies = [
 
 [[package]]
 name = "starmetal-conformance-tests"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "ahash",
  "async-trait",
@@ -5251,7 +5251,7 @@ dependencies = [
 
 [[package]]
 name = "starmetal-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "ahash",
  "async-trait",
@@ -5271,7 +5271,7 @@ dependencies = [
 
 [[package]]
 name = "starmetal-forge"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "base64 0.23.0",
@@ -5286,7 +5286,7 @@ dependencies = [
 
 [[package]]
 name = "starmetal-git"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "blake3",
@@ -5303,7 +5303,7 @@ dependencies = [
 
 [[package]]
 name = "starmetal-integration-tests"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "ahash",
  "async-trait",
@@ -5339,7 +5339,7 @@ dependencies = [
 
 [[package]]
 name = "starmetal-managers"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "starmetal-core",
  "starmetal-update-core",
@@ -5348,7 +5348,7 @@ dependencies = [
 
 [[package]]
 name = "starmetal-metadata"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "bb8",
@@ -5369,7 +5369,7 @@ dependencies = [
 
 [[package]]
 name = "starmetal-oidc"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "base64 0.23.0",
  "hmac 0.12.1",
@@ -5387,7 +5387,7 @@ dependencies = [
 
 [[package]]
 name = "starmetal-ops"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "ahash",
  "bytes",
@@ -5412,7 +5412,7 @@ dependencies = [
 
 [[package]]
 name = "starmetal-schema-manager"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "blake3",
  "clap",
@@ -5427,7 +5427,7 @@ dependencies = [
 
 [[package]]
 name = "starmetal-server"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "axum",
  "serde",
@@ -5444,7 +5444,7 @@ dependencies = [
 
 [[package]]
 name = "starmetal-service"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "ahash",
  "async-trait",
@@ -5472,7 +5472,7 @@ dependencies = [
 
 [[package]]
 name = "starmetal-storage"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -5486,7 +5486,7 @@ dependencies = [
 
 [[package]]
 name = "starmetal-test-generator"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "clap",
  "serde",
@@ -5496,7 +5496,7 @@ dependencies = [
 
 [[package]]
 name = "starmetal-update-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "serde",
@@ -5506,7 +5506,7 @@ dependencies = [
 
 [[package]]
 name = "starmetal-updater"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "starmetal-core",
@@ -5517,7 +5517,7 @@ dependencies = [
 
 [[package]]
 name = "starmetal-versioning"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "semver",
  "starmetal-core",
