@@ -181,19 +181,14 @@ async fn dispatch_tail_inner<S: HasSwiftState>(
     let mirror = state.git_mirror().as_ref();
     ensure_mirror(mirror, &git_url).await.map_err(|err| map_error(&err))?;
 
+    let max_archive_bytes = state.config().swift.max_archive_bytes;
     match request {
-        SwiftRequest::Metadata(version) => release_metadata(mirror, &identifier, &git_url, name, &version).await,
+        SwiftRequest::Metadata(version) => {
+            release_metadata(mirror, &identifier, &git_url, name, &version, max_archive_bytes).await
+        }
         SwiftRequest::Manifest(version) => manifest(mirror, &identifier, &git_url, &version).await,
         SwiftRequest::Archive(version) => {
-            archive(
-                mirror,
-                &identifier,
-                &git_url,
-                name,
-                &version,
-                state.config().swift.max_archive_bytes,
-            )
-            .await
+            archive(mirror, &identifier, &git_url, name, &version, max_archive_bytes).await
         }
     }
 }
@@ -224,12 +219,13 @@ async fn release_metadata(
     git_url: &str,
     name: &str,
     version: &str,
+    max_archive_bytes: u64,
 ) -> Result<Response, (StatusCode, String)> {
     let tag = resolve_tag(mirror, identifier, git_url, version).await?;
     let source = archive_zip(mirror, git_url, &tag)
         .await
         .map_err(|err| map_error(&err))?;
-    let registry_zip = build_registry_zip(name, &source).map_err(|err| map_error(&err))?;
+    let registry_zip = build_registry_zip(name, &source, max_archive_bytes).map_err(|err| map_error(&err))?;
     let checksum = upstream::sha256_hex(&registry_zip);
 
     json_response(&ReleaseMetadata {
@@ -270,14 +266,9 @@ async fn archive(
     let source = archive_zip(mirror, git_url, &tag)
         .await
         .map_err(|err| map_error(&err))?;
-    let registry_zip = build_registry_zip(name, &source).map_err(|err| map_error(&err))?;
-    if registry_zip.len() as u64 > max_archive_bytes {
-        return Err(map_error(&StarmetalError::Upstream(format!(
-            "Swift source archive for '{identifier}@{version}' ({} bytes) exceeded configured \
-             max_archive_bytes ({max_archive_bytes})",
-            registry_zip.len()
-        ))));
-    }
+    // `build_registry_zip` enforces `max_archive_bytes` itself, fail-fast, before the whole tree is
+    // materialized — see its doc comment — so no separate post-build size check is needed here.
+    let registry_zip = build_registry_zip(name, &source, max_archive_bytes).map_err(|err| map_error(&err))?;
 
     let digest_value = format!("sha-256={}", upstream::sha256_base64(&registry_zip));
     let disposition_value = format!("attachment; filename=\"{name}-{version}.zip\"");

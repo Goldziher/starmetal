@@ -84,11 +84,25 @@ pub async fn archive_zip(mirror: &dyn GitMirror, git_url: &str, reference: &str)
 /// declared target paths. Re-prefixing every entry under a single top-level directory first avoids
 /// this; entry order is sorted by path for determinism, independent of the source archive's own
 /// ordering (mirroring the Go module proxy's zip construction).
-pub fn build_registry_zip(name: &str, source_zip: &[u8]) -> Result<Bytes> {
+///
+/// `max_archive_bytes` is enforced twice, both times before the remainder of the work is done: once
+/// against the incoming source-tree archive's own length (cheap, no inflation needed), and once
+/// against the running total of decompressed entry bytes as each entry is inflated, failing fast as
+/// soon as the total would exceed the cap rather than after the whole tree has been materialized.
+pub fn build_registry_zip(name: &str, source_zip: &[u8], max_archive_bytes: u64) -> Result<Bytes> {
+    if source_zip.len() as u64 > max_archive_bytes {
+        return Err(StarmetalError::Upstream(format!(
+            "Swift source tree archive for '{name}' ({} bytes) exceeded configured max_archive_bytes \
+             ({max_archive_bytes}) before the registry archive could be built",
+            source_zip.len()
+        )));
+    }
+
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(source_zip))
         .map_err(|err| StarmetalError::Upstream(format!("invalid source tree archive: {err}")))?;
 
     let mut entries: Vec<(String, Vec<u8>)> = Vec::new();
+    let mut decompressed_total: u64 = 0;
     for index in 0..archive.len() {
         let mut file = archive
             .by_index(index)
@@ -97,9 +111,21 @@ pub fn build_registry_zip(name: &str, source_zip: &[u8]) -> Result<Bytes> {
             continue;
         }
         let entry_name = file.name().to_string();
+        // Bound the read itself to one byte past the remaining budget, so a single oversized entry
+        // cannot be fully inflated into memory before the cumulative cap below is checked.
+        let remaining_budget = max_archive_bytes.saturating_sub(decompressed_total);
         let mut data = Vec::new();
-        file.read_to_end(&mut data)
+        (&mut file)
+            .take(remaining_budget.saturating_add(1))
+            .read_to_end(&mut data)
             .map_err(|err| StarmetalError::Upstream(format!("failed to read tree archive entry: {err}")))?;
+        decompressed_total = decompressed_total.saturating_add(data.len() as u64);
+        if decompressed_total > max_archive_bytes {
+            return Err(StarmetalError::Upstream(format!(
+                "Swift source tree for '{name}' exceeded configured max_archive_bytes ({max_archive_bytes}) while \
+                 building the registry archive"
+            )));
+        }
         entries.push((entry_name, data));
     }
     entries.sort_by(|a, b| a.0.cmp(&b.0));
@@ -186,13 +212,17 @@ mod tests {
             .collect()
     }
 
+    /// A generous cap that every well-behaved fixture in this module stays under, so tests that
+    /// aren't specifically exercising the cap don't have to compute one.
+    const TEST_MAX_ARCHIVE_BYTES: u64 = 1_000_000;
+
     #[test]
     fn prefixes_every_entry_with_the_package_name() {
         let source = read_source_zip(&[
             ("Package.swift", "// swift-tools-version:5.9\n"),
             ("Sources/fixture/fixture.swift", "public struct Fixture {}\n"),
         ]);
-        let registry_zip = build_registry_zip("fixture", &source).unwrap();
+        let registry_zip = build_registry_zip("fixture", &source, TEST_MAX_ARCHIVE_BYTES).unwrap();
         let names = zip_entry_names(&registry_zip);
         assert_eq!(
             names,
@@ -203,10 +233,47 @@ mod tests {
     #[test]
     fn registry_zip_construction_is_deterministic() {
         let source = read_source_zip(&[("b.swift", "// b\n"), ("a.swift", "// a\n")]);
-        let first = build_registry_zip("fixture", &source).unwrap();
-        let second = build_registry_zip("fixture", &source).unwrap();
+        let first = build_registry_zip("fixture", &source, TEST_MAX_ARCHIVE_BYTES).unwrap();
+        let second = build_registry_zip("fixture", &source, TEST_MAX_ARCHIVE_BYTES).unwrap();
         assert_eq!(first, second);
         assert_eq!(zip_entry_names(&first), vec!["fixture/a.swift", "fixture/b.swift"]);
+    }
+
+    #[test]
+    fn rejects_a_source_archive_whose_own_length_exceeds_the_cap_before_opening_it() {
+        let source = read_source_zip(&[("Package.swift", "// swift-tools-version:5.9\n")]);
+        let max_archive_bytes = (source.len() as u64) - 1;
+        let err = build_registry_zip("fixture", &source, max_archive_bytes).unwrap_err();
+        assert!(
+            matches!(&err, StarmetalError::Upstream(message) if message.contains("before the registry archive could be built")),
+            "expected an early Upstream error naming the pre-build check, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn fails_fast_once_cumulative_decompressed_bytes_exceed_the_cap() {
+        // A highly compressible entry: the source zip itself is tiny, but the decompressed content
+        // alone blows past a small cap — proving the cap is enforced against inflated bytes, not
+        // just the compressed source length.
+        let mut writer_buffer = std::io::Cursor::new(Vec::new());
+        {
+            let mut writer = zip::ZipWriter::new(&mut writer_buffer);
+            let options = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+            writer.start_file("big.txt", options).unwrap();
+            writer.write_all(&vec![b'a'; 100_000]).unwrap();
+            writer.finish().unwrap();
+        }
+        let source = writer_buffer.into_inner();
+        assert!(
+            (source.len() as u64) < 1_000,
+            "fixture should compress far below the cap"
+        );
+
+        let err = build_registry_zip("fixture", &source, 1_000).unwrap_err();
+        assert!(
+            matches!(&err, StarmetalError::Upstream(message) if message.contains("while building the registry archive")),
+            "expected the cumulative-decompressed-bytes error, got {err:?}"
+        );
     }
 
     #[test]

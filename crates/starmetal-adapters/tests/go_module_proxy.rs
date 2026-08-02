@@ -11,6 +11,9 @@ use starmetal_adapters::go::models::is_valid_go_version;
 use starmetal_adapters::go::upstream::{archive_zip, build_module_zip, ensure_mirror, list_refs, read_blob};
 use starmetal_git::{GitRefKind, GixMirror};
 
+/// A generous cap that every fixture module zip in this file stays well under.
+const TEST_MAX_ZIP_BYTES: u64 = 1_000_000;
+
 struct Fixture {
     _root: tempfile::TempDir,
     url: String,
@@ -121,7 +124,7 @@ async fn module_zip_is_correctly_prefixed_contains_go_mod_and_decompresses() {
     let source = archive_zip(&mirror, &fixture.url, "v1.0.0")
         .await
         .expect("source archive");
-    let module_zip = build_module_zip("example.com/mod", "v1.0.0", &source).expect("module zip");
+    let module_zip = build_module_zip("example.com/mod", "v1.0.0", &source, TEST_MAX_ZIP_BYTES).expect("module zip");
 
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(module_zip.to_vec())).expect("valid module zip");
     let names: Vec<String> = (0..archive.len())
@@ -149,8 +152,8 @@ async fn module_zip_construction_is_deterministic_for_a_fixed_commit() {
     let source = archive_zip(&mirror, &fixture.url, "v1.1.0")
         .await
         .expect("source archive");
-    let first = build_module_zip("example.com/mod", "v1.1.0", &source).expect("first module zip");
-    let second = build_module_zip("example.com/mod", "v1.1.0", &source).expect("second module zip");
+    let first = build_module_zip("example.com/mod", "v1.1.0", &source, TEST_MAX_ZIP_BYTES).expect("first module zip");
+    let second = build_module_zip("example.com/mod", "v1.1.0", &source, TEST_MAX_ZIP_BYTES).expect("second module zip");
 
     assert_eq!(
         first, second,

@@ -86,7 +86,16 @@ async fn dispatch<S: HasGoState>(
         GoproxyRequest::List => list(mirror, &git_url).await,
         GoproxyRequest::Info(version) => info(mirror, &module_path, &git_url, &version).await,
         GoproxyRequest::Mod(version) => go_mod(mirror, &module_path, &git_url, &version).await,
-        GoproxyRequest::Zip(version) => zip(mirror, &module_path, &git_url, &version).await,
+        GoproxyRequest::Zip(version) => {
+            zip(
+                mirror,
+                &module_path,
+                &git_url,
+                &version,
+                state.config().go.max_zip_bytes,
+            )
+            .await
+        }
         GoproxyRequest::Latest => latest(mirror, &module_path, &git_url).await,
     }
 }
@@ -189,12 +198,15 @@ async fn zip(
     module_path: &str,
     git_url: &str,
     version: &str,
+    max_zip_bytes: u64,
 ) -> Result<Response, (StatusCode, String)> {
     ensure_known_version(mirror, module_path, git_url, version).await?;
     let source = archive_zip(mirror, git_url, version)
         .await
         .map_err(|err| map_error(&err))?;
-    let module_zip = build_module_zip(module_path, version, &source).map_err(|err| map_error(&err))?;
+    // `build_module_zip` enforces `max_zip_bytes` itself, fail-fast, before the whole tree is
+    // materialized — see its doc comment.
+    let module_zip = build_module_zip(module_path, version, &source, max_zip_bytes).map_err(|err| map_error(&err))?;
     Ok(([(header::CONTENT_TYPE, "application/zip")], Body::from(module_zip)).into_response())
 }
 

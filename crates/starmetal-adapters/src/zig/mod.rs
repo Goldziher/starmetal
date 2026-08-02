@@ -88,6 +88,12 @@ async fn dispatch<S: HasZigState>(
     let archive = archive_tar_gz(mirror, &git_url, reference)
         .await
         .map_err(|err| map_error(&err))?;
+    // Unlike the Go module proxy and the Swift registry proxy, there is no in-adapter archive-build
+    // step here to cap before construction. The git mirror port already hands back the complete,
+    // already-compressed archive bytes when its await resolves, so this is the earliest point at
+    // which this adapter can possibly observe (and bound) the archive's size. A deeper, streaming
+    // cap enforced while the tarball is being produced would have to live in the git mirror port
+    // itself, which is out of scope here.
     let max_bytes = state.config().zig.max_archive_bytes;
     if archive.len() as u64 > max_bytes {
         return Err(map_error(&StarmetalError::Upstream(format!(
