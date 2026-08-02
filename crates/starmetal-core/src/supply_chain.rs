@@ -76,11 +76,99 @@ impl PolicyReason {
             Self::ImmutableVersion => "immutable-version",
         }
     }
+
+    /// Parse a stable reason code string (as produced by [`PolicyReason::as_str`]) back into a
+    /// [`PolicyReason`].
+    ///
+    /// This is the inverse of `as_str` and is what lets a surfacing layer (an HTTP adapter, the
+    /// admin API) recover the typed reason from a `StarmetalError::PolicyViolation` message that
+    /// gates format as `"<code>: <prose>"` (see [`PolicyReason::http_status_for_message`]). Returns
+    /// `None` for any string that is not one of the stable codes.
+    pub fn from_code(code: &str) -> Option<Self> {
+        match code {
+            "blocked-coordinate" => Some(Self::BlockedCoordinate),
+            "disallowed-license" => Some(Self::DisallowedLicense),
+            "vuln-severity-exceeded" => Some(Self::VulnSeverityExceeded),
+            "missing-signature" => Some(Self::MissingSignature),
+            "failing-provenance" => Some(Self::FailingProvenance),
+            "missing-scan-report" => Some(Self::MissingScanReport),
+            "incomplete-scan" => Some(Self::IncompleteScan),
+            "quota-exceeded" => Some(Self::QuotaExceeded),
+            "immutable-version" => Some(Self::ImmutableVersion),
+            _ => None,
+        }
+    }
+
+    /// The canonical HTTP status class this reason surfaces as (ADR-0024/0025 centralized,
+    /// reason-aware surfacing).
+    ///
+    /// Every reason surfaces as `Forbidden` (403) except the two whose semantics are not really
+    /// "you may never have this" but rather "not right now, under these conditions": a quota
+    /// denial ([`Self::QuotaExceeded`]) is a size/rate limit, so it surfaces as `ContentTooLarge`
+    /// (413); a write against an already-published, immutable version ([`Self::ImmutableVersion`])
+    /// is a conflict with existing state, so it surfaces as `Conflict` (409).
+    ///
+    /// `starmetal-core` has no framework dependency, so this returns the minimal
+    /// [`PolicyHttpStatus`] vocabulary rather than a web framework's status type; the adapters/
+    /// server layer converts it to its own `StatusCode`.
+    pub fn http_status(self) -> PolicyHttpStatus {
+        match self {
+            Self::QuotaExceeded => PolicyHttpStatus::ContentTooLarge,
+            Self::ImmutableVersion => PolicyHttpStatus::Conflict,
+            Self::BlockedCoordinate
+            | Self::DisallowedLicense
+            | Self::VulnSeverityExceeded
+            | Self::MissingSignature
+            | Self::FailingProvenance
+            | Self::MissingScanReport
+            | Self::IncompleteScan => PolicyHttpStatus::Forbidden,
+        }
+    }
+
+    /// Resolve the canonical HTTP status for a `StarmetalError::PolicyViolation` message.
+    ///
+    /// Gates format such messages as `"<code>: <prose>"` (the stable [`PolicyReason::as_str`] code,
+    /// a colon, then human-readable prose) so a surfacing layer can recover the reason without
+    /// re-running policy evaluation. When the message has no recognizable code prefix, this falls
+    /// back to [`PolicyHttpStatus::Forbidden`] — today's flat behavior for any policy denial.
+    pub fn http_status_for_message(message: &str) -> PolicyHttpStatus {
+        message
+            .split_once(": ")
+            .and_then(|(code, _)| Self::from_code(code))
+            .map(Self::http_status)
+            .unwrap_or(PolicyHttpStatus::Forbidden)
+    }
 }
 
 impl std::fmt::Display for PolicyReason {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.as_str())
+    }
+}
+
+/// A framework-agnostic HTTP status class a [`PolicyReason`] surfaces as (ADR-0024/0025).
+///
+/// `starmetal-core` never depends on a web framework (hexagonal boundary), so this is a minimal,
+/// closed vocabulary of the status classes policy denials actually use; the adapters/server layer
+/// converts a value to its framework's status type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PolicyHttpStatus {
+    /// 403 Forbidden — the default for coordinate/license/vuln/signature/provenance/scan denials.
+    Forbidden,
+    /// 409 Conflict — a write targeted an immutable, already-published version.
+    Conflict,
+    /// 413 Content Too Large — a storage, count, or rate quota was exceeded.
+    ContentTooLarge,
+}
+
+impl PolicyHttpStatus {
+    /// The numeric HTTP status code for this status class.
+    pub fn as_u16(self) -> u16 {
+        match self {
+            Self::Forbidden => 403,
+            Self::Conflict => 409,
+            Self::ContentTooLarge => 413,
+        }
     }
 }
 
@@ -706,6 +794,79 @@ mod tests {
             let json = serde_json::to_string(&reason).unwrap();
             assert_eq!(json, format!("\"{expected}\""), "serde mismatch for {reason:?}");
         }
+    }
+
+    #[test]
+    fn should_round_trip_every_reason_code_through_from_code() {
+        let reasons = [
+            PolicyReason::BlockedCoordinate,
+            PolicyReason::DisallowedLicense,
+            PolicyReason::VulnSeverityExceeded,
+            PolicyReason::MissingSignature,
+            PolicyReason::FailingProvenance,
+            PolicyReason::MissingScanReport,
+            PolicyReason::IncompleteScan,
+            PolicyReason::QuotaExceeded,
+            PolicyReason::ImmutableVersion,
+        ];
+        for reason in reasons {
+            assert_eq!(
+                PolicyReason::from_code(reason.as_str()),
+                Some(reason),
+                "from_code did not round-trip as_str for {reason:?}"
+            );
+        }
+        assert_eq!(PolicyReason::from_code("not-a-real-code"), None);
+        assert_eq!(PolicyReason::from_code(""), None);
+    }
+
+    #[test]
+    fn should_map_each_reason_to_its_canonical_status() {
+        let cases = [
+            (PolicyReason::BlockedCoordinate, PolicyHttpStatus::Forbidden),
+            (PolicyReason::DisallowedLicense, PolicyHttpStatus::Forbidden),
+            (PolicyReason::VulnSeverityExceeded, PolicyHttpStatus::Forbidden),
+            (PolicyReason::MissingSignature, PolicyHttpStatus::Forbidden),
+            (PolicyReason::FailingProvenance, PolicyHttpStatus::Forbidden),
+            (PolicyReason::MissingScanReport, PolicyHttpStatus::Forbidden),
+            (PolicyReason::IncompleteScan, PolicyHttpStatus::Forbidden),
+            (PolicyReason::QuotaExceeded, PolicyHttpStatus::ContentTooLarge),
+            (PolicyReason::ImmutableVersion, PolicyHttpStatus::Conflict),
+        ];
+        for (reason, expected) in cases {
+            assert_eq!(reason.http_status(), expected, "status mismatch for {reason:?}");
+        }
+        assert_eq!(PolicyHttpStatus::Forbidden.as_u16(), 403);
+        assert_eq!(PolicyHttpStatus::Conflict.as_u16(), 409);
+        assert_eq!(PolicyHttpStatus::ContentTooLarge.as_u16(), 413);
+    }
+
+    #[test]
+    fn should_resolve_status_from_prefixed_policy_violation_message() {
+        assert_eq!(
+            PolicyReason::http_status_for_message("quota-exceeded: storage quota exceeded"),
+            PolicyHttpStatus::ContentTooLarge
+        );
+        assert_eq!(
+            PolicyReason::http_status_for_message("immutable-version: version already published"),
+            PolicyHttpStatus::Conflict
+        );
+        assert_eq!(
+            PolicyReason::http_status_for_message("vuln-severity-exceeded: critical CVE present"),
+            PolicyHttpStatus::Forbidden
+        );
+    }
+
+    #[test]
+    fn should_fall_back_to_forbidden_for_unprefixed_policy_violation_message() {
+        assert_eq!(
+            PolicyReason::http_status_for_message("vulnerability policy violation"),
+            PolicyHttpStatus::Forbidden
+        );
+        assert_eq!(
+            PolicyReason::http_status_for_message("package foo is blocked"),
+            PolicyHttpStatus::Forbidden
+        );
     }
 
     #[test]
