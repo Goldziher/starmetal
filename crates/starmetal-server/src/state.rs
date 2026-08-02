@@ -113,6 +113,11 @@ pub struct UpstreamClients {
     /// implementation selected in `starmetal-ops`.
     #[cfg(feature = "swift")]
     pub swift_mirror: Arc<dyn starmetal_git::GitMirror>,
+    /// Per-`(git_url, commit_oid)` built-archive cache backing the Swift Package Registry proxy, so
+    /// the release-metadata and archive endpoints share one build of the registry zip per commit
+    /// instead of each rebuilding and re-hashing it.
+    #[cfg(feature = "swift")]
+    pub swift_archive_cache: Arc<starmetal_adapters::swift::upstream::SwiftArchiveCache>,
 }
 
 impl AppState {
@@ -536,6 +541,10 @@ impl starmetal_adapters::swift::HasSwiftState for AppState {
 
     fn git_mirror(&self) -> &Arc<dyn starmetal_git::GitMirror> {
         &self.upstreams.swift_mirror
+    }
+
+    fn archive_cache(&self) -> &Arc<starmetal_adapters::swift::upstream::SwiftArchiveCache> {
+        &self.upstreams.swift_archive_cache
     }
 }
 

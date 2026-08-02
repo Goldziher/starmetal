@@ -14,8 +14,9 @@
 //! `swift.package_overrides` (operator-trusted config; a `file://` URL is permitted, the seam for
 //! offline testing).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::io::{Read as _, Write as _};
+use std::sync::{Arc, Mutex};
 
 use bytes::Bytes;
 use sha2::{Digest, Sha256};
@@ -150,6 +151,123 @@ pub fn build_registry_zip(name: &str, source_zip: &[u8], max_archive_bytes: u64)
             .map_err(|err| StarmetalError::Upstream(format!("failed to finalize registry zip: {err}")))?;
     }
     Ok(Bytes::from(output.into_inner()))
+}
+
+/// A built Swift registry archive together with the checksums derived from it: the release-metadata
+/// endpoint needs [`Self::checksum_hex`] and the archive endpoint needs both the bytes and
+/// [`Self::checksum_base64`] (for its `Digest` response header). Building either independently means
+/// running the same deterministic zip construction and SHA-256 hash twice per `swift package
+/// resolve` (see the module doc comment on [`super`]); [`get_or_build_archive`] builds this once per
+/// `(git_url, commit_oid)` and both endpoints reuse it.
+#[derive(Debug)]
+pub struct CachedArchive {
+    /// The built, name-prefixed registry zip (see [`build_registry_zip`]).
+    pub registry_zip: Bytes,
+    /// Lowercase-hex SHA-256 of `registry_zip`, for the release-metadata `checksum` field.
+    pub checksum_hex: String,
+    /// Base64 SHA-256 of `registry_zip`, for the archive endpoint's `Digest: sha-256=...` header.
+    pub checksum_base64: String,
+}
+
+/// Upper bound on the number of distinct `(git_url, commit_oid)` archives [`SwiftArchiveCache`]
+/// holds at once. Each entry owns a full built zip, so the bound is kept small; eviction is FIFO by
+/// insertion order once it is reached.
+const SWIFT_ARCHIVE_CACHE_CAPACITY: usize = 64;
+
+/// A cache key: a git remote URL paired with the exact commit oid an archive was built from.
+type ArchiveCacheKey = (String, String);
+
+#[derive(Default)]
+struct SwiftArchiveCacheState {
+    entries: HashMap<ArchiveCacheKey, Arc<CachedArchive>>,
+    /// Insertion order of `entries`' keys, oldest first, used for FIFO eviction once the cache is at
+    /// capacity.
+    order: VecDeque<ArchiveCacheKey>,
+}
+
+/// Bounded in-memory cache of built Swift registry archives, dependency-injected into the adapter
+/// (no global state) via [`super::HasSwiftState::archive_cache`].
+///
+/// Keyed by **`(git_url, commit_oid)`**, not `(git_url, tag)`: a force-moved tag resolves to a
+/// different oid on its next request and so naturally misses and rebuilds, rather than serving a
+/// stale archive under the old commit — correctness by construction, with no TTL or staleness check
+/// needed. Bounded to [`SWIFT_ARCHIVE_CACHE_CAPACITY`] entries with FIFO eviction by insertion order;
+/// a poisoned lock is recovered rather than propagated, matching
+/// `CachingPackageService::record_statistics`'s convention elsewhere in the codebase.
+#[derive(Default)]
+pub struct SwiftArchiveCache {
+    state: Mutex<SwiftArchiveCacheState>,
+}
+
+impl SwiftArchiveCache {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    fn get(&self, key: &ArchiveCacheKey) -> Option<Arc<CachedArchive>> {
+        let state = self.state.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        state.entries.get(key).cloned()
+    }
+
+    /// Insert `value` under `key` unless it is already present (a concurrent build for the same key
+    /// having won the race), evicting the oldest entry first if the cache is at capacity.
+    fn insert(&self, key: ArchiveCacheKey, value: Arc<CachedArchive>) {
+        let mut state = self.state.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if state.entries.contains_key(&key) {
+            return;
+        }
+        if state.order.len() >= SWIFT_ARCHIVE_CACHE_CAPACITY
+            && let Some(oldest) = state.order.pop_front()
+        {
+            state.entries.remove(&oldest);
+        }
+        state.order.push_back(key.clone());
+        state.entries.insert(key, value);
+    }
+}
+
+/// Resolve `tag` to its commit oid and return the cached built registry archive for
+/// `(git_url, oid)`, building and inserting it on a miss.
+///
+/// The miss path still runs `build_registry_zip` (which enforces `max_archive_bytes` fail-fast) and
+/// the SHA-256 hashing on a blocking thread, since both are CPU-bound — unchanged from the
+/// pre-cache behavior, just performed at most once per commit instead of once per endpoint call.
+pub async fn get_or_build_archive(
+    cache: &SwiftArchiveCache,
+    mirror: &dyn GitMirror,
+    git_url: &str,
+    tag: &str,
+    name: &str,
+    max_archive_bytes: u64,
+) -> Result<Arc<CachedArchive>> {
+    let oid = mirror
+        .resolve(git_url, tag)
+        .await
+        .map_err(|err| StarmetalError::Upstream(err.to_string()))?
+        .ok_or_else(|| StarmetalError::Upstream(format!("Swift registry tag '{tag}' did not resolve to a commit")))?;
+
+    let key: ArchiveCacheKey = (git_url.to_string(), oid.clone());
+    if let Some(cached) = cache.get(&key) {
+        return Ok(cached);
+    }
+
+    let source = archive_zip(mirror, git_url, &oid).await?;
+    let name_owned = name.to_string();
+    let cached = tokio::task::spawn_blocking(move || {
+        let registry_zip = build_registry_zip(&name_owned, &source, max_archive_bytes)?;
+        let checksum_hex = sha256_hex(&registry_zip);
+        let checksum_base64 = sha256_base64(&registry_zip);
+        Ok::<_, StarmetalError>(Arc::new(CachedArchive {
+            registry_zip,
+            checksum_hex,
+            checksum_base64,
+        }))
+    })
+    .await
+    .map_err(|err| StarmetalError::Upstream(format!("Swift registry archive build task failed: {err}")))??;
+
+    cache.insert(key, cached.clone());
+    Ok(cached)
 }
 
 /// Lowercase-hex SHA-256 digest of `bytes`, as required by SE-0292's release-metadata `checksum`
@@ -293,5 +411,193 @@ mod tests {
         let base64_digest = sha256_base64(b"hello");
         let decoded = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &base64_digest).unwrap();
         assert_eq!(hex::encode(decoded), hex_digest);
+    }
+
+    /// A [`GitMirror`] fake for [`get_or_build_archive`] tests: `resolve` looks a reference up in a
+    /// fixed tag -> oid map, and `archive` counts its own calls and returns a tiny source zip whose
+    /// single entry's contents are the resolved reference — so two references produce distinguishably
+    /// different (but each internally deterministic) built archives.
+    #[derive(Default)]
+    struct FakeMirror {
+        oids: HashMap<String, String>,
+        archive_calls: Mutex<u32>,
+    }
+
+    impl FakeMirror {
+        fn with_tag(tag: &str, oid: &str) -> Self {
+            let mut oids = HashMap::new();
+            oids.insert(tag.to_string(), oid.to_string());
+            Self {
+                oids,
+                archive_calls: Mutex::new(0),
+            }
+        }
+
+        fn archive_call_count(&self) -> u32 {
+            *self.archive_calls.lock().unwrap()
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl GitMirror for FakeMirror {
+        async fn ensure_mirror(&self, _remote_url: &str) -> starmetal_git::Result<()> {
+            Ok(())
+        }
+
+        async fn list_refs(&self, _remote_url: &str) -> starmetal_git::Result<Vec<starmetal_git::GitRef>> {
+            Ok(Vec::new())
+        }
+
+        async fn resolve(&self, _remote_url: &str, reference: &str) -> starmetal_git::Result<Option<String>> {
+            Ok(self.oids.get(reference).cloned())
+        }
+
+        async fn read_blob(
+            &self,
+            _remote_url: &str,
+            _reference: &str,
+            _path: &str,
+        ) -> starmetal_git::Result<Option<Bytes>> {
+            Ok(None)
+        }
+
+        async fn commit_time(&self, _remote_url: &str, _reference: &str) -> starmetal_git::Result<Option<i64>> {
+            Ok(None)
+        }
+
+        async fn archive(
+            &self,
+            _remote_url: &str,
+            reference: &str,
+            _format: starmetal_git::ArchiveFormat,
+        ) -> starmetal_git::Result<Bytes> {
+            *self.archive_calls.lock().unwrap() += 1;
+            Ok(Bytes::from(read_source_zip(&[("Package.swift", reference)])))
+        }
+    }
+
+    #[tokio::test]
+    async fn get_or_build_archive_reuses_a_cached_build_for_the_same_oid() {
+        let mirror = FakeMirror::with_tag("1.0.0", "deadbeef");
+        let cache = SwiftArchiveCache::new();
+
+        let first = get_or_build_archive(
+            &cache,
+            &mirror,
+            "git://fixture",
+            "1.0.0",
+            "fixture",
+            TEST_MAX_ARCHIVE_BYTES,
+        )
+        .await
+        .unwrap();
+        let second = get_or_build_archive(
+            &cache,
+            &mirror,
+            "git://fixture",
+            "1.0.0",
+            "fixture",
+            TEST_MAX_ARCHIVE_BYTES,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(mirror.archive_call_count(), 1, "the second call must not rebuild");
+        assert!(
+            Arc::ptr_eq(&first, &second),
+            "the second call must return the same cached instance"
+        );
+    }
+
+    #[tokio::test]
+    async fn get_or_build_archive_misses_for_a_different_oid() {
+        // Simulates a force-moved tag: the same tag name now resolves to a different commit oid, so
+        // the cache must miss and rebuild rather than serving the stale archive.
+        let mirror = FakeMirror::with_tag("1.0.0", "oid-a");
+        let cache = SwiftArchiveCache::new();
+        let first = get_or_build_archive(
+            &cache,
+            &mirror,
+            "git://fixture",
+            "1.0.0",
+            "fixture",
+            TEST_MAX_ARCHIVE_BYTES,
+        )
+        .await
+        .unwrap();
+
+        let moved_mirror = FakeMirror::with_tag("1.0.0", "oid-b");
+        let second = get_or_build_archive(
+            &cache,
+            &moved_mirror,
+            "git://fixture",
+            "1.0.0",
+            "fixture",
+            TEST_MAX_ARCHIVE_BYTES,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(moved_mirror.archive_call_count(), 1, "a new oid must rebuild");
+        assert!(
+            !Arc::ptr_eq(&first, &second),
+            "a different oid must not reuse the previous oid's cached archive"
+        );
+        assert_ne!(
+            first.checksum_hex, second.checksum_hex,
+            "the two oids' archives contain different source content, so their checksums differ"
+        );
+    }
+
+    #[tokio::test]
+    async fn cache_evicts_the_oldest_entry_once_at_capacity() {
+        let cache = SwiftArchiveCache::new();
+        // Fill the cache to capacity with distinct (git_url, oid) keys sharing one tag name, then
+        // insert one more — the very first entry must be evicted (FIFO), while the most recent
+        // capacity-worth of entries all remain cached.
+        for index in 0..SWIFT_ARCHIVE_CACHE_CAPACITY {
+            let oid = format!("oid-{index}");
+            let mirror = FakeMirror::with_tag("1.0.0", &oid);
+            get_or_build_archive(
+                &cache,
+                &mirror,
+                "git://fixture",
+                "1.0.0",
+                "fixture",
+                TEST_MAX_ARCHIVE_BYTES,
+            )
+            .await
+            .unwrap();
+        }
+
+        let overflow_mirror = FakeMirror::with_tag("1.0.0", "oid-overflow");
+        get_or_build_archive(
+            &cache,
+            &overflow_mirror,
+            "git://fixture",
+            "1.0.0",
+            "fixture",
+            TEST_MAX_ARCHIVE_BYTES,
+        )
+        .await
+        .unwrap();
+
+        let evicted_key: ArchiveCacheKey = ("git://fixture".to_string(), "oid-0".to_string());
+        assert!(
+            cache.get(&evicted_key).is_none(),
+            "the oldest entry must have been evicted once the cache exceeded capacity"
+        );
+
+        let still_cached_key: ArchiveCacheKey = ("git://fixture".to_string(), "oid-1".to_string());
+        assert!(
+            cache.get(&still_cached_key).is_some(),
+            "entries inserted after the evicted one must remain cached"
+        );
+
+        let overflow_key: ArchiveCacheKey = ("git://fixture".to_string(), "oid-overflow".to_string());
+        assert!(
+            cache.get(&overflow_key).is_some(),
+            "the entry that triggered eviction must itself be cached"
+        );
     }
 }

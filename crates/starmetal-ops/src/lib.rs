@@ -255,6 +255,11 @@ impl StarmetalRuntime {
         // (ADR-0023): the registry proxy reads through this mirror handle directly.
         #[cfg(feature = "swift")]
         let swift_mirror = build_swift_mirror(&config);
+        // Shared per-(git_url, commit_oid) built-archive cache for the Swift registry proxy, so the
+        // release-metadata and archive endpoints for one `swift package resolve` build the registry
+        // zip once instead of twice.
+        #[cfg(feature = "swift")]
+        let swift_archive_cache = Arc::new(starmetal_adapters::swift::upstream::SwiftArchiveCache::new());
 
         let signing = SigningService::from_config(&config.signing)?;
         let service =
@@ -404,6 +409,8 @@ impl StarmetalRuntime {
             zig_mirror,
             #[cfg(feature = "swift")]
             swift_mirror,
+            #[cfg(feature = "swift")]
+            swift_archive_cache,
         };
 
         Ok(Self {

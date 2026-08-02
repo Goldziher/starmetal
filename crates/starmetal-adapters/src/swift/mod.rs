@@ -75,12 +75,18 @@ use starmetal_core::error::StarmetalError;
 use starmetal_git::{GitMirror, GitRefKind};
 
 use self::models::{ReleaseLink, ReleaseMetadata, ReleaseResource, SwiftRequest, parse_swift_request};
-use self::upstream::{archive_zip, build_registry_zip, ensure_mirror, list_refs, read_blob, resolve_package_url};
+use self::upstream::{
+    SwiftArchiveCache, ensure_mirror, get_or_build_archive, list_refs, read_blob, resolve_package_url,
+};
 
 /// State a caller must expose to mount the Swift Package Registry proxy router.
 pub trait HasSwiftState: Clone + Send + Sync + 'static {
     fn config(&self) -> &Arc<Config>;
     fn git_mirror(&self) -> &Arc<dyn GitMirror>;
+    /// The per-`(git_url, commit_oid)` built-archive cache (see [`upstream::SwiftArchiveCache`]),
+    /// shared by the release-metadata and archive endpoints so a `swift package resolve` builds and
+    /// hashes the registry zip once, not twice.
+    fn archive_cache(&self) -> &Arc<SwiftArchiveCache>;
 }
 
 /// `Content-Version`, required on every response by the registry protocol.
@@ -182,13 +188,14 @@ async fn dispatch_tail_inner<S: HasSwiftState>(
     ensure_mirror(mirror, &git_url).await.map_err(|err| map_error(&err))?;
 
     let max_archive_bytes = state.config().swift.max_archive_bytes;
+    let cache = state.archive_cache().as_ref();
     match request {
         SwiftRequest::Metadata(version) => {
-            release_metadata(mirror, &identifier, &git_url, name, &version, max_archive_bytes).await
+            release_metadata(mirror, cache, &identifier, &git_url, name, &version, max_archive_bytes).await
         }
         SwiftRequest::Manifest(version) => manifest(mirror, &identifier, &git_url, &version).await,
         SwiftRequest::Archive(version) => {
-            archive(mirror, &identifier, &git_url, name, &version, max_archive_bytes).await
+            archive(mirror, cache, &identifier, &git_url, name, &version, max_archive_bytes).await
         }
     }
 }
@@ -215,6 +222,7 @@ async fn resolve_tag(
 
 async fn release_metadata(
     mirror: &dyn GitMirror,
+    cache: &SwiftArchiveCache,
     identifier: &str,
     git_url: &str,
     name: &str,
@@ -222,19 +230,9 @@ async fn release_metadata(
     max_archive_bytes: u64,
 ) -> Result<Response, (StatusCode, String)> {
     let tag = resolve_tag(mirror, identifier, git_url, version).await?;
-    let source = archive_zip(mirror, git_url, &tag)
+    let cached = get_or_build_archive(cache, mirror, git_url, &tag, name, max_archive_bytes)
         .await
         .map_err(|err| map_error(&err))?;
-    // The inflate/deflate zip build and the SHA-256 hash are both CPU-bound; run them on a blocking
-    // thread so a large source tree doesn't hold up the async worker.
-    let name = name.to_string();
-    let checksum = tokio::task::spawn_blocking(move || {
-        let registry_zip = build_registry_zip(&name, &source, max_archive_bytes)?;
-        Ok::<_, StarmetalError>(upstream::sha256_hex(&registry_zip))
-    })
-    .await
-    .map_err(map_join_error)?
-    .map_err(|err| map_error(&err))?;
 
     json_response(&ReleaseMetadata {
         id: identifier.to_string(),
@@ -242,7 +240,7 @@ async fn release_metadata(
         resources: vec![ReleaseResource {
             name: "source-archive".to_string(),
             kind: "application/zip".to_string(),
-            checksum,
+            checksum: cached.checksum_hex.clone(),
         }],
         metadata: serde_json::json!({}),
     })
@@ -264,6 +262,7 @@ async fn manifest(
 
 async fn archive(
     mirror: &dyn GitMirror,
+    cache: &SwiftArchiveCache,
     identifier: &str,
     git_url: &str,
     name: &str,
@@ -271,22 +270,10 @@ async fn archive(
     max_archive_bytes: u64,
 ) -> Result<Response, (StatusCode, String)> {
     let tag = resolve_tag(mirror, identifier, git_url, version).await?;
-    let source = archive_zip(mirror, git_url, &tag)
+    let cached = get_or_build_archive(cache, mirror, git_url, &tag, name, max_archive_bytes)
         .await
         .map_err(|err| map_error(&err))?;
-    // `build_registry_zip` enforces `max_archive_bytes` itself, fail-fast, before the whole tree is
-    // materialized — see its doc comment — so no separate post-build size check is needed here. The
-    // inflate/deflate build and the SHA-256 hash are both CPU-bound; run them on a blocking thread so
-    // a large source tree doesn't hold up the async worker.
-    let name_owned = name.to_string();
-    let (registry_zip, digest_value) = tokio::task::spawn_blocking(move || {
-        let registry_zip = build_registry_zip(&name_owned, &source, max_archive_bytes)?;
-        let digest_value = format!("sha-256={}", upstream::sha256_base64(&registry_zip));
-        Ok::<_, StarmetalError>((registry_zip, digest_value))
-    })
-    .await
-    .map_err(map_join_error)?
-    .map_err(|err| map_error(&err))?;
+    let digest_value = format!("sha-256={}", cached.checksum_base64);
 
     let disposition_value = format!("attachment; filename=\"{name}-{version}.zip\"");
     let headers = [
@@ -300,7 +287,7 @@ async fn archive(
             HeaderValue::from_str(&digest_value).unwrap_or_else(|_| HeaderValue::from_static("")),
         ),
     ];
-    Ok((headers, Body::from(registry_zip)).into_response())
+    Ok((headers, Body::from(cached.registry_zip.clone())).into_response())
 }
 
 fn not_found(identifier: &str, version: &str) -> (StatusCode, String) {
@@ -319,15 +306,6 @@ fn json_response<T: serde::Serialize>(body: &T) -> Result<Response, (StatusCode,
 fn map_error(err: &StarmetalError) -> (StatusCode, String) {
     tracing::warn!(error = %err, "Swift Package Registry proxy request failed");
     crate::map_public_error(err)
-}
-
-/// Map a `tokio::task::spawn_blocking` join error (the blocking archive-build task panicked or was
-/// cancelled) to the same `StarmetalError::Upstream` (-> 502) convention used for every other
-/// upstream failure in this adapter.
-fn map_join_error(err: tokio::task::JoinError) -> (StatusCode, String) {
-    map_error(&StarmetalError::Upstream(format!(
-        "Swift registry archive build task failed: {err}"
-    )))
 }
 
 #[cfg(test)]

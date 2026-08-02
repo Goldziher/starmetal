@@ -153,6 +153,7 @@ impl TestServer {
             swift_mirror_cache.path(),
             std::time::Duration::from_secs(300),
         ));
+        let swift_archive_cache = Arc::new(starmetal_adapters::swift::upstream::SwiftArchiveCache::new());
 
         let service = Arc::new(CachingPackageService::new(
             Arc::new(storage),
@@ -186,6 +187,7 @@ impl TestServer {
             go_mirror,
             zig_mirror,
             swift_mirror,
+            swift_archive_cache,
         };
         // Populate the facet recipe registry the same way the runtime does, so `build_app`'s
         // registry-driven mounting produces the historical proxy routes (ADR-0019). Go, Zig, and

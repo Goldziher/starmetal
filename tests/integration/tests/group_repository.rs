@@ -91,6 +91,7 @@ fn unused_upstreams() -> UpstreamClients {
             tempfile::tempdir().expect("swift mirror cache tempdir").keep(),
             std::time::Duration::from_secs(300),
         )),
+        swift_archive_cache: Arc::new(starmetal_adapters::swift::upstream::SwiftArchiveCache::new()),
     }
 }
 
