@@ -25,6 +25,11 @@ pub enum Ecosystem {
     /// Go modules (ADR-0023): resolved from an upstream git repository's tags rather than a
     /// package-index protocol, served via the GOPROXY HTTP protocol.
     Go,
+    /// Zig packages (ADR-0023): like Go, resolved from an upstream git repository's tagged refs
+    /// rather than a package-index protocol — `zig fetch` downloads and client-side-hashes a
+    /// source tarball, so this ecosystem is served as a git-sourced tarball proxy rather than
+    /// through a registry protocol.
+    Zig,
 }
 
 impl std::fmt::Display for Ecosystem {
@@ -39,6 +44,7 @@ impl std::fmt::Display for Ecosystem {
             Self::NuGet => write!(f, "nuget"),
             Self::Pub => write!(f, "pub"),
             Self::Go => write!(f, "go"),
+            Self::Zig => write!(f, "zig"),
         }
     }
 }
@@ -57,6 +63,7 @@ impl FromStr for Ecosystem {
             "nuget" => Ok(Self::NuGet),
             "pub" | "pubdev" | "pub.dev" => Ok(Self::Pub),
             "go" | "golang" => Ok(Self::Go),
+            "zig" => Ok(Self::Zig),
             _ => Err(StarmetalError::Config(format!("unknown ecosystem: {s}"))),
         }
     }
@@ -110,10 +117,10 @@ impl PackageName {
                 }
             }
             Ecosystem::Npm => normalize_npm(&self.0),
-            // Maven group:artifact ids and Go module paths (`github.com/User/Repo`) are both
-            // case-sensitive identifiers naming an actual upstream coordinate — lowercasing a Go
-            // module path would resolve to a different repository, so it is left untouched.
-            Ecosystem::Maven | Ecosystem::Go => Cow::Borrowed(&self.0),
+            // Maven group:artifact ids and Go/Zig git-repository paths (`github.com/User/Repo`)
+            // are all case-sensitive identifiers naming an actual upstream coordinate —
+            // lowercasing one would resolve to a different repository, so it is left untouched.
+            Ecosystem::Maven | Ecosystem::Go | Ecosystem::Zig => Cow::Borrowed(&self.0),
             Ecosystem::Cargo | Ecosystem::Hex | Ecosystem::RubyGems | Ecosystem::NuGet | Ecosystem::Pub => {
                 if self
                     .0
@@ -145,15 +152,16 @@ impl PackageName {
                 _ => None,
             },
             Ecosystem::Maven => self.0.rsplit_once(':').map(|(group, _artifact)| group.to_string()),
-            // Go module paths (`github.com/user/repo`) have no npm/Maven-style namespace concept
-            // distinct from the module path itself.
+            // Go/Zig git-repository paths (`github.com/user/repo`) have no npm/Maven-style
+            // namespace concept distinct from the path itself.
             Ecosystem::PyPI
             | Ecosystem::Cargo
             | Ecosystem::Hex
             | Ecosystem::RubyGems
             | Ecosystem::NuGet
             | Ecosystem::Pub
-            | Ecosystem::Go => None,
+            | Ecosystem::Go
+            | Ecosystem::Zig => None,
         }
     }
 }
@@ -478,6 +486,7 @@ mod tests {
             Ecosystem::NuGet,
             Ecosystem::Pub,
             Ecosystem::Go,
+            Ecosystem::Zig,
         ] {
             assert_eq!(
                 PackageName::new("some/oddly-formed-name").publish_namespace(ecosystem),
@@ -497,6 +506,7 @@ mod tests {
         assert_eq!("PYPI".parse::<Ecosystem>().unwrap(), Ecosystem::PyPI);
         assert_eq!("go".parse::<Ecosystem>().unwrap(), Ecosystem::Go);
         assert_eq!("golang".parse::<Ecosystem>().unwrap(), Ecosystem::Go);
+        assert_eq!("zig".parse::<Ecosystem>().unwrap(), Ecosystem::Zig);
         assert!("unknown".parse::<Ecosystem>().is_err());
     }
 
@@ -504,6 +514,12 @@ mod tests {
     fn go_module_path_normalization_preserves_case() {
         let pkg = PackageName::new("github.com/Foo/Bar");
         assert_eq!(pkg.normalized(Ecosystem::Go).as_ref(), "github.com/Foo/Bar");
+    }
+
+    #[test]
+    fn zig_repository_path_normalization_preserves_case() {
+        let pkg = PackageName::new("github.com/Foo/Bar");
+        assert_eq!(pkg.normalized(Ecosystem::Zig).as_ref(), "github.com/Foo/Bar");
     }
 
     #[test]

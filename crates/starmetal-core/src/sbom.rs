@@ -30,6 +30,10 @@ pub fn purl_type(ecosystem: Ecosystem) -> &'static str {
         Ecosystem::NuGet => "nuget",
         Ecosystem::Pub => "pub",
         Ecosystem::Go => "golang",
+        // Not an officially registered purl-spec type (as of this writing) — a placeholder
+        // consistent with the ecosystem's own name, matching Go's read-only/no-publish scope: SBOM
+        // generation never runs for Zig since it is never routed through `PackageService`.
+        Ecosystem::Zig => "zig",
     }
 }
 

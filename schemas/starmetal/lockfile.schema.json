@@ -11,6 +11,11 @@
           "const": "go",
           "description": "Go modules (ADR-0023): resolved from an upstream git repository's tags rather than a\npackage-index protocol, served via the GOPROXY HTTP protocol.",
           "type": "string"
+        },
+        {
+          "const": "zig",
+          "description": "Zig packages (ADR-0023): like Go, resolved from an upstream git repository's tagged refs\nrather than a package-index protocol — `zig fetch` downloads and client-side-hashes a\nsource tarball, so this ecosystem is served as a git-sourced tarball proxy rather than\nthrough a registry protocol.",
+          "type": "string"
         }
       ]
     },

@@ -43,6 +43,11 @@
           "const": "go",
           "description": "Go modules (ADR-0023): resolved from an upstream git repository's tags rather than a\npackage-index protocol, served via the GOPROXY HTTP protocol.",
           "type": "string"
+        },
+        {
+          "const": "zig",
+          "description": "Zig packages (ADR-0023): like Go, resolved from an upstream git repository's tagged refs\nrather than a package-index protocol — `zig fetch` downloads and client-side-hashes a\nsource tarball, so this ecosystem is served as a git-sourced tarball proxy rather than\nthrough a registry protocol.",
+          "type": "string"
         }
       ]
     },
@@ -872,6 +877,44 @@
     "VulnSeverity": {
       "enum": ["low", "medium", "high", "critical"],
       "type": "string"
+    },
+    "ZigConfig": {
+      "description": "Configuration for the Zig source-tarball proxy (ADR-0023): like [`GoConfig`], git-sourced, so it\ndoes not fit the single base-URL `[upstream]` shape — `zig fetch <url>` names a git remote\ncoordinate directly (`{host}/{user}/{repo}/{ref}.tar.gz`), not a package-index host.\n\nOff by default, for the same reason as Go: the built-in host mapping reaches whatever host a\nclient's URL names (github.com, gitlab.com, bitbucket.org by default), so mounting it is an\nexplicit operator decision.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Whether the Zig tarball proxy repository is mounted. `false` by default.",
+          "type": "boolean"
+        },
+        "max_archive_bytes": {
+          "default": 536870912,
+          "description": "Maximum bytes accepted for a served source tarball.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "mirror_cache_dir": {
+          "default": "./starmetal-data/git-mirrors",
+          "description": "Local directory backing the git-mirror cache (bare repositories + fetch-freshness stamps).",
+          "type": "string"
+        },
+        "mirror_refresh_interval_secs": {
+          "default": 300,
+          "description": "How long a mirrored repository is considered fresh before a request triggers a re-fetch.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "repo_overrides": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Explicit repository-path (or path-prefix) to git-URL overrides, checked before the built-in\ngithub.com/gitlab.com/bitbucket.org mapping and matched by longest path-segment prefix.\nOperator-supplied and trusted, so (unlike an inbound repository path) a `file://` URL is\npermitted here — this is the intended seam for private git hosts and offline testing.",
+          "type": "object"
+        }
+      },
+      "type": "object"
     }
   },
   "$id": "https://schemas.starmetal.local/starmetal/config.schema.json",
@@ -1087,6 +1130,17 @@
         }
       },
       "type": "object"
+    },
+    "zig": {
+      "$ref": "#/$defs/ZigConfig",
+      "default": {
+        "enabled": false,
+        "max_archive_bytes": 536870912,
+        "mirror_cache_dir": "./starmetal-data/git-mirrors",
+        "mirror_refresh_interval_secs": 300,
+        "repo_overrides": {}
+      },
+      "description": "Zig tarball proxy configuration (ADR-0023). Like Go, git-sourced rather than a single-base-URL\nupstream — see [`ZigConfig`]."
     }
   },
   "title": "Starmetal Configuration",

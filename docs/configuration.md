@@ -312,6 +312,31 @@ enabled = true
 "example.com/mod" = "file:///srv/git-fixtures/example-mod.git"
 ```
 
+## Zig Tarball Proxy
+
+Like Go, Zig packages are resolved from an upstream git repository's tagged refs rather than a
+package-index protocol (ADR-0023): `zig fetch <url>` downloads and client-side-hashes a source
+tarball, so `[zig]` is a separate section instead of another `[upstream.*]` entry. A repository's
+git remote is derived from the request path itself (`github.com/user/repo`, `gitlab.com/user/repo`,
+`bitbucket.org/user/repo`) or from an explicit `zig.repo_overrides` entry, and served at
+`GET /zig/{host}/{user}/{repo}/{ref}.tar.gz`.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `zig.enabled` | `false` | Mounts the Zig tarball proxy repository. Off by default since, unlike the other ecosystems, there is no single upstream host to scope it to. |
+| `zig.mirror_cache_dir` | `./starmetal-data/git-mirrors` | Local directory backing the git-mirror cache (bare repositories and fetch-freshness stamps). |
+| `zig.mirror_refresh_interval_secs` | `300` | How long a mirrored repository is considered fresh before a request triggers a re-fetch. |
+| `zig.max_archive_bytes` | `536870912` | Maximum bytes accepted for a served source tarball. |
+| `zig.repo_overrides` | `{}` | Repository-path (or path-prefix) to git-URL overrides, checked before the built-in host mapping and matched by longest path-segment prefix. Trusted operator configuration — `file://` URLs are permitted here for private mirrors or offline testing. |
+
+```toml
+[zig]
+enabled = true
+
+[zig.repo_overrides]
+"example.com/pkg" = "file:///srv/git-fixtures/example-pkg.git"
+```
+
 ## Repositories
 
 Repositories model the `(kind, ecosystem)` composition surface (ADR-0019). When

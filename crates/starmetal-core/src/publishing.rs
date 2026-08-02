@@ -140,6 +140,12 @@ pub enum ProtocolMetadata {
     Go {
         go_mod: String,
     },
+    /// Zig packages (ADR-0023), like Go, are resolved read-only from an upstream git repository's
+    /// tagged refs — there is no hosted publish workflow, so this variant exists purely for match
+    /// exhaustiveness.
+    Zig {
+        git_url: String,
+    },
 }
 
 impl ProtocolMetadata {
@@ -168,6 +174,7 @@ impl ProtocolMetadata {
                 pubspec: serde_json::Value::Null,
             },
             Ecosystem::Go => Self::Go { go_mod: String::new() },
+            Ecosystem::Zig => Self::Zig { git_url: String::new() },
         }
     }
 }

@@ -65,6 +65,10 @@ fn osv_ecosystem(ecosystem: Ecosystem) -> &'static str {
         Ecosystem::NuGet => "NuGet",
         Ecosystem::Pub => "Pub",
         Ecosystem::Go => "Go",
+        // OSV.dev has no registered "Zig" ecosystem (as of this writing). Unreachable in practice:
+        // Zig is never routed through `CachingPackageService`/the scanner, so this exists purely
+        // for match exhaustiveness, mirroring Go's read-only, no-publish scope.
+        Ecosystem::Zig => "Zig",
     }
 }
 
@@ -323,6 +327,7 @@ mod tests {
             (Ecosystem::NuGet, "NuGet"),
             (Ecosystem::Pub, "Pub"),
             (Ecosystem::Go, "Go"),
+            (Ecosystem::Zig, "Zig"),
         ];
         for (ecosystem, expected) in cases {
             assert_eq!(osv_ecosystem(ecosystem), expected, "mismatch for {ecosystem:?}");

@@ -46,6 +46,10 @@ pub struct Config {
     /// single base URL — see [`GoConfig`].
     #[serde(default)]
     pub go: GoConfig,
+    /// Zig tarball proxy configuration (ADR-0023). Like Go, git-sourced rather than a single-base-URL
+    /// upstream — see [`ZigConfig`].
+    #[serde(default)]
+    pub zig: ZigConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -242,6 +246,56 @@ fn default_go_mirror_cache_dir() -> PathBuf {
 
 /// Default mirror refresh TTL: 5 minutes, matching the other upstream caches' TTL convention.
 fn default_go_mirror_refresh_interval_secs() -> u64 {
+    300
+}
+
+/// Configuration for the Zig source-tarball proxy (ADR-0023): like [`GoConfig`], git-sourced, so it
+/// does not fit the single base-URL `[upstream]` shape — `zig fetch <url>` names a git remote
+/// coordinate directly (`{host}/{user}/{repo}/{ref}.tar.gz`), not a package-index host.
+///
+/// Off by default, for the same reason as Go: the built-in host mapping reaches whatever host a
+/// client's URL names (github.com, gitlab.com, bitbucket.org by default), so mounting it is an
+/// explicit operator decision.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ZigConfig {
+    /// Whether the Zig tarball proxy repository is mounted. `false` by default.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Local directory backing the git-mirror cache (bare repositories + fetch-freshness stamps).
+    #[serde(default = "default_zig_mirror_cache_dir")]
+    pub mirror_cache_dir: PathBuf,
+    /// How long a mirrored repository is considered fresh before a request triggers a re-fetch.
+    #[serde(default = "default_zig_mirror_refresh_interval_secs")]
+    pub mirror_refresh_interval_secs: u64,
+    /// Maximum bytes accepted for a served source tarball.
+    #[serde(default = "default_max_upstream_bytes")]
+    pub max_archive_bytes: u64,
+    /// Explicit repository-path (or path-prefix) to git-URL overrides, checked before the built-in
+    /// github.com/gitlab.com/bitbucket.org mapping and matched by longest path-segment prefix.
+    /// Operator-supplied and trusted, so (unlike an inbound repository path) a `file://` URL is
+    /// permitted here — this is the intended seam for private git hosts and offline testing.
+    #[serde(default)]
+    pub repo_overrides: HashMap<String, String>,
+}
+
+impl Default for ZigConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            mirror_cache_dir: default_zig_mirror_cache_dir(),
+            mirror_refresh_interval_secs: default_zig_mirror_refresh_interval_secs(),
+            max_archive_bytes: default_max_upstream_bytes(),
+            repo_overrides: HashMap::new(),
+        }
+    }
+}
+
+fn default_zig_mirror_cache_dir() -> PathBuf {
+    PathBuf::from("./starmetal-data/git-mirrors")
+}
+
+/// Default mirror refresh TTL: 5 minutes, matching the other upstream caches' TTL convention.
+fn default_zig_mirror_refresh_interval_secs() -> u64 {
     300
 }
 
@@ -702,6 +756,12 @@ impl Config {
             })?;
         }
 
+        for (repo, url) in &self.zig.repo_overrides {
+            url::Url::parse(url).map_err(|err| {
+                StarmetalError::Config(format!("zig.repo_overrides.{repo}: invalid URL '{url}': {err}"))
+            })?;
+        }
+
         for (name, upstream) in &self.upstream {
             validate_upstream_url(name, &upstream.url, upstream)?;
             if let Some(artifact_url) = &upstream.artifact_url {
@@ -822,6 +882,15 @@ impl Config {
                     members: Vec::new(),
                 });
             }
+            // Zig, like Go, has no `[upstream]` entry — derived from `[zig].enabled` instead.
+            if self.zig.enabled {
+                repositories.push(RepositoryConfig {
+                    name: "zig".to_string(),
+                    kind: RepositoryKind::Proxy,
+                    ecosystem: Ecosystem::Zig,
+                    members: Vec::new(),
+                });
+            }
             repositories
         } else {
             self.repositories.clone()
@@ -884,6 +953,7 @@ impl Default for Config {
             metadata: MetadataConfig::default(),
             supply_chain: SupplyChainConfig::default(),
             go: GoConfig::default(),
+            zig: ZigConfig::default(),
         }
     }
 }
