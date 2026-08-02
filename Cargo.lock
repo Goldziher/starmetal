@@ -4331,6 +4331,7 @@ version = "0.3.0"
 dependencies = [
  "ahash",
  "axum",
+ "bytes",
  "reqwest",
  "serde_json",
  "starmetal-adapters",

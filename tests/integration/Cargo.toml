@@ -35,6 +35,7 @@ starmetal-storage = { workspace = true, features = ["backend-memory"] }
 tokio.workspace = true
 
 [dev-dependencies]
+bytes.workspace = true
 reqwest.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
