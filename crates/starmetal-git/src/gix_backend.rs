@@ -107,6 +107,12 @@ impl GitMirror for GixMirror {
         let bytes = run_blocking(move || archive_blocking(&repo_dir, &reference, format)).await?;
         Ok(Bytes::from(bytes))
     }
+
+    async fn commit_time(&self, remote_url: &str, reference: &str) -> Result<Option<i64>> {
+        let repo_dir = self.mirror_dir(remote_url);
+        let reference = reference.to_owned();
+        run_blocking(move || commit_time_blocking(&repo_dir, &reference)).await
+    }
 }
 
 /// Run a blocking mirror operation off the async runtime and flatten the join failure.
@@ -247,6 +253,16 @@ fn archive_blocking(repo_dir: &Path, reference: &str, format: ArchiveFormat) -> 
         .worktree_archive(stream, &mut out, gix::progress::Discard, &should_interrupt, options)
         .map_err(GitMirrorError::git)?;
     Ok(out.into_inner())
+}
+
+fn commit_time_blocking(repo_dir: &Path, reference: &str) -> Result<Option<i64>> {
+    let repository = open_mirror(repo_dir)?;
+    let commit = match resolve_commit(&repository, reference)? {
+        Some(object) => object.into_commit(),
+        None => return Ok(None),
+    };
+    let seconds = commit.time().map_err(GitMirrorError::git)?.seconds;
+    Ok(Some(seconds))
 }
 
 fn archive_format(format: ArchiveFormat) -> gix_archive::Format {

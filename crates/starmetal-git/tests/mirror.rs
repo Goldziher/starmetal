@@ -18,6 +18,7 @@ struct Fixture {
     url: String,
     v1_0_0: String,
     v1_1_0: String,
+    v1_0_0_time: i64,
 }
 
 fn git(dir: &Path, args: &[&str]) -> String {
@@ -62,6 +63,10 @@ fn build_fixture() -> Fixture {
     git(&work, &["commit", "-m", "release 1.0.0"]);
     git(&work, &["tag", "v1.0.0"]);
     let v1_0_0 = git(&work, &["rev-parse", "HEAD"]).trim().to_owned();
+    let v1_0_0_time: i64 = git(&work, &["log", "-1", "--format=%ct"])
+        .trim()
+        .parse()
+        .expect("commit time is a unix timestamp");
 
     write_file(&work, "README", "readme v1.1\n");
     write_file(&work, "go.mod", "module example.com/foo\n\ngo 1.21\n");
@@ -76,6 +81,7 @@ fn build_fixture() -> Fixture {
         url,
         v1_0_0,
         v1_1_0,
+        v1_0_0_time,
     }
 }
 
@@ -134,6 +140,27 @@ async fn resolve_returns_commit_for_tag_and_none_for_missing() {
         .resolve(&fixture.url, "nonexistent")
         .await
         .expect("resolve missing");
+    assert_eq!(missing, None);
+}
+
+#[tokio::test]
+async fn commit_time_returns_the_tagged_commit_time_and_none_for_missing() {
+    let fixture = build_fixture();
+    let cache = cache_root();
+    let mirror = GixMirror::new(cache.path(), Duration::from_secs(3600));
+    mirror.ensure_mirror(&fixture.url).await.expect("mirror");
+
+    let time = mirror
+        .commit_time(&fixture.url, "v1.0.0")
+        .await
+        .expect("commit time for tag")
+        .expect("v1.0.0 has a commit time");
+    assert_eq!(time, fixture.v1_0_0_time);
+
+    let missing = mirror
+        .commit_time(&fixture.url, "nonexistent")
+        .await
+        .expect("commit time for missing ref");
     assert_eq!(missing, None);
 }
 

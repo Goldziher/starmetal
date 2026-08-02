@@ -66,6 +66,13 @@ pub trait GitMirror: Send + Sync {
     /// (for example, it names a directory).
     async fn read_blob(&self, remote_url: &str, reference: &str, path: &str) -> Result<Option<Bytes>>;
 
+    /// The commit time of `reference`, as Unix seconds since the epoch.
+    ///
+    /// Returns `Ok(None)` when the reference does not exist in the mirror. Ecosystem adapters that
+    /// synthesize a version-info document from a git tag (for example, the Go module proxy's
+    /// `@v/<version>.info`) use this as the version's timestamp.
+    async fn commit_time(&self, remote_url: &str, reference: &str) -> Result<Option<i64>>;
+
     /// Produce a source archive of the tree at `reference` in the requested `format`.
     ///
     /// The archive is the basis for ecosystem artifacts (Go module zip, Swift source archive, Zig
