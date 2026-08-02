@@ -277,6 +277,11 @@ tasks:
     cmds:
       - cargo test -p starmetal-integration-tests --test go -- --ignored --test-threads=1
 
+  test:e2e:zig:
+    desc: Run live Zig tarball proxy (zig fetch) E2E tests
+    cmds:
+      - cargo test -p starmetal-integration-tests --test zig -- --ignored --test-threads=1
+
   fmt:check:
     desc: Check Rust formatting
     cmds:
