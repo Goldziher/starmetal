@@ -359,12 +359,16 @@ reclaimable by the reference-counted garbage collector. Requires the `metadata` 
 | `metadata.gc_interval_secs` | `0` | Interval between scheduled garbage-collection sweeps (ADR-0020 Stage 2d). `0` disables the scheduler; admin `POST /gc` still triggers a sweep on demand. |
 | `metadata.gc_grace_secs` | `86400` | Grace window applied to every blob a GC sweep soft-deletes before a later sweep may hard-delete it. A blob soft-deleted this sweep is reclaimed only by a sweep run after its grace elapses. |
 | `metadata.retention_interval_secs` | `0` | Interval between scheduled retention sweeps (ADR-0020 Stage 2c). `0` disables the scheduler; admin `POST /retention` still triggers a sweep on demand. |
-| `metadata.retention` | `{}` | Retention policy applied to every component family by the retention sweep. An empty policy is a no-op. `metadata.retention.rules` is a list of rules (`keep-latest`, `is-prerelease`, `matches-regex`, `last-updated`, `last-downloaded`); a version is deleted when **any** rule selects it. Deleting component rows leaves blobs unreferenced, which the GC sweep then reclaims. |
+| `metadata.retention` | `{}` | Global fallback retention policy, applied to a component family when neither a per-repository nor a per-ecosystem policy matches. An empty policy is a no-op. `metadata.retention.rules` is a list of rules (`keep-latest`, `is-prerelease`, `matches-regex`, `last-updated`, `last-downloaded`); a version is deleted when **any** rule selects it. Deleting component rows leaves blobs unreferenced, which the GC sweep then reclaims. |
+| `metadata.retention_per_ecosystem` | `{}` | Retention policies keyed by canonical ecosystem name (`pypi`, `npm`, `cargo`, `hex`, `maven`, `rubygems`, `nuget`, `pub`). A family whose ecosystem matches uses this in preference to the global `metadata.retention`. Each entry's `metadata.retention_per_ecosystem.*.rules` list uses the same rule strategies as `metadata.retention`. Startup rejects a key that is not a canonical ecosystem name. |
+| `metadata.retention_per_repository` | `{}` | Retention policies keyed by repository attribution string (the named repository a component was published to). A family whose repository matches uses this in preference to both `metadata.retention_per_ecosystem` and the global `metadata.retention`. Each entry's `metadata.retention_per_repository.*.rules` list uses the same rule strategies. Keys are free-form and not validated. |
 
 Garbage collection and retention run only when their interval is non-zero (and `metadata.enabled`);
 both are also exposed as admin triggers (`POST /admin/api/v1/gc`, `POST /admin/api/v1/retention`).
-A single `metadata.retention` policy currently applies to every family; per-repository policies are
-a planned follow-up.
+Retention is resolved per component family with precedence **per-repository > per-ecosystem >
+global** (`metadata.retention_per_repository` > `metadata.retention_per_ecosystem` >
+`metadata.retention`): the family's repository attribution is consulted first, then its ecosystem,
+then the global fallback.
 
 ```toml
 [metadata]
@@ -377,6 +381,16 @@ retention_interval_secs = 0    # scheduled retention off; trigger via admin API
 [[metadata.retention.rules]]
 strategy = "keep-latest"
 count = 10
+
+# Per-ecosystem override: npm keeps only the latest 5 (wins over the global policy above).
+[[metadata.retention_per_ecosystem.npm.rules]]
+strategy = "keep-latest"
+count = 5
+
+# Per-repository override: the "team-internal" repository keeps only the latest 2 (wins over both).
+[[metadata.retention_per_repository.team-internal.rules]]
+strategy = "keep-latest"
+count = 2
 ```
 
 ## Supply Chain (Vulnerability Scanning)

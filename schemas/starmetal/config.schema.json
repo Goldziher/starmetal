@@ -99,7 +99,7 @@
           "default": {
             "rules": []
           },
-          "description": "The retention policy applied by the scheduled retention sweep. An empty policy (the\ndefault) is a no-op."
+          "description": "The retention policy applied by the scheduled retention sweep when neither a per-repository\nnor a per-ecosystem policy matches a component family. An empty policy (the default) is a\nno-op. Precedence is `retention_per_repository` > `retention_per_ecosystem` > `retention`."
         },
         "retention_interval_secs": {
           "default": 0,
@@ -107,6 +107,22 @@
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
+        },
+        "retention_per_ecosystem": {
+          "additionalProperties": {
+            "$ref": "#/$defs/RetentionPolicy"
+          },
+          "default": {},
+          "description": "Retention policies keyed by canonical ecosystem name (`\"pypi\"`, `\"npm\"`, `\"cargo\"`, `\"hex\"`,\n`\"maven\"`, `\"rubygems\"`, `\"nuget\"`, `\"pub\"`). A family whose ecosystem matches uses this\npolicy in preference to the global `retention` (but a matching `retention_per_repository`\nstill wins). Empty by default.",
+          "type": "object"
+        },
+        "retention_per_repository": {
+          "additionalProperties": {
+            "$ref": "#/$defs/RetentionPolicy"
+          },
+          "default": {},
+          "description": "Retention policies keyed by repository attribution string (see\n[`crate::content::Component::repository`]). A family whose repository matches uses this\npolicy in preference to both `retention_per_ecosystem` and the global `retention`. Keys are\nfree-form (no validation). Empty by default.",
+          "type": "object"
         }
       },
       "type": "object"
@@ -798,7 +814,9 @@
         "retention": {
           "rules": []
         },
-        "retention_interval_secs": 0
+        "retention_interval_secs": 0,
+        "retention_per_ecosystem": {},
+        "retention_per_repository": {}
       }
     },
     "policies": {

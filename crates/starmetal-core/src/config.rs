@@ -272,10 +272,23 @@ pub struct MetadataConfig {
     /// default) disables the scheduler. Only effective when `enabled`.
     #[serde(default)]
     pub retention_interval_secs: u64,
-    /// The retention policy applied by the scheduled retention sweep. An empty policy (the
-    /// default) is a no-op.
+    /// The retention policy applied by the scheduled retention sweep when neither a per-repository
+    /// nor a per-ecosystem policy matches a component family. An empty policy (the default) is a
+    /// no-op. Precedence is `retention_per_repository` > `retention_per_ecosystem` > `retention`.
     #[serde(default)]
     pub retention: crate::content::RetentionPolicy,
+    /// Retention policies keyed by canonical ecosystem name (`"pypi"`, `"npm"`, `"cargo"`, `"hex"`,
+    /// `"maven"`, `"rubygems"`, `"nuget"`, `"pub"`). A family whose ecosystem matches uses this
+    /// policy in preference to the global `retention` (but a matching `retention_per_repository`
+    /// still wins). Empty by default.
+    #[serde(default)]
+    pub retention_per_ecosystem: HashMap<String, crate::content::RetentionPolicy>,
+    /// Retention policies keyed by repository attribution string (see
+    /// [`crate::content::Component::repository`]). A family whose repository matches uses this
+    /// policy in preference to both `retention_per_ecosystem` and the global `retention`. Keys are
+    /// free-form (no validation). Empty by default.
+    #[serde(default)]
+    pub retention_per_repository: HashMap<String, crate::content::RetentionPolicy>,
 }
 
 impl Default for MetadataConfig {
@@ -288,6 +301,8 @@ impl Default for MetadataConfig {
             gc_grace_secs: default_gc_grace_secs(),
             retention_interval_secs: 0,
             retention: crate::content::RetentionPolicy::default(),
+            retention_per_ecosystem: HashMap::new(),
+            retention_per_repository: HashMap::new(),
         }
     }
 }
@@ -546,6 +561,7 @@ impl Config {
         validate_encryption_config(&self.encryption)?;
         validate_signing_config(&self.signing)?;
         validate_quota_config(&self.supply_chain.quota)?;
+        validate_retention_config(&self.metadata)?;
 
         if self.auth.enabled && self.auth.tokens.is_empty() {
             return Err(StarmetalError::Config(
@@ -939,6 +955,32 @@ fn validate_quota_config(config: &QuotaConfig) -> Result<()> {
     Ok(())
 }
 
+/// Reject a `metadata.retention_per_ecosystem` map keyed by anything other than a canonical
+/// ecosystem name. The retention sweep resolves a per-ecosystem policy by matching the family's
+/// `ecosystem.to_string()` (the `Display` form), so a misspelled (`NPM`) or non-canonical alias
+/// (`crates`) key would silently never match and fall through to the global policy. Failing startup
+/// turns that footgun into a loud error, mirroring [`validate_quota_config`].
+/// `retention_per_repository` keys are free-form and intentionally not validated.
+fn validate_retention_config(config: &MetadataConfig) -> Result<()> {
+    for key in config.retention_per_ecosystem.keys() {
+        match key.parse::<Ecosystem>() {
+            Ok(ecosystem) if &ecosystem.to_string() == key => {}
+            Ok(ecosystem) => {
+                return Err(StarmetalError::Config(format!(
+                    "metadata.retention_per_ecosystem key '{key}' is not the canonical ecosystem name; \
+                     use '{ecosystem}'"
+                )));
+            }
+            Err(_) => {
+                return Err(StarmetalError::Config(format!(
+                    "metadata.retention_per_ecosystem key '{key}' is not a known ecosystem"
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn redact_signing_config(value: &mut toml::Value) {
     let Some(signing) = value.get_mut("signing").and_then(toml::Value::as_table_mut) else {
         return;
@@ -1122,6 +1164,50 @@ mod tests {
     fn startup_validation_accepts_a_canonical_quota_ecosystem_key() {
         let config: Config = toml::from_str("[supply_chain.quota.per_ecosystem.npm]\nmax_versions = 5\n").unwrap();
         assert!(config.validate_mvp().is_ok());
+    }
+
+    #[test]
+    fn startup_validation_rejects_a_noncanonical_retention_ecosystem_key() {
+        let config: Config = toml::from_str("[metadata.retention_per_ecosystem.NPM]\nrules = []\n").unwrap();
+        let err = config.validate_mvp().unwrap_err().to_string();
+        assert!(
+            err.contains("canonical ecosystem name") && err.contains("'npm'"),
+            "expected a canonical-name hint, got: {err}"
+        );
+    }
+
+    #[test]
+    fn startup_validation_rejects_an_unknown_retention_ecosystem_key() {
+        let config: Config = toml::from_str("[metadata.retention_per_ecosystem.banana]\nrules = []\n").unwrap();
+        let err = config.validate_mvp().unwrap_err().to_string();
+        assert!(err.contains("not a known ecosystem"), "got: {err}");
+    }
+
+    #[test]
+    fn startup_validation_accepts_a_canonical_retention_ecosystem_key() {
+        let config: Config = toml::from_str(
+            "[metadata.retention_per_ecosystem.pypi]\nrules = [{ strategy = \"keep-latest\", count = 3 }]\n",
+        )
+        .unwrap();
+        assert!(config.validate_mvp().is_ok());
+    }
+
+    #[test]
+    fn startup_validation_does_not_validate_retention_repository_keys() {
+        // Repository keys are free-form: an arbitrary string that is not an ecosystem is accepted.
+        let config: Config = toml::from_str(
+            "[metadata.retention_per_repository.\"team-internal\"]\nrules = [{ strategy = \"keep-latest\", count = 5 }]\n",
+        )
+        .unwrap();
+        assert!(config.validate_mvp().is_ok());
+        assert_eq!(config.metadata.retention_per_repository.len(), 1);
+    }
+
+    #[test]
+    fn metadata_per_family_retention_maps_default_empty() {
+        let metadata = MetadataConfig::default();
+        assert!(metadata.retention_per_ecosystem.is_empty());
+        assert!(metadata.retention_per_repository.is_empty());
     }
 
     #[test]
