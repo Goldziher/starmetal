@@ -1652,6 +1652,23 @@ ecosystem = "pypi"
     }
 
     #[test]
+    fn startup_validation_rejects_group_repositories() {
+        // Group repositories have a functional GroupFacet (ADR-0019) but no wired HTTP mount yet, so
+        // validate_mvp must still reject them rather than accept a config that would not serve.
+        let config: Config = toml::from_str(
+            r#"
+[[repositories]]
+name = "group-pypi"
+kind = "group"
+ecosystem = "pypi"
+"#,
+        )
+        .unwrap();
+        let err = config.validate_mvp().unwrap_err().to_string();
+        assert!(err.contains("only 'proxy' repositories are supported"), "got: {err}");
+    }
+
+    #[test]
     fn startup_validation_rejects_duplicate_repository_names() {
         let config: Config = toml::from_str(
             r#"
