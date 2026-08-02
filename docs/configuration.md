@@ -249,15 +249,21 @@ Repositories model the `(kind, ecosystem)` composition surface (ADR-0019). When
 `repositories` is omitted or empty, Starmetal derives one `proxy` repository per
 enabled `[upstream]` ecosystem, mounted under the ecosystem's own name — the
 historical proxy-only behavior. Declaring repositories explicitly overrides that
-derivation. Only `proxy` repositories are supported today; `hosted` and `group`
-kinds are reserved for later stages and rejected at startup.
+derivation. `proxy` and `group` repositories are supported; the `hosted` kind is
+reserved for a later stage and rejected at startup.
+
+A `group` is a read-only virtual repository that merges its member proxies of the
+same ecosystem behind one URL: version listings are the union of all members
+(deduplicated, deterministically ordered) and an artifact is served by the first
+member that has it, in declared order. A group cannot be published to.
 
 | Option | Default | Description |
 |--------|---------|-------------|
 | `repositories` | Derived from `upstream` | List of declared repositories. Empty derives one proxy per enabled upstream. |
 | `repositories.*.name` | — | URL mount segment and unique identity of the repository (e.g. `pypi`). |
-| `repositories.*.kind` | — | Repository kind: `proxy` (only supported kind today), `hosted`, or `group`. |
+| `repositories.*.kind` | — | Repository kind: `proxy`, `group`, or `hosted` (`hosted` is rejected at startup). |
 | `repositories.*.ecosystem` | — | Ecosystem served: `pypi`, `npm`, `cargo`, `hex`, `maven`, `rubygems`, `nuget`, or `pub`. |
+| `repositories.*.members` | `[]` | Member repository names for a `group`; each must name another declared `proxy` of the same ecosystem. Required non-empty for `group`, and must be empty for `proxy`. |
 
 Example (mount a PyPI proxy under `/python`):
 
@@ -266,6 +272,26 @@ Example (mount a PyPI proxy under `/python`):
 name = "python"
 kind = "proxy"
 ecosystem = "pypi"
+```
+
+Example (merge two PyPI proxies into a `group` mounted under `/combined`):
+
+```toml
+[[repositories]]
+name = "pypi-central"
+kind = "proxy"
+ecosystem = "pypi"
+
+[[repositories]]
+name = "pypi-internal"
+kind = "proxy"
+ecosystem = "pypi"
+
+[[repositories]]
+name = "combined"
+kind = "group"
+ecosystem = "pypi"
+members = ["pypi-central", "pypi-internal"]
 ```
 
 ## Policies

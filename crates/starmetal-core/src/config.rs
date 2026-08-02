@@ -192,8 +192,8 @@ fn default_max_upstream_bytes() -> u64 {
 /// When [`Config::repositories`] is empty, Starmetal derives one `proxy`
 /// repository per enabled `[upstream]` ecosystem (see
 /// [`Config::resolved_repositories`]), preserving the historical proxy-only
-/// behavior. Only `proxy` repositories are supported today; `hosted` and `group`
-/// are reserved for later stages and rejected by [`Config::validate_mvp`].
+/// behavior. `proxy` and `group` repositories are supported; `hosted` is
+/// reserved for a later stage and rejected by [`Config::validate_mvp`].
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct RepositoryConfig {
     /// URL mount segment and identity of the repository (e.g. `pypi`). Must be
@@ -203,6 +203,12 @@ pub struct RepositoryConfig {
     pub kind: RepositoryKind,
     /// The ecosystem this repository serves.
     pub ecosystem: Ecosystem,
+    /// Member repository names for a `group` (ADR-0019). Each must name another declared repository
+    /// of the same ecosystem. Empty (and required to be empty) for `proxy` and `hosted` kinds; a
+    /// `group` requires at least one member. Members resolve in order — first-match for artifacts,
+    /// merge-all for version listings.
+    #[serde(default)]
+    pub members: Vec<String>,
 }
 
 #[derive(Clone, Default, Serialize, Deserialize, JsonSchema)]
@@ -539,6 +545,15 @@ impl Config {
             }
         }
 
+        // Index declared repositories by name so a group's members can be resolved to their kind and
+        // ecosystem. Built before the validation pass because a member may be declared after the
+        // group that references it.
+        let repositories_by_name: std::collections::HashMap<&str, &RepositoryConfig> = self
+            .repositories
+            .iter()
+            .map(|repository| (repository.name.as_str(), repository))
+            .collect();
+
         let mut repository_names = std::collections::HashSet::new();
         for repository in &self.repositories {
             if repository.name.trim().is_empty() {
@@ -550,12 +565,7 @@ impl Config {
                     repository.name
                 )));
             }
-            if repository.kind != RepositoryKind::Proxy {
-                return Err(StarmetalError::Config(format!(
-                    "repository '{}' uses kind '{}'; only 'proxy' repositories are supported in this MVP",
-                    repository.name, repository.kind
-                )));
-            }
+            validate_repository(repository, &repositories_by_name)?;
         }
 
         validate_encryption_config(&self.encryption)?;
@@ -628,6 +638,7 @@ impl Config {
                         name: name.clone(),
                         kind: RepositoryKind::Proxy,
                         ecosystem,
+                        members: Vec::new(),
                     })
                 })
                 .collect()
@@ -785,6 +796,70 @@ fn default_upstreams() -> HashMap<String, UpstreamConfig> {
         },
     );
     upstream
+}
+
+/// Validate a single declared repository against ADR-0019's kind rules.
+///
+/// `proxy` is fully supported and must not declare members. `group` is supported and must declare
+/// at least one member, each naming another declared repository of the same ecosystem. `hosted` is
+/// out of scope for this stage and is rejected. `repositories_by_name` indexes every declared
+/// repository so a group's members resolve regardless of declaration order.
+fn validate_repository(
+    repository: &RepositoryConfig,
+    repositories_by_name: &std::collections::HashMap<&str, &RepositoryConfig>,
+) -> Result<()> {
+    match repository.kind {
+        RepositoryKind::Proxy => {
+            if !repository.members.is_empty() {
+                return Err(StarmetalError::Config(format!(
+                    "proxy repository '{}' must not declare members; members are only valid on a group",
+                    repository.name
+                )));
+            }
+            Ok(())
+        }
+        RepositoryKind::Hosted => Err(StarmetalError::Config(format!(
+            "repository '{}' uses kind '{}'; only 'proxy' repositories are supported in this MVP",
+            repository.name, repository.kind
+        ))),
+        RepositoryKind::Group => validate_group_repository(repository, repositories_by_name),
+    }
+}
+
+/// Validate a `group` repository's member list: non-empty, every member declared, each a `proxy` of
+/// the same ecosystem as the group.
+fn validate_group_repository(
+    repository: &RepositoryConfig,
+    repositories_by_name: &std::collections::HashMap<&str, &RepositoryConfig>,
+) -> Result<()> {
+    if repository.members.is_empty() {
+        return Err(StarmetalError::Config(format!(
+            "group repository '{}' requires at least one member",
+            repository.name
+        )));
+    }
+    for member_name in &repository.members {
+        let member = repositories_by_name.get(member_name.as_str()).ok_or_else(|| {
+            StarmetalError::Config(format!(
+                "group repository '{}' references unknown member '{member_name}'",
+                repository.name
+            ))
+        })?;
+        if member.ecosystem != repository.ecosystem {
+            return Err(StarmetalError::Config(format!(
+                "group repository '{}' member '{member_name}' serves ecosystem '{}', but the group serves '{}'; \
+                 all members must share the group's ecosystem",
+                repository.name, member.ecosystem, repository.ecosystem
+            )));
+        }
+        if member.kind != RepositoryKind::Proxy {
+            return Err(StarmetalError::Config(format!(
+                "group repository '{}' member '{member_name}' is a '{}'; group members must be 'proxy' repositories",
+                repository.name, member.kind
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn validate_public_base_url(value: &str) -> Result<()> {
@@ -1652,20 +1727,101 @@ ecosystem = "pypi"
     }
 
     #[test]
-    fn startup_validation_rejects_group_repositories() {
-        // Group repositories have a functional GroupFacet (ADR-0019) but no wired HTTP mount yet, so
-        // validate_mvp must still reject them rather than accept a config that would not serve.
+    fn startup_validation_accepts_a_valid_group_repository() {
+        // A group over one or more same-ecosystem proxy members is wired end-to-end (ADR-0019), so
+        // validate_mvp accepts it.
         let config: Config = toml::from_str(
             r#"
 [[repositories]]
-name = "group-pypi"
+name = "pypi-central"
+kind = "proxy"
+ecosystem = "pypi"
+
+[[repositories]]
+name = "pypi-internal"
+kind = "proxy"
+ecosystem = "pypi"
+
+[[repositories]]
+name = "pypi-group"
+kind = "group"
+ecosystem = "pypi"
+members = ["pypi-central", "pypi-internal"]
+"#,
+        )
+        .unwrap();
+        config.validate_mvp().expect("a valid group must be accepted");
+    }
+
+    #[test]
+    fn startup_validation_rejects_a_group_without_members() {
+        let config: Config = toml::from_str(
+            r#"
+[[repositories]]
+name = "pypi-group"
 kind = "group"
 ecosystem = "pypi"
 "#,
         )
         .unwrap();
         let err = config.validate_mvp().unwrap_err().to_string();
-        assert!(err.contains("only 'proxy' repositories are supported"), "got: {err}");
+        assert!(err.contains("requires at least one member"), "got: {err}");
+    }
+
+    #[test]
+    fn startup_validation_rejects_a_group_member_of_a_different_ecosystem() {
+        let config: Config = toml::from_str(
+            r#"
+[[repositories]]
+name = "npm-proxy"
+kind = "proxy"
+ecosystem = "npm"
+
+[[repositories]]
+name = "pypi-group"
+kind = "group"
+ecosystem = "pypi"
+members = ["npm-proxy"]
+"#,
+        )
+        .unwrap();
+        let err = config.validate_mvp().unwrap_err().to_string();
+        assert!(
+            err.contains("all members must share the group's ecosystem"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn startup_validation_rejects_a_group_with_a_missing_member() {
+        let config: Config = toml::from_str(
+            r#"
+[[repositories]]
+name = "pypi-group"
+kind = "group"
+ecosystem = "pypi"
+members = ["does-not-exist"]
+"#,
+        )
+        .unwrap();
+        let err = config.validate_mvp().unwrap_err().to_string();
+        assert!(err.contains("references unknown member 'does-not-exist'"), "got: {err}");
+    }
+
+    #[test]
+    fn startup_validation_rejects_members_on_a_proxy_repository() {
+        let config: Config = toml::from_str(
+            r#"
+[[repositories]]
+name = "pypi-proxy"
+kind = "proxy"
+ecosystem = "pypi"
+members = ["something"]
+"#,
+        )
+        .unwrap();
+        let err = config.validate_mvp().unwrap_err().to_string();
+        assert!(err.contains("must not declare members"), "got: {err}");
     }
 
     #[test]

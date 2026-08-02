@@ -293,7 +293,7 @@
       "type": "object"
     },
     "RepositoryConfig": {
-      "description": "A declared repository (ADR-0019): a `(kind, ecosystem)` surface mounted under\nits own URL segment.\n\nWhen [`Config::repositories`] is empty, Starmetal derives one `proxy`\nrepository per enabled `[upstream]` ecosystem (see\n[`Config::resolved_repositories`]), preserving the historical proxy-only\nbehavior. Only `proxy` repositories are supported today; `hosted` and `group`\nare reserved for later stages and rejected by [`Config::validate_mvp`].",
+      "description": "A declared repository (ADR-0019): a `(kind, ecosystem)` surface mounted under\nits own URL segment.\n\nWhen [`Config::repositories`] is empty, Starmetal derives one `proxy`\nrepository per enabled `[upstream]` ecosystem (see\n[`Config::resolved_repositories`]), preserving the historical proxy-only\nbehavior. `proxy` and `group` repositories are supported; `hosted` is\nreserved for a later stage and rejected by [`Config::validate_mvp`].",
       "properties": {
         "ecosystem": {
           "$ref": "#/$defs/Ecosystem",
@@ -302,6 +302,14 @@
         "kind": {
           "$ref": "#/$defs/RepositoryKind",
           "description": "The repository kind: `proxy`, `hosted`, or `group`."
+        },
+        "members": {
+          "default": [],
+          "description": "Member repository names for a `group` (ADR-0019). Each must name another declared repository\nof the same ecosystem. Empty (and required to be empty) for `proxy` and `hosted` kinds; a\n`group` requires at least one member. Members resolve in order — first-match for artifacts,\nmerge-all for version listings.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "name": {
           "description": "URL mount segment and identity of the repository (e.g. `pypi`). Must be\nunique across repositories.",

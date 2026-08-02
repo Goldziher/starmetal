@@ -47,6 +47,7 @@ async fn explicit_repositories_override_derivation_and_mount_at_custom_name() {
             name: "python".to_string(),
             kind: RepositoryKind::Proxy,
             ecosystem: Ecosystem::PyPI,
+            members: Vec::new(),
         }];
     })
     .await;
