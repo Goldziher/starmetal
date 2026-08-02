@@ -31,6 +31,8 @@ pub struct Config {
     #[serde(default)]
     pub admin: AdminConfig,
     #[serde(default)]
+    pub oidc: OidcConfig,
+    #[serde(default)]
     pub publishing: PublishingConfig,
     #[serde(default)]
     pub encryption: EncryptionConfig,
@@ -243,6 +245,108 @@ impl std::fmt::Debug for AdminConfig {
             .field("tokens", &format!("[{} redacted]", self.tokens.len()))
             .finish()
     }
+}
+
+/// Static-JWKS OIDC bearer-token identity backend (ADR-0022).
+///
+/// A second [`Authenticator`](crate::authz::Authenticator) backend, composed ahead of the flat-token
+/// `LocalAuthorizer`: when `enabled`, a compact JWS bearer is verified against a **static** JWKS
+/// supplied inline ([`jwks`](OidcConfig::jwks)) or from a file
+/// ([`jwks_file`](OidcConfig::jwks_file)). This is deliberately offline — there is no JWKS-URL fetch,
+/// OIDC discovery, or token refresh; a live IdP integration is a later stage. Off by default, so a
+/// deployment that omits this section authenticates exactly as before.
+///
+/// The validator (in `starmetal-oidc`) verifies the signature (RS256 or ES256 only — `alg: none` and
+/// any other algorithm are rejected), the `exp` claim (with [`leeway_secs`](OidcConfig::leeway_secs)),
+/// the `iss` claim (must equal [`issuer`](OidcConfig::issuer)), and the `aud` claim (must contain
+/// [`audience`](OidcConfig::audience)), then maps [`principal_claim`](OidcConfig::principal_claim) to a
+/// `Principal::User`.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct OidcConfig {
+    /// Whether the OIDC identity backend is active. When `false` (the default) no JWT validation is
+    /// wired and authentication is unchanged.
+    #[serde(default)]
+    pub enabled: bool,
+    /// The expected token issuer. A token whose `iss` claim does not equal this exactly is rejected.
+    /// Required (non-empty) when `enabled`.
+    #[serde(default)]
+    pub issuer: String,
+    /// The expected audience. A token whose `aud` claim does not contain this value is rejected.
+    /// Required (non-empty) when `enabled`.
+    #[serde(default)]
+    pub audience: String,
+    /// Inline JWKS document (RFC 7517 JSON), e.g. `{ "keys": [ ... ] }`. Takes precedence over
+    /// [`jwks_file`](OidcConfig::jwks_file) when both are set. The keys hold only public material.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub jwks: Option<String>,
+    /// Path to a file containing the JWKS document, read once at startup. Used when
+    /// [`jwks`](OidcConfig::jwks) is unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub jwks_file: Option<PathBuf>,
+    /// The claim mapped to the authenticated principal's id. Defaults to `sub`.
+    #[serde(default = "default_principal_claim")]
+    pub principal_claim: String,
+    /// Clock-skew leeway, in seconds, applied when checking `exp`. Defaults to 60.
+    #[serde(default = "default_oidc_leeway_secs")]
+    pub leeway_secs: u64,
+}
+
+impl Default for OidcConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            issuer: String::new(),
+            audience: String::new(),
+            jwks: None,
+            jwks_file: None,
+            principal_claim: default_principal_claim(),
+            leeway_secs: default_oidc_leeway_secs(),
+        }
+    }
+}
+
+impl OidcConfig {
+    /// Config-level validation of the OIDC section, run by [`Config::validate_mvp`].
+    ///
+    /// When disabled, always succeeds. When enabled, requires a non-empty `issuer` and `audience`
+    /// and at least one JWKS source (`jwks` or `jwks_file`). Parsing the JWKS and requiring at least
+    /// one usable key is the crypto backend's responsibility (`starmetal-oidc`), performed at startup
+    /// wiring, since it needs the signing-key types this framework-free crate does not depend on.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StarmetalError::Config`] when enabled with a missing issuer, audience, or JWKS source.
+    pub fn validate(&self) -> Result<()> {
+        if !self.enabled {
+            return Ok(());
+        }
+        if self.issuer.trim().is_empty() {
+            return Err(StarmetalError::Config(
+                "oidc.issuer must not be empty when oidc.enabled".to_string(),
+            ));
+        }
+        if self.audience.trim().is_empty() {
+            return Err(StarmetalError::Config(
+                "oidc.audience must not be empty when oidc.enabled".to_string(),
+            ));
+        }
+        let has_inline = self.jwks.as_ref().is_some_and(|jwks| !jwks.trim().is_empty());
+        let has_file = self.jwks_file.is_some();
+        if !has_inline && !has_file {
+            return Err(StarmetalError::Config(
+                "oidc requires either oidc.jwks or oidc.jwks_file when oidc.enabled".to_string(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+fn default_principal_claim() -> String {
+    "sub".to_string()
+}
+
+fn default_oidc_leeway_secs() -> u64 {
+    60
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
@@ -533,6 +637,8 @@ impl Config {
             validate_public_base_url(origin)?;
         }
 
+        self.oidc.validate()?;
+
         for (name, upstream) in &self.upstream {
             validate_upstream_url(name, &upstream.url, upstream)?;
             if let Some(artifact_url) = &upstream.artifact_url {
@@ -696,6 +802,7 @@ impl Default for Config {
             policies: PolicyConfig::default(),
             auth: AuthConfig::default(),
             admin: AdminConfig::default(),
+            oidc: OidcConfig::default(),
             publishing: PublishingConfig::default(),
             encryption: EncryptionConfig::default(),
             signing: SigningConfig::default(),
@@ -1842,5 +1949,59 @@ ecosystem = "npm"
         .unwrap();
         let err = config.validate_mvp().unwrap_err().to_string();
         assert!(err.contains("duplicate repository name: dup"), "got: {err}");
+    }
+
+    #[test]
+    fn oidc_disabled_is_always_valid() {
+        assert!(OidcConfig::default().validate().is_ok());
+    }
+
+    #[test]
+    fn oidc_enabled_requires_issuer_audience_and_jwks_source() {
+        let empty_issuer = OidcConfig {
+            enabled: true,
+            issuer: String::new(),
+            audience: "starmetal".to_string(),
+            jwks: Some("{}".to_string()),
+            ..OidcConfig::default()
+        };
+        assert!(empty_issuer.validate().unwrap_err().to_string().contains("oidc.issuer"));
+
+        let empty_audience = OidcConfig {
+            enabled: true,
+            issuer: "https://issuer.example.com".to_string(),
+            audience: String::new(),
+            jwks: Some("{}".to_string()),
+            ..OidcConfig::default()
+        };
+        assert!(
+            empty_audience
+                .validate()
+                .unwrap_err()
+                .to_string()
+                .contains("oidc.audience")
+        );
+
+        let no_jwks = OidcConfig {
+            enabled: true,
+            issuer: "https://issuer.example.com".to_string(),
+            audience: "starmetal".to_string(),
+            jwks: None,
+            jwks_file: None,
+            ..OidcConfig::default()
+        };
+        assert!(no_jwks.validate().unwrap_err().to_string().contains("oidc.jwks"));
+    }
+
+    #[test]
+    fn oidc_enabled_with_all_required_fields_is_valid() {
+        let config = OidcConfig {
+            enabled: true,
+            issuer: "https://issuer.example.com".to_string(),
+            audience: "starmetal".to_string(),
+            jwks_file: Some(PathBuf::from("/etc/starmetal/jwks.json")),
+            ..OidcConfig::default()
+        };
+        assert!(config.validate().is_ok());
     }
 }

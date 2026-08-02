@@ -678,6 +678,42 @@ pub trait Authenticator: Send + Sync {
     fn authenticate_bearer(&self, credential: &str) -> Option<Principal>;
 }
 
+/// An [`Authenticator`] that consults an ordered list of backends, returning the first [`Principal`]
+/// any of them resolves the credential to.
+///
+/// This is the composition seam for multiple identity backends (ADR-0022): a deployment can front a
+/// delegated backend (e.g. static-JWKS OIDC) ahead of the built-in flat-token authenticator, so a
+/// JWT authenticates via the first backend while an unchanged flat bearer token still authenticates
+/// via the fallback. Ordering is precedence: earlier backends win. An empty list authenticates
+/// nothing. Being itself an [`Authenticator`], it drops into any `Arc<dyn Authenticator>` slot.
+pub struct CompositeAuthenticator {
+    backends: Vec<std::sync::Arc<dyn Authenticator>>,
+}
+
+impl CompositeAuthenticator {
+    /// Compose `backends` in precedence order (first match wins).
+    pub fn new(backends: Vec<std::sync::Arc<dyn Authenticator>>) -> Self {
+        Self { backends }
+    }
+}
+
+impl std::fmt::Debug for CompositeAuthenticator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CompositeAuthenticator")
+            .field("backends", &self.backends.len())
+            .finish()
+    }
+}
+
+impl Authenticator for CompositeAuthenticator {
+    /// Resolve `credential` against each backend in order, returning the first [`Principal`] produced.
+    fn authenticate_bearer(&self, credential: &str) -> Option<Principal> {
+        self.backends
+            .iter()
+            .find_map(|backend| backend.authenticate_bearer(credential))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -910,6 +946,89 @@ mod tests {
         assert!(PrincipalScope::System.covers(&namespace("anything")));
         assert!(PrincipalScope::Namespace(namespace("team-a")).covers(&namespace("team-a")));
         assert!(!PrincipalScope::Namespace(namespace("team-a")).covers(&namespace("team-b")));
+    }
+
+    /// A stub [`Authenticator`] that resolves exactly one token to one principal id.
+    struct StubAuthenticator {
+        token: &'static str,
+        id: &'static str,
+    }
+
+    impl Authenticator for StubAuthenticator {
+        fn authenticate_bearer(&self, credential: &str) -> Option<Principal> {
+            (credential == self.token).then(|| Principal::User {
+                id: PrincipalId::new(self.id).expect("non-empty id"),
+                scope: PrincipalScope::System,
+            })
+        }
+    }
+
+    #[test]
+    fn composite_authenticator_returns_first_matching_backend() {
+        use std::sync::Arc;
+
+        let composite = CompositeAuthenticator::new(vec![
+            Arc::new(StubAuthenticator {
+                token: "jwt",
+                id: "oidc-user",
+            }) as Arc<dyn Authenticator>,
+            Arc::new(StubAuthenticator {
+                token: "flat",
+                id: "legacy-bearer",
+            }) as Arc<dyn Authenticator>,
+        ]);
+
+        // First backend authenticates the JWT-shaped token.
+        assert_eq!(
+            composite
+                .authenticate_bearer("jwt")
+                .expect("first backend")
+                .id()
+                .as_str(),
+            "oidc-user"
+        );
+        // Fallback backend still authenticates the flat token (behavior preservation).
+        assert_eq!(
+            composite
+                .authenticate_bearer("flat")
+                .expect("fallback backend")
+                .id()
+                .as_str(),
+            "legacy-bearer"
+        );
+        // A credential no backend recognizes is unauthenticated.
+        assert!(composite.authenticate_bearer("unknown").is_none());
+    }
+
+    #[test]
+    fn composite_authenticator_precedence_prefers_earlier_backend() {
+        use std::sync::Arc;
+
+        let composite = CompositeAuthenticator::new(vec![
+            Arc::new(StubAuthenticator {
+                token: "shared",
+                id: "primary",
+            }) as Arc<dyn Authenticator>,
+            Arc::new(StubAuthenticator {
+                token: "shared",
+                id: "secondary",
+            }) as Arc<dyn Authenticator>,
+        ]);
+
+        assert_eq!(
+            composite
+                .authenticate_bearer("shared")
+                .expect("primary wins")
+                .id()
+                .as_str(),
+            "primary"
+        );
+    }
+
+    #[test]
+    fn empty_composite_authenticates_nothing() {
+        let composite = CompositeAuthenticator::new(Vec::new());
+        assert!(composite.authenticate_bearer("anything").is_none());
     }
 
     #[test]

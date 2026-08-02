@@ -4375,6 +4375,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "starmetal-oidc"
+version = "0.3.0"
+dependencies = [
+ "base64 0.23.0",
+ "hmac 0.12.1",
+ "p256",
+ "rand 0.8.7",
+ "rsa",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "signature 2.2.0",
+ "starmetal-core",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
 name = "starmetal-ops"
 version = "0.3.0"
 dependencies = [
@@ -4386,6 +4404,7 @@ dependencies = [
  "starmetal-core",
  "starmetal-managers",
  "starmetal-metadata",
+ "starmetal-oidc",
  "starmetal-server",
  "starmetal-service",
  "starmetal-storage",

@@ -217,6 +217,51 @@ nothing, is denied. All eight publish adapters and the admin API consult the `Au
 gating still checks `auth.tokens` directly. There is intentionally no `[authz]` config section yet —
 configure access by setting `[auth]`, `[admin]`, and `[publishing]` tokens as documented above.
 
+## OIDC Identity (Static JWKS)
+
+An optional second identity backend (ADR-0022) that authenticates OIDC JWT bearer tokens against a
+**static** JWKS supplied in configuration. It is composed *ahead* of the flat-token authenticator: a
+valid JWT authenticates via OIDC, while an unchanged `[auth]`/`[admin]`/`[publishing]` flat token
+still authenticates exactly as before. Off by default — omitting the section leaves authentication
+unchanged. Requires building with the `oidc` feature (included in the default `full` build); enabling
+`oidc.enabled` in a build without that feature is a startup error.
+
+**Scope boundary:** this backend is deliberately offline. The JWKS is read from config (inline or a
+local file) and parsed once at startup. There is intentionally no JWKS-URL fetch, OIDC discovery, or
+token refresh — a live-IdP integration is out of scope for this stage.
+
+Validation accepts a token only when its signature verifies (RS256 or ES256 only — `alg: none`, HMAC
+algorithms, and every other algorithm are rejected, defeating key-confusion attacks), its `exp` is in
+the future within `oidc.leeway_secs`, its `iss` equals `oidc.issuer`, and its `aud` contains
+`oidc.audience`. The `oidc.principal_claim` claim is then mapped to a system-scoped user principal.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `oidc.enabled` | `false` | Enables the static-JWKS OIDC identity backend. |
+| `oidc.issuer` | `""` | Expected `iss` claim. Required (non-empty) when enabled. |
+| `oidc.audience` | `""` | Expected `aud` claim (matched against a string or array). Required when enabled. |
+| `oidc.jwks` | `null` | Inline JWKS document (RFC 7517 JSON). Takes precedence over `oidc.jwks_file`. |
+| `oidc.jwks_file` | `null` | Path to a JWKS document, read once at startup. Used when `oidc.jwks` is unset. |
+| `oidc.principal_claim` | `"sub"` | Claim mapped to the authenticated principal id. |
+| `oidc.leeway_secs` | `60` | Clock-skew leeway, in seconds, applied to the `exp` check. |
+
+At startup, an enabled section requires a non-empty `oidc.issuer` and `oidc.audience`, at least one of
+`oidc.jwks`/`oidc.jwks_file`, and a JWKS that parses to at least one usable RS256/ES256 key.
+
+```toml
+[oidc]
+enabled = true
+issuer = "https://issuer.example.com"
+audience = "starmetal"
+principal_claim = "sub"
+leeway_secs = 60
+jwks_file = "/etc/starmetal/jwks.json"
+# or inline instead of a file:
+# jwks = '{ "keys": [ { "kty": "RSA", "kid": "key-1", "alg": "RS256", "n": "...", "e": "AQAB" } ] }'
+```
+
+The JWKS holds only public key material; do not place private keys or secrets here.
+
 ## Upstreams
 
 Defaults configure all currently implemented upstreams: `pypi`, `npm`, `cargo`, `hex`, `maven`,

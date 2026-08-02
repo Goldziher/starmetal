@@ -22,6 +22,7 @@ backend-gcs = ["starmetal-storage/backend-gcs"]
 pq = ["starmetal-core/pq"]
 signing-x509 = ["starmetal-core/signing-x509"]
 metadata = ["dep:starmetal-metadata"]
+oidc = ["dep:starmetal-oidc"]
 scanner-osv = ["starmetal-adapters/scanner-osv"]
 update = [
   "dep:starmetal-update-core",
@@ -41,6 +42,7 @@ starmetal-adapters = { workspace = true, default-features = false }
 starmetal-core.workspace = true
 starmetal-managers = { workspace = true, optional = true }
 starmetal-metadata = { workspace = true, optional = true }
+starmetal-oidc = { workspace = true, optional = true }
 starmetal-server = { workspace = true, default-features = false }
 starmetal-service.workspace = true
 starmetal-storage = { workspace = true, default-features = false }

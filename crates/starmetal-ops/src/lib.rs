@@ -6,6 +6,7 @@ use ahash::AHashMap;
 use bytes::Bytes;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use starmetal_core::authz::{Authenticator, CompositeAuthenticator};
 use starmetal_core::config::{Config, DEFAULT_MAX_UPSTREAM_BYTES, UpstreamConfig};
 use starmetal_core::content::{ContentBrowse, ContentMaintenance};
 use starmetal_core::error::{Result, StarmetalError};
@@ -115,6 +116,10 @@ pub struct StarmetalRuntime {
     /// SBOM retrieval handle (ADR-0024). `Some` when `supply_chain.sbom.enabled`; backs the admin
     /// SBOM list/fetch endpoints. Independent of the scanner.
     pub sbom: Option<Arc<dyn SbomIndex>>,
+    /// Extra identity backend composed ahead of the flat-token authenticator (ADR-0022). `Some` only
+    /// when `[oidc]` is enabled and the crate is built with the `oidc` feature; `app_state` fronts the
+    /// flat-token authenticator with it via `CompositeAuthenticator`, leaving authorization unchanged.
+    pub oidc_authenticator: Option<Arc<dyn Authenticator>>,
 }
 
 /// Attach a Postgres-backed content store (ADR-0020) to the service when `metadata.enabled`, so
@@ -184,6 +189,31 @@ fn attach_scanner(service: CachingPackageService, config: &Config) -> CachingPac
         .with_ingest_quarantine(config.supply_chain.ingest_quarantine)
 }
 
+/// Build the static-JWKS OIDC authenticator (ADR-0022) when `[oidc]` is enabled.
+///
+/// The validator crate carries the JWT/JWKS crypto, so it is compiled only under the `oidc` feature;
+/// an enabled `[oidc]` section without that feature is a startup misconfiguration, surfaced as a
+/// config error rather than silently ignored. Returns `Ok(None)` when OIDC is disabled.
+#[cfg(feature = "oidc")]
+fn build_oidc_authenticator(config: &Config) -> Result<Option<Arc<dyn Authenticator>>> {
+    if !config.oidc.enabled {
+        return Ok(None);
+    }
+    let authenticator = starmetal_oidc::OidcAuthenticator::into_authenticator(&config.oidc)
+        .map_err(|error| StarmetalError::Config(error.to_string()))?;
+    Ok(Some(authenticator))
+}
+
+#[cfg(not(feature = "oidc"))]
+fn build_oidc_authenticator(config: &Config) -> Result<Option<Arc<dyn Authenticator>>> {
+    if config.oidc.enabled {
+        return Err(StarmetalError::Config(
+            "oidc.enabled requires building with the `oidc` feature".to_string(),
+        ));
+    }
+    Ok(None)
+}
+
 impl StarmetalRuntime {
     pub async fn new(options: ConfigLoadOptions) -> Result<Self> {
         let config = load_config(options)?;
@@ -192,6 +222,7 @@ impl StarmetalRuntime {
     }
 
     pub async fn from_config(config: Config) -> Result<Self> {
+        let oidc_authenticator = build_oidc_authenticator(&config)?;
         let storage = Arc::new(OpenDalStorage::from_config(&config.storage)?);
         #[allow(unused_mut)]
         let mut clients: AHashMap<Ecosystem, Arc<dyn UpstreamClient>> = AHashMap::new();
@@ -365,6 +396,7 @@ impl StarmetalRuntime {
             content_maintenance,
             content_browse,
             sbom,
+            oidc_authenticator,
         })
     }
 
@@ -463,7 +495,7 @@ impl StarmetalRuntime {
     }
 
     pub fn app_state(&self) -> AppState {
-        AppState::new(
+        let state = AppState::new(
             self.config.clone(),
             self.package_service.clone(),
             self.publishing_service.clone(),
@@ -476,7 +508,19 @@ impl StarmetalRuntime {
         .with_ingest_quarantine(self.ingest_quarantine.clone())
         .with_content_maintenance(self.content_maintenance.clone())
         .with_content_browse(self.content_browse.clone())
-        .with_sbom(self.sbom.clone())
+        .with_sbom(self.sbom.clone());
+
+        // Compose the OIDC backend ahead of the flat-token authenticator (ADR-0022) when configured.
+        // Ordering is precedence: a JWT authenticates via OIDC, an unchanged flat token falls through
+        // to the local authorizer. Authorization (grant evaluation) stays on the concrete authorizer.
+        match &self.oidc_authenticator {
+            Some(oidc) => {
+                let flat_tokens: Arc<dyn Authenticator> = state.authorizer.clone();
+                let composite = Arc::new(CompositeAuthenticator::new(vec![oidc.clone(), flat_tokens]));
+                state.with_authenticator(composite)
+            }
+            None => state,
+        }
     }
 
     pub fn status(&self) -> RuntimeStatus {

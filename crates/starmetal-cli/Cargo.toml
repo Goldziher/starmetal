@@ -34,6 +34,7 @@ full = [
   "backend-fs",
   "update",
   "metadata",
+  "oidc",
   "scanner-osv",
 ]
 update = [
@@ -62,6 +63,7 @@ backend-gcs = ["starmetal-ops/backend-gcs", "starmetal-storage/backend-gcs"]
 pq = ["starmetal-core/pq", "starmetal-ops/pq"]
 signing-x509 = ["starmetal-core/signing-x509", "starmetal-ops/signing-x509"]
 metadata = ["starmetal-ops/metadata"]
+oidc = ["starmetal-ops/oidc"]
 scanner-osv = ["starmetal-ops/scanner-osv"]
 
 [dependencies]

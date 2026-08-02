@@ -127,6 +127,47 @@
       },
       "type": "object"
     },
+    "OidcConfig": {
+      "description": "Static-JWKS OIDC bearer-token identity backend (ADR-0022).\n\nA second [`Authenticator`](crate::authz::Authenticator) backend, composed ahead of the flat-token\n`LocalAuthorizer`: when `enabled`, a compact JWS bearer is verified against a **static** JWKS\nsupplied inline ([`jwks`](OidcConfig::jwks)) or from a file\n([`jwks_file`](OidcConfig::jwks_file)). This is deliberately offline — there is no JWKS-URL fetch,\nOIDC discovery, or token refresh; a live IdP integration is a later stage. Off by default, so a\ndeployment that omits this section authenticates exactly as before.\n\nThe validator (in `starmetal-oidc`) verifies the signature (RS256 or ES256 only — `alg: none` and\nany other algorithm are rejected), the `exp` claim (with [`leeway_secs`](OidcConfig::leeway_secs)),\nthe `iss` claim (must equal [`issuer`](OidcConfig::issuer)), and the `aud` claim (must contain\n[`audience`](OidcConfig::audience)), then maps [`principal_claim`](OidcConfig::principal_claim) to a\n`Principal::User`.",
+      "properties": {
+        "audience": {
+          "default": "",
+          "description": "The expected audience. A token whose `aud` claim does not contain this value is rejected.\nRequired (non-empty) when `enabled`.",
+          "type": "string"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Whether the OIDC identity backend is active. When `false` (the default) no JWT validation is\nwired and authentication is unchanged.",
+          "type": "boolean"
+        },
+        "issuer": {
+          "default": "",
+          "description": "The expected token issuer. A token whose `iss` claim does not equal this exactly is rejected.\nRequired (non-empty) when `enabled`.",
+          "type": "string"
+        },
+        "jwks": {
+          "description": "Inline JWKS document (RFC 7517 JSON), e.g. `{ \"keys\": [ ... ] }`. Takes precedence over\n[`jwks_file`](OidcConfig::jwks_file) when both are set. The keys hold only public material.",
+          "type": ["string", "null"]
+        },
+        "jwks_file": {
+          "description": "Path to a file containing the JWKS document, read once at startup. Used when\n[`jwks`](OidcConfig::jwks) is unset.",
+          "type": ["string", "null"]
+        },
+        "leeway_secs": {
+          "default": 60,
+          "description": "Clock-skew leeway, in seconds, applied when checking `exp`. Defaults to 60.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "principal_claim": {
+          "default": "sub",
+          "description": "The claim mapped to the authenticated principal's id. Defaults to `sub`.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "PolicyConfig": {
       "properties": {
         "allowed_licenses": {
@@ -825,6 +866,16 @@
         "retention_interval_secs": 0,
         "retention_per_ecosystem": {},
         "retention_per_repository": {}
+      }
+    },
+    "oidc": {
+      "$ref": "#/$defs/OidcConfig",
+      "default": {
+        "audience": "",
+        "enabled": false,
+        "issuer": "",
+        "leeway_secs": 60,
+        "principal_claim": "sub"
       }
     },
     "policies": {

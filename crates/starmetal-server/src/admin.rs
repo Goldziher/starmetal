@@ -379,7 +379,7 @@ async fn authorize_admin(state: &AppState, headers: &HeaderMap) -> Result<(), (S
     // targets the whole default namespace. Admin-migrated tokens carry a `RepositoryAdmin` grant;
     // flat and publish tokens do not, so they are denied here exactly as before. ~keep
     if let Some(token) = token
-        && let Some(principal) = state.authorizer.authenticate(token)
+        && let Some(principal) = state.authenticator.authenticate_bearer(token)
     {
         let resource = Resource {
             namespace: default_namespace(),

@@ -102,7 +102,10 @@ async fn authorize_browse(state: &AppState, headers: &HeaderMap) -> Result<Query
 
     let unauthorized = || (StatusCode::UNAUTHORIZED, "missing or invalid bearer token".to_string());
     let token = token.ok_or_else(unauthorized)?;
-    let principal = state.authorizer.authenticate(token).ok_or_else(unauthorized)?;
+    let principal = state
+        .authenticator
+        .authenticate_bearer(token)
+        .ok_or_else(unauthorized)?;
 
     let resource = Resource {
         namespace: default_namespace(),

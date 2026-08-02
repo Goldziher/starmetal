@@ -28,6 +28,12 @@ pub struct AppState {
     /// implementation today; consulted at the admin API now and the publish/read paths as later
     /// stages consume it.
     pub authorizer: Arc<LocalAuthorizer>,
+    /// Authentication seam (ADR-0022): resolves a bearer credential to a `Principal`. Defaults to the
+    /// `authorizer` above (flat-token authentication, unchanged), but a deployment can compose extra
+    /// identity backends ahead of it — e.g. a static-JWKS OIDC validator — via
+    /// `CompositeAuthenticator`, wired in `starmetal-ops`. Authentication resolves through this;
+    /// authorization (grant evaluation) stays on the concrete `authorizer`.
+    pub authenticator: Arc<dyn Authenticator>,
     pub upstreams: UpstreamClients,
     /// Quarantine review workflow (ADR-0024), `Some` only when a scanner is attached. Backs the admin
     /// promote/reject/list endpoints; `None` leaves those endpoints reporting quarantine disabled.
@@ -103,6 +109,10 @@ impl AppState {
     ) -> Self {
         // Migrate the flat token config into the grant model once, at assembly time.
         let authorizer = Arc::new(LocalAuthorizer::from_config(&config));
+        // By default the authenticator IS the flat-token authorizer, so authentication behaves
+        // exactly as before. `with_authenticator` swaps in a composite when extra identity backends
+        // (e.g. OIDC) are configured.
+        let authenticator: Arc<dyn Authenticator> = authorizer.clone();
         Self {
             config: Arc::new(config),
             recipe_registry: Arc::new(RecipeRegistry::new()),
@@ -110,6 +120,7 @@ impl AppState {
             publishing_service,
             statistics_service,
             authorizer,
+            authenticator,
             upstreams,
             quarantine: None,
             ingest_quarantine: None,
@@ -183,6 +194,16 @@ impl AppState {
         self.sbom = sbom;
         self
     }
+
+    /// Override the authentication seam with a composed [`Authenticator`] (ADR-0022).
+    ///
+    /// Defaults to the flat-token `authorizer`; the runtime calls this to front it with extra
+    /// identity backends (e.g. a static-JWKS OIDC validator) via `CompositeAuthenticator`, leaving
+    /// authorization on the concrete `authorizer` untouched.
+    pub fn with_authenticator(mut self, authenticator: Arc<dyn Authenticator>) -> Self {
+        self.authenticator = authenticator;
+        self
+    }
 }
 
 /// Resolve a publish authorization check (`Action::Add`) through the ADR-0022
@@ -196,6 +217,7 @@ impl AppState {
 /// lives in a `#[cfg(feature = "...")]`-gated `Has*State` impl below.
 #[allow(dead_code)]
 fn resolve_publish_authorization(
+    authenticator: &dyn Authenticator,
     authorizer: &LocalAuthorizer,
     credential: Option<&str>,
     ecosystem: Ecosystem,
@@ -204,7 +226,10 @@ fn resolve_publish_authorization(
     let Some(token) = credential else {
         return PublishAuthorization::Unauthenticated;
     };
-    let Some(principal) = authorizer.authenticate_bearer(token) else {
+    // Authenticate through the (possibly composed) authenticator seam; authorize on the concrete
+    // grant-based authorizer. An OIDC-authenticated principal simply carries no migrated grant here,
+    // so it is Forbidden until later stages attach grants — flat/publish tokens are unchanged.
+    let Some(principal) = authenticator.authenticate_bearer(token) else {
         return PublishAuthorization::Forbidden;
     };
     let resource = Resource {
@@ -251,7 +276,13 @@ impl starmetal_adapters::pypi::HasPypiState for AppState {
         ecosystem: Ecosystem,
         name: &PackageName,
     ) -> PublishAuthorization {
-        resolve_publish_authorization(&self.authorizer, credential, ecosystem, name)
+        resolve_publish_authorization(
+            self.authenticator.as_ref(),
+            &self.authorizer,
+            credential,
+            ecosystem,
+            name,
+        )
     }
 }
 
@@ -279,7 +310,13 @@ impl starmetal_adapters::npm::HasNpmState for AppState {
         ecosystem: Ecosystem,
         name: &PackageName,
     ) -> PublishAuthorization {
-        resolve_publish_authorization(&self.authorizer, credential, ecosystem, name)
+        resolve_publish_authorization(
+            self.authenticator.as_ref(),
+            &self.authorizer,
+            credential,
+            ecosystem,
+            name,
+        )
     }
 }
 
@@ -307,7 +344,13 @@ impl starmetal_adapters::cargo::HasCargoState for AppState {
         ecosystem: Ecosystem,
         name: &PackageName,
     ) -> PublishAuthorization {
-        resolve_publish_authorization(&self.authorizer, credential, ecosystem, name)
+        resolve_publish_authorization(
+            self.authenticator.as_ref(),
+            &self.authorizer,
+            credential,
+            ecosystem,
+            name,
+        )
     }
 }
 
@@ -335,7 +378,13 @@ impl starmetal_adapters::hex::HasHexState for AppState {
         ecosystem: Ecosystem,
         name: &PackageName,
     ) -> PublishAuthorization {
-        resolve_publish_authorization(&self.authorizer, credential, ecosystem, name)
+        resolve_publish_authorization(
+            self.authenticator.as_ref(),
+            &self.authorizer,
+            credential,
+            ecosystem,
+            name,
+        )
     }
 }
 
@@ -363,7 +412,13 @@ impl starmetal_adapters::maven::HasMavenState for AppState {
         ecosystem: Ecosystem,
         name: &PackageName,
     ) -> PublishAuthorization {
-        resolve_publish_authorization(&self.authorizer, credential, ecosystem, name)
+        resolve_publish_authorization(
+            self.authenticator.as_ref(),
+            &self.authorizer,
+            credential,
+            ecosystem,
+            name,
+        )
     }
 }
 
@@ -391,7 +446,13 @@ impl starmetal_adapters::rubygems::HasRubyGemsState for AppState {
         ecosystem: Ecosystem,
         name: &PackageName,
     ) -> PublishAuthorization {
-        resolve_publish_authorization(&self.authorizer, credential, ecosystem, name)
+        resolve_publish_authorization(
+            self.authenticator.as_ref(),
+            &self.authorizer,
+            credential,
+            ecosystem,
+            name,
+        )
     }
 }
 
@@ -419,7 +480,13 @@ impl starmetal_adapters::nuget::HasNuGetState for AppState {
         ecosystem: Ecosystem,
         name: &PackageName,
     ) -> PublishAuthorization {
-        resolve_publish_authorization(&self.authorizer, credential, ecosystem, name)
+        resolve_publish_authorization(
+            self.authenticator.as_ref(),
+            &self.authorizer,
+            credential,
+            ecosystem,
+            name,
+        )
     }
 }
 
@@ -447,7 +514,13 @@ impl starmetal_adapters::pubdev::HasPubState for AppState {
         ecosystem: Ecosystem,
         name: &PackageName,
     ) -> PublishAuthorization {
-        resolve_publish_authorization(&self.authorizer, credential, ecosystem, name)
+        resolve_publish_authorization(
+            self.authenticator.as_ref(),
+            &self.authorizer,
+            credential,
+            ecosystem,
+            name,
+        )
     }
 }
 
@@ -481,6 +554,7 @@ mod tests {
         let authorizer = authorizer_with_scoped_publish_token();
         let decision = resolve_publish_authorization(
             &authorizer,
+            &authorizer,
             Some("scoped-secret"),
             Ecosystem::Npm,
             &PackageName::new("left-pad"),
@@ -492,6 +566,7 @@ mod tests {
     fn resolve_publish_authorization_denies_wrong_package() {
         let authorizer = authorizer_with_scoped_publish_token();
         let decision = resolve_publish_authorization(
+            &authorizer,
             &authorizer,
             Some("scoped-secret"),
             Ecosystem::Npm,
@@ -505,6 +580,7 @@ mod tests {
         let authorizer = authorizer_with_scoped_publish_token();
         let decision = resolve_publish_authorization(
             &authorizer,
+            &authorizer,
             Some("scoped-secret"),
             Ecosystem::PyPI,
             &PackageName::new("left-pad"),
@@ -517,6 +593,7 @@ mod tests {
         let authorizer = authorizer_with_scoped_publish_token();
         let decision = resolve_publish_authorization(
             &authorizer,
+            &authorizer,
             Some("not-configured"),
             Ecosystem::Npm,
             &PackageName::new("left-pad"),
@@ -527,7 +604,13 @@ mod tests {
     #[test]
     fn resolve_publish_authorization_is_unauthenticated_without_credential() {
         let authorizer = authorizer_with_scoped_publish_token();
-        let decision = resolve_publish_authorization(&authorizer, None, Ecosystem::Npm, &PackageName::new("left-pad"));
+        let decision = resolve_publish_authorization(
+            &authorizer,
+            &authorizer,
+            None,
+            Ecosystem::Npm,
+            &PackageName::new("left-pad"),
+        );
         assert_eq!(decision, PublishAuthorization::Unauthenticated);
     }
 }

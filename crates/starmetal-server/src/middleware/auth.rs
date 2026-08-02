@@ -34,7 +34,7 @@ pub async fn require_bearer_token(State(state): State<AppState>, request: Reques
         .and_then(|value| value.strip_prefix("Bearer "));
 
     if let Some(token) = token
-        && let Some(principal) = state.authorizer.authenticate(token)
+        && let Some(principal) = state.authenticator.authenticate_bearer(token)
     {
         let resource = Resource {
             namespace: default_namespace(),

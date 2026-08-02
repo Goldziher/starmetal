@@ -1,0 +1,22 @@
+[package]
+name = "starmetal-oidc"
+description = "Offline static-JWKS OIDC bearer validator behind the core Authenticator port (ADR-0022)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+base64.workspace = true
+p256 = { version = "0.13", features = ["ecdsa"] }
+rsa = "0.9"
+serde.workspace = true
+serde_json.workspace = true
+sha2 = { version = "0.10", features = ["oid"] }
+signature = "2"
+starmetal-core.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+hmac = "0.12"
+rand = "0.8"
