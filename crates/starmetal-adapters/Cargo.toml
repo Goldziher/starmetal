@@ -35,6 +35,10 @@ scanner-osv = []
 # port trait is pulled in here — the gitoxide-backed implementation is selected at assembly time
 # in `starmetal-ops`, so this crate never depends on a git library directly.
 go = ["dep:starmetal-git", "dep:chrono", "dep:semver"]
+# Zig source-tarball proxy (ADR-0023), backed by the same `starmetal-git` GitMirror port as `go`.
+# No version validation or timestamp document is needed (`zig fetch` hashes the tarball itself), so
+# unlike `go` this feature pulls in neither `chrono` nor `semver`.
+zig = ["dep:starmetal-git"]
 
 [dependencies]
 ahash.workspace = true
