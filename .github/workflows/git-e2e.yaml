@@ -1,0 +1,61 @@
+name: Git E2E
+
+# Deterministic end-to-end tests for the git-as-source ecosystems (Go GOPROXY, Zig tarball, Swift
+# Package Registry). Each drives a real go/zig/swift toolchain through Starmetal against a hermetic
+# `file://` git fixture with fixed commit dates, so the runs are reproducible and offline (no upstream
+# network). Path-filtered like ci-metadata.yaml because installing the three toolchains — Swift in
+# particular — is heavy; it gates the code paths those tests actually exercise.
+
+on:
+  pull_request:
+    paths:
+      - "crates/starmetal-git/**"
+      - "crates/starmetal-adapters/**"
+      - "crates/starmetal-server/**"
+      - "tests/integration/**"
+      - "Taskfile.yml"
+      - ".github/workflows/git-e2e.yaml"
+  push:
+    branches:
+      - main
+    paths:
+      - "crates/starmetal-git/**"
+      - "crates/starmetal-adapters/**"
+      - "crates/starmetal-server/**"
+      - "tests/integration/**"
+      - "Taskfile.yml"
+      - ".github/workflows/git-e2e.yaml"
+
+concurrency:
+  group: git-e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  git-e2e:
+    name: git-as-source E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: "0.16.0"
+      - uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "6.3.1"
+      - uses: go-task/setup-task@v2
+        with:
+          version: 3.51.1
+      - run: task test:e2e:git

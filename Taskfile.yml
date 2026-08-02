@@ -287,6 +287,13 @@ tasks:
     cmds:
       - cargo test -p starmetal-integration-tests --test swift -- --ignored --test-threads=1
 
+  test:e2e:git:
+    desc: Run deterministic git-as-source (Go/Zig/Swift) E2E tests through hermetic file:// fixtures (requires go/zig/swift toolchains)
+    cmds:
+      - task: test:e2e:go
+      - task: test:e2e:zig
+      - task: test:e2e:swift
+
   fmt:check:
     desc: Check Rust formatting
     cmds:
