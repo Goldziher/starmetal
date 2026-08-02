@@ -267,14 +267,21 @@ different — a Swift registry identifier (`{scope}.{name}`) carries no host at 
 
 ```toml
 [go.module_overrides]
-"example.com/mod" = "https://git.internal.example.com/mod.git"
+"example.com/mod" = "ssh://git@git.internal.example.com/mod.git"
 
 [swift.package_overrides]
-"example.pkg" = "https://git.internal.example.com/example-pkg.git"
+"example.pkg" = "ssh://git@git.internal.example.com/example-pkg.git"
 ```
 
 `file://` URLs are permitted in all three override maps for private mirrors or offline testing,
 since these are trusted operator configuration, not client-supplied paths.
+
+**Runtime requirement — a `git` binary.** These proxies fetch through gix, which shells out to
+`git upload-pack` for the local/`git://`/`ssh://` transports, so a `git` executable must be on the
+server's `PATH`. The published Docker image bundles one for exactly this reason; a from-source or
+binary deployment that enables Go/Zig/Swift must have `git` installed, or every fetch returns
+`502 Bad Gateway`. The bundled git covers `file://`, `git://`, and `ssh://` remotes only — gix has
+no HTTP git transport, so `https://` git remotes are not supported regardless of the git binary.
 
 Run the matching live E2E task before treating any of these as ready for use:
 
