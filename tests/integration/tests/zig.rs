@@ -5,73 +5,11 @@
 //! fixture's `file://` URL via `zig.repo_overrides` -- no network access, mirroring `go.rs`.
 
 use std::io::Read;
-use std::path::Path;
-use std::process::Command as StdCommand;
 
-use starmetal_integration_tests::TestServer;
+use starmetal_integration_tests::{GitFixture, TestServer, require_zig, zig_package_fixture};
 use tokio::process::Command;
 
-fn git(dir: &Path, args: &[&str]) -> String {
-    let output = StdCommand::new("git")
-        .args(args)
-        .current_dir(dir)
-        .env("GIT_AUTHOR_NAME", "Fixture")
-        .env("GIT_AUTHOR_EMAIL", "fixture@example.test")
-        .env("GIT_COMMITTER_NAME", "Fixture")
-        .env("GIT_COMMITTER_EMAIL", "fixture@example.test")
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
-        .env("GIT_CONFIG_SYSTEM", "/dev/null")
-        .output()
-        .expect("git CLI is available");
-    assert!(
-        output.status.success(),
-        "git {args:?} failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8(output.stdout).expect("git output is utf-8")
-}
-
-fn write_file(dir: &Path, relative: &str, contents: &str) {
-    let path = dir.join(relative);
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).expect("create parent dirs");
-    }
-    std::fs::write(path, contents).expect("write fixture file");
-}
-
-/// An `example.com/pkg`-shaped Zig package fixture with one tagged release, `v1.0.0`.
-struct Fixture {
-    _root: tempfile::TempDir,
-    url: String,
-}
-
-fn build_fixture() -> Fixture {
-    let root = tempfile::tempdir().expect("tempdir");
-    let work = root.path().join("upstream");
-    std::fs::create_dir_all(&work).expect("create work dir");
-
-    git(&work, &["init", "-b", "main"]);
-    write_file(
-        &work,
-        "build.zig.zon",
-        ".{\n    .name = .fixture,\n    .version = \"1.0.0\",\n    .fingerprint = 0x5e540eeeedcbb0d,\n    \
-         .paths = .{\"\"},\n}\n",
-    );
-    write_file(
-        &work,
-        "build.zig",
-        "const std = @import(\"std\");\npub fn build(b: *std.Build) void {\n    _ = b;\n}\n",
-    );
-    write_file(&work, "src/main.zig", "pub fn main() void {}\n");
-    git(&work, &["add", "-A"]);
-    git(&work, &["commit", "-m", "release 1.0.0"]);
-    git(&work, &["tag", "v1.0.0"]);
-
-    let url = format!("file://{}", work.display());
-    Fixture { _root: root, url }
-}
-
-async fn start_server_with_fixture(fixture: &Fixture) -> TestServer {
+async fn start_server_with_fixture(fixture: &GitFixture) -> TestServer {
     let git_url = fixture.url.clone();
     TestServer::start_with_config(move |config| {
         config.zig.enabled = true;
@@ -101,7 +39,7 @@ fn tar_gz_entry_names(bytes: &[u8]) -> Vec<String> {
 
 #[tokio::test]
 async fn zig_proxy_serves_the_tarball_for_a_tagged_ref() {
-    let fixture = build_fixture();
+    let fixture = zig_package_fixture();
     let server = start_server_with_fixture(&fixture).await;
     let client = reqwest::Client::new();
 
@@ -146,7 +84,7 @@ async fn zig_proxy_serves_the_tarball_for_a_tagged_ref() {
 
 #[tokio::test]
 async fn zig_proxy_reports_404_for_an_unknown_ref() {
-    let fixture = build_fixture();
+    let fixture = zig_package_fixture();
     let server = start_server_with_fixture(&fixture).await;
     let client = reqwest::Client::new();
 
@@ -162,7 +100,7 @@ async fn zig_proxy_reports_404_for_an_unknown_ref() {
 
 #[tokio::test]
 async fn zig_proxy_reports_502_when_the_archive_exceeds_max_archive_bytes() {
-    let fixture = build_fixture();
+    let fixture = zig_package_fixture();
     let git_url = fixture.url.clone();
     let server = TestServer::start_with_config(move |config| {
         config.zig.enabled = true;
@@ -183,20 +121,11 @@ async fn zig_proxy_reports_502_when_the_archive_exceeds_max_archive_bytes() {
     server.shutdown();
 }
 
-async fn require_zig() -> String {
-    if let Ok(output) = Command::new("zig").arg("version").output().await
-        && output.status.success()
-    {
-        return "zig".to_string();
-    }
-    panic!("zig not found — install the Zig toolchain to run Zig E2E tests");
-}
-
 #[tokio::test]
 #[ignore]
 async fn zig_fetch_downloads_and_hashes_a_tarball_through_starmetal() {
     let zig = require_zig().await;
-    let fixture = build_fixture();
+    let fixture = zig_package_fixture();
     let server = start_server_with_fixture(&fixture).await;
 
     // `zig fetch` (without `--save`) requires being run inside a project that already has a

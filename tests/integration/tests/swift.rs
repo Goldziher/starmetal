@@ -6,73 +6,12 @@
 //! access, mirroring `zig.rs`/`go.rs`.
 
 use std::path::Path;
-use std::process::Command as StdCommand;
 
 use sha2::{Digest, Sha256};
-use starmetal_integration_tests::TestServer;
+use starmetal_integration_tests::{GitFixture, TestServer, require_swift, swift_package_fixture};
 use tokio::process::Command;
 
-fn git(dir: &Path, args: &[&str]) -> String {
-    let output = StdCommand::new("git")
-        .args(args)
-        .current_dir(dir)
-        .env("GIT_AUTHOR_NAME", "Fixture")
-        .env("GIT_AUTHOR_EMAIL", "fixture@example.test")
-        .env("GIT_COMMITTER_NAME", "Fixture")
-        .env("GIT_COMMITTER_EMAIL", "fixture@example.test")
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
-        .env("GIT_CONFIG_SYSTEM", "/dev/null")
-        .output()
-        .expect("git CLI is available");
-    assert!(
-        output.status.success(),
-        "git {args:?} failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8(output.stdout).expect("git output is utf-8")
-}
-
-fn write_file(dir: &Path, relative: &str, contents: &str) {
-    let path = dir.join(relative);
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).expect("create parent dirs");
-    }
-    std::fs::write(path, contents).expect("write fixture file");
-}
-
-/// A `test.fixture`-shaped Swift package fixture with one tagged release, `1.0.0`.
-struct Fixture {
-    _root: tempfile::TempDir,
-    url: String,
-}
-
-fn build_fixture() -> Fixture {
-    let root = tempfile::tempdir().expect("tempdir");
-    let work = root.path().join("upstream");
-    std::fs::create_dir_all(&work).expect("create work dir");
-
-    git(&work, &["init", "-b", "main"]);
-    write_file(
-        &work,
-        "Package.swift",
-        "// swift-tools-version:5.9\nimport PackageDescription\n\nlet package = Package(\n    name: \"fixture\",\n    \
-         products: [\n        .library(name: \"fixture\", targets: [\"fixture\"])\n    ],\n    targets: [\n        \
-         .target(name: \"fixture\", path: \"Sources/fixture\")\n    ]\n)\n",
-    );
-    write_file(
-        &work,
-        "Sources/fixture/fixture.swift",
-        "public struct Fixture {\n    public init() {}\n    public func hello() -> String { \"hello\" }\n}\n",
-    );
-    git(&work, &["add", "-A"]);
-    git(&work, &["commit", "-m", "release 1.0.0"]);
-    git(&work, &["tag", "1.0.0"]);
-
-    let url = format!("file://{}", work.display());
-    Fixture { _root: root, url }
-}
-
-async fn start_server_with_fixture(fixture: &Fixture) -> TestServer {
+async fn start_server_with_fixture(fixture: &GitFixture) -> TestServer {
     let git_url = fixture.url.clone();
     TestServer::start_with_config(move |config| {
         config.swift.enabled = true;
@@ -90,7 +29,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
 
 #[tokio::test]
 async fn swift_proxy_lists_the_tagged_release() {
-    let fixture = build_fixture();
+    let fixture = swift_package_fixture();
     let server = start_server_with_fixture(&fixture).await;
     let client = reqwest::Client::new();
 
@@ -131,7 +70,7 @@ async fn swift_proxy_lists_the_tagged_release() {
 
 #[tokio::test]
 async fn swift_proxy_serves_release_metadata_with_a_checksum_matching_the_zip() {
-    let fixture = build_fixture();
+    let fixture = swift_package_fixture();
     let server = start_server_with_fixture(&fixture).await;
     let client = reqwest::Client::new();
 
@@ -171,7 +110,7 @@ async fn swift_proxy_serves_release_metadata_with_a_checksum_matching_the_zip() 
 
 #[tokio::test]
 async fn swift_proxy_serves_the_manifest_with_text_x_swift_content_type() {
-    let fixture = build_fixture();
+    let fixture = swift_package_fixture();
     let server = start_server_with_fixture(&fixture).await;
     let client = reqwest::Client::new();
 
@@ -196,7 +135,7 @@ async fn swift_proxy_serves_the_manifest_with_text_x_swift_content_type() {
 
 #[tokio::test]
 async fn swift_proxy_serves_the_source_archive_with_correct_headers() {
-    let fixture = build_fixture();
+    let fixture = swift_package_fixture();
     let server = start_server_with_fixture(&fixture).await;
     let client = reqwest::Client::new();
 
@@ -245,7 +184,7 @@ async fn swift_proxy_serves_the_source_archive_with_correct_headers() {
 
 #[tokio::test]
 async fn swift_proxy_reports_404_for_an_unknown_version() {
-    let fixture = build_fixture();
+    let fixture = swift_package_fixture();
     let server = start_server_with_fixture(&fixture).await;
     let client = reqwest::Client::new();
 
@@ -263,7 +202,7 @@ async fn swift_proxy_reports_404_for_an_unknown_version() {
 async fn swift_proxy_reports_404_for_a_package_absent_from_overrides() {
     // A package this registry does not host (no `package_overrides` entry) is 404, not a 400 client
     // error — SE-0292 clients distinguish the two (404 falls through to other registries / SCM).
-    let fixture = build_fixture();
+    let fixture = swift_package_fixture();
     let server = start_server_with_fixture(&fixture).await;
     let client = reqwest::Client::new();
 
@@ -279,7 +218,7 @@ async fn swift_proxy_reports_404_for_a_package_absent_from_overrides() {
 
 #[tokio::test]
 async fn swift_proxy_reports_502_when_the_archive_exceeds_max_archive_bytes() {
-    let fixture = build_fixture();
+    let fixture = swift_package_fixture();
     let git_url = fixture.url.clone();
     let server = TestServer::start_with_config(move |config| {
         config.swift.enabled = true;
@@ -303,13 +242,14 @@ async fn swift_proxy_reports_502_when_the_archive_exceeds_max_archive_bytes() {
     server.shutdown();
 }
 
-async fn require_swift() -> String {
-    if let Ok(output) = Command::new("swift").arg("--version").output().await
-        && output.status.success()
-    {
-        return "swift".to_string();
+/// Writes `contents` to `relative` under `dir`, for building a consumer project's working tree
+/// (unlike the fixture's working tree, this one isn't committed to git).
+fn write_file(dir: &Path, relative: &str, contents: &str) {
+    let path = dir.join(relative);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).expect("create parent dirs");
     }
-    panic!("swift not found — install the Swift toolchain to run Swift E2E tests");
+    std::fs::write(path, contents).expect("write consumer project file");
 }
 
 /// Configure `project` to speak to `registry_url` as its default (unscoped) registry, isolated
@@ -347,7 +287,7 @@ async fn configure_registry(swift: &str, project: &Path, cache_path: &Path, secu
 #[ignore]
 async fn swift_package_resolve_downloads_and_builds_against_starmetal() {
     let swift = require_swift().await;
-    let fixture = build_fixture();
+    let fixture = swift_package_fixture();
     let server = start_server_with_fixture(&fixture).await;
 
     let project = tempfile::tempdir().expect("project tempdir");

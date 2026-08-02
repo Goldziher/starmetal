@@ -1,6 +1,13 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+mod git_fixture;
+
+pub use git_fixture::{
+    GitFixture, GitFixtureBuilder, go_module_fixture, require_go, require_swift, require_tool, require_zig,
+    swift_package_fixture, zig_package_fixture,
+};
+
 use ahash::AHashMap;
 use starmetal_adapters::cargo::upstream::CargoUpstreamClient;
 use starmetal_adapters::hex::upstream::HexUpstreamClient;
