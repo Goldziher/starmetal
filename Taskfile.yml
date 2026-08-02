@@ -282,6 +282,11 @@ tasks:
     cmds:
       - cargo test -p starmetal-integration-tests --test zig -- --ignored --test-threads=1
 
+  test:e2e:swift:
+    desc: Run live Swift Package Registry (swift package resolve) E2E tests
+    cmds:
+      - cargo test -p starmetal-integration-tests --test swift -- --ignored --test-threads=1
+
   fmt:check:
     desc: Check Rust formatting
     cmds:
