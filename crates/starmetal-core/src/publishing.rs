@@ -134,6 +134,12 @@ pub enum ProtocolMetadata {
     Pub {
         pubspec: serde_json::Value,
     },
+    /// Go modules (ADR-0023) are resolved read-only from an upstream git repository — there is no
+    /// hosted publish workflow yet, so this variant exists for match exhaustiveness and carries the
+    /// synthesized or repository `go.mod` text.
+    Go {
+        go_mod: String,
+    },
 }
 
 impl ProtocolMetadata {
@@ -161,6 +167,7 @@ impl ProtocolMetadata {
             Ecosystem::Pub => Self::Pub {
                 pubspec: serde_json::Value::Null,
             },
+            Ecosystem::Go => Self::Go { go_mod: String::new() },
         }
     }
 }

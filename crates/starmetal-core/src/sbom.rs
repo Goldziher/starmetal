@@ -29,6 +29,7 @@ pub fn purl_type(ecosystem: Ecosystem) -> &'static str {
         Ecosystem::RubyGems => "gem",
         Ecosystem::NuGet => "nuget",
         Ecosystem::Pub => "pub",
+        Ecosystem::Go => "golang",
     }
 }
 

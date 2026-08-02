@@ -288,6 +288,30 @@ allow_private_network = true
 max_response_bytes = 536870912
 ```
 
+## Go Module Proxy
+
+Go modules are resolved from an upstream git repository's tags rather than a package-index
+protocol (ADR-0023), so `[go]` is a separate section instead of another `[upstream.*]` entry —
+there is no single base URL. A module's git remote is derived from the module path itself
+(`github.com/user/repo`, `gitlab.com/user/repo`, `bitbucket.org/user/repo`, `golang.org/x/name`) or
+from an explicit `go.module_overrides` entry.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `go.enabled` | `false` | Mounts the Go module proxy (`GOPROXY`) repository. Off by default since, unlike the other ecosystems, there is no single upstream host to scope it to. |
+| `go.mirror_cache_dir` | `./starmetal-data/git-mirrors` | Local directory backing the git-mirror cache (bare repositories and fetch-freshness stamps). |
+| `go.mirror_refresh_interval_secs` | `300` | How long a mirrored repository is considered fresh before `go get` triggers a re-fetch. |
+| `go.max_zip_bytes` | `536870912` | Maximum bytes accepted for a synthesized module zip. |
+| `go.module_overrides` | `{}` | Module-path (or path-prefix) to git-URL overrides, checked before the built-in host mapping and matched by longest path-segment prefix. Trusted operator configuration — `file://` URLs are permitted here for private mirrors or offline testing. |
+
+```toml
+[go]
+enabled = true
+
+[go.module_overrides]
+"example.com/mod" = "file:///srv/git-fixtures/example-mod.git"
+```
+
 ## Repositories
 
 Repositories model the `(kind, ecosystem)` composition surface (ADR-0019). When

@@ -64,6 +64,7 @@ fn osv_ecosystem(ecosystem: Ecosystem) -> &'static str {
         Ecosystem::RubyGems => "RubyGems",
         Ecosystem::NuGet => "NuGet",
         Ecosystem::Pub => "Pub",
+        Ecosystem::Go => "Go",
     }
 }
 
@@ -321,6 +322,7 @@ mod tests {
             (Ecosystem::RubyGems, "RubyGems"),
             (Ecosystem::NuGet, "NuGet"),
             (Ecosystem::Pub, "Pub"),
+            (Ecosystem::Go, "Go"),
         ];
         for (ecosystem, expected) in cases {
             assert_eq!(osv_ecosystem(ecosystem), expected, "mismatch for {ecosystem:?}");

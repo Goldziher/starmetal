@@ -2,8 +2,17 @@
   "$defs": {
     "Ecosystem": {
       "description": "Supported package ecosystems.",
-      "enum": ["pypi", "npm", "cargo", "hex", "maven", "rubygems", "nuget", "pub"],
-      "type": "string"
+      "oneOf": [
+        {
+          "enum": ["pypi", "npm", "cargo", "hex", "maven", "rubygems", "nuget", "pub"],
+          "type": "string"
+        },
+        {
+          "const": "go",
+          "description": "Go modules (ADR-0023): resolved from an upstream git repository's tags rather than a\npackage-index protocol, served via the GOPROXY HTTP protocol.",
+          "type": "string"
+        }
+      ]
     },
     "LockMetadata": {
       "properties": {

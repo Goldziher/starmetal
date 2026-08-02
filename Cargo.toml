@@ -86,6 +86,7 @@ starmetal-authz = { path = "crates/starmetal-authz" }
 
 starmetal-core = { path = "crates/starmetal-core" }
 starmetal-forge = { path = "crates/starmetal-forge", default-features = false }
+starmetal-git = { path = "crates/starmetal-git", default-features = false }
 starmetal-managers = { path = "crates/starmetal-managers", default-features = false }
 starmetal-metadata = { path = "crates/starmetal-metadata" }
 starmetal-oidc = { path = "crates/starmetal-oidc" }

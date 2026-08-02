@@ -22,6 +22,9 @@ pub enum Ecosystem {
     RubyGems,
     NuGet,
     Pub,
+    /// Go modules (ADR-0023): resolved from an upstream git repository's tags rather than a
+    /// package-index protocol, served via the GOPROXY HTTP protocol.
+    Go,
 }
 
 impl std::fmt::Display for Ecosystem {
@@ -35,6 +38,7 @@ impl std::fmt::Display for Ecosystem {
             Self::RubyGems => write!(f, "rubygems"),
             Self::NuGet => write!(f, "nuget"),
             Self::Pub => write!(f, "pub"),
+            Self::Go => write!(f, "go"),
         }
     }
 }
@@ -52,6 +56,7 @@ impl FromStr for Ecosystem {
             "rubygems" | "gem" | "gems" => Ok(Self::RubyGems),
             "nuget" => Ok(Self::NuGet),
             "pub" | "pubdev" | "pub.dev" => Ok(Self::Pub),
+            "go" | "golang" => Ok(Self::Go),
             _ => Err(StarmetalError::Config(format!("unknown ecosystem: {s}"))),
         }
     }
@@ -105,7 +110,10 @@ impl PackageName {
                 }
             }
             Ecosystem::Npm => normalize_npm(&self.0),
-            Ecosystem::Maven => Cow::Borrowed(&self.0),
+            // Maven group:artifact ids and Go module paths (`github.com/User/Repo`) are both
+            // case-sensitive identifiers naming an actual upstream coordinate — lowercasing a Go
+            // module path would resolve to a different repository, so it is left untouched.
+            Ecosystem::Maven | Ecosystem::Go => Cow::Borrowed(&self.0),
             Ecosystem::Cargo | Ecosystem::Hex | Ecosystem::RubyGems | Ecosystem::NuGet | Ecosystem::Pub => {
                 if self
                     .0
@@ -137,12 +145,15 @@ impl PackageName {
                 _ => None,
             },
             Ecosystem::Maven => self.0.rsplit_once(':').map(|(group, _artifact)| group.to_string()),
+            // Go module paths (`github.com/user/repo`) have no npm/Maven-style namespace concept
+            // distinct from the module path itself.
             Ecosystem::PyPI
             | Ecosystem::Cargo
             | Ecosystem::Hex
             | Ecosystem::RubyGems
             | Ecosystem::NuGet
-            | Ecosystem::Pub => None,
+            | Ecosystem::Pub
+            | Ecosystem::Go => None,
         }
     }
 }
@@ -466,6 +477,7 @@ mod tests {
             Ecosystem::RubyGems,
             Ecosystem::NuGet,
             Ecosystem::Pub,
+            Ecosystem::Go,
         ] {
             assert_eq!(
                 PackageName::new("some/oddly-formed-name").publish_namespace(ecosystem),
@@ -483,7 +495,15 @@ mod tests {
         assert_eq!("crates".parse::<Ecosystem>().unwrap(), Ecosystem::Cargo);
         assert_eq!("hex".parse::<Ecosystem>().unwrap(), Ecosystem::Hex);
         assert_eq!("PYPI".parse::<Ecosystem>().unwrap(), Ecosystem::PyPI);
+        assert_eq!("go".parse::<Ecosystem>().unwrap(), Ecosystem::Go);
+        assert_eq!("golang".parse::<Ecosystem>().unwrap(), Ecosystem::Go);
         assert!("unknown".parse::<Ecosystem>().is_err());
+    }
+
+    #[test]
+    fn go_module_path_normalization_preserves_case() {
+        let pkg = PackageName::new("github.com/Foo/Bar");
+        assert_eq!(pkg.normalized(Ecosystem::Go).as_ref(), "github.com/Foo/Bar");
     }
 
     #[test]
@@ -589,6 +609,21 @@ mod tests {
         assert_eq!(
             artifact.validated_storage_key().unwrap().as_str(),
             "npm/@scope%2Fname/1.0.0/name-1.0.0.tgz"
+        );
+    }
+
+    #[test]
+    fn storage_key_encodes_slash_bearing_go_module_path() {
+        let artifact = ArtifactId {
+            ecosystem: Ecosystem::Go,
+            name: PackageName::new("github.com/foo/bar"),
+            version: "v1.0.0".to_string(),
+            filename: "v1.0.0.zip".to_string(),
+        };
+
+        assert_eq!(
+            artifact.validated_storage_key().unwrap().as_str(),
+            "go/github.com%2Ffoo%2Fbar/v1.0.0/v1.0.0.zip"
         );
     }
 }

@@ -42,6 +42,10 @@ pub struct Config {
     pub metadata: MetadataConfig,
     #[serde(default)]
     pub supply_chain: SupplyChainConfig,
+    /// Go module proxy configuration (ADR-0023). Separate from `[upstream]` because Go has no
+    /// single base URL — see [`GoConfig`].
+    #[serde(default)]
+    pub go: GoConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -186,6 +190,59 @@ fn default_true() -> bool {
 
 fn default_max_upstream_bytes() -> u64 {
     DEFAULT_MAX_UPSTREAM_BYTES
+}
+
+/// Configuration for the Go module proxy (ADR-0023): git-sourced, so it does not fit the single
+/// base-URL `[upstream]` shape the other eight ecosystems share — a Go module's git remote is
+/// derived per-request from the module path itself (see the `go` adapter's module→git-URL mapping),
+/// not from one configured host.
+///
+/// Off by default: unlike the other ecosystems, compiling the `go` feature in does not by itself
+/// make sense to expose without an operator decision, since the module→git-URL mapping reaches
+/// whatever host a client's module path names (github.com, gitlab.com, bitbucket.org, and
+/// golang.org/x by default).
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct GoConfig {
+    /// Whether the Go module proxy repository is mounted. `false` by default.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Local directory backing the git-mirror cache (bare repositories + fetch-freshness stamps).
+    #[serde(default = "default_go_mirror_cache_dir")]
+    pub mirror_cache_dir: PathBuf,
+    /// How long a mirrored repository is considered fresh before `go get` triggers a re-fetch.
+    #[serde(default = "default_go_mirror_refresh_interval_secs")]
+    pub mirror_refresh_interval_secs: u64,
+    /// Maximum bytes accepted for a synthesized module zip.
+    #[serde(default = "default_max_upstream_bytes")]
+    pub max_zip_bytes: u64,
+    /// Explicit module-path (or module-path-prefix) to git-URL overrides, checked before the
+    /// built-in github.com/gitlab.com/bitbucket.org/golang.org/x mapping and matched by longest
+    /// path-segment prefix. Operator-supplied and trusted, so (unlike an inbound module path) a
+    /// `file://` URL is permitted here — this is the intended seam for private git hosts, vanity
+    /// import domains, and offline testing.
+    #[serde(default)]
+    pub module_overrides: HashMap<String, String>,
+}
+
+impl Default for GoConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            mirror_cache_dir: default_go_mirror_cache_dir(),
+            mirror_refresh_interval_secs: default_go_mirror_refresh_interval_secs(),
+            max_zip_bytes: default_max_upstream_bytes(),
+            module_overrides: HashMap::new(),
+        }
+    }
+}
+
+fn default_go_mirror_cache_dir() -> PathBuf {
+    PathBuf::from("./starmetal-data/git-mirrors")
+}
+
+/// Default mirror refresh TTL: 5 minutes, matching the other upstream caches' TTL convention.
+fn default_go_mirror_refresh_interval_secs() -> u64 {
+    300
 }
 
 /// A declared repository (ADR-0019): a `(kind, ecosystem)` surface mounted under
@@ -639,6 +696,12 @@ impl Config {
 
         self.oidc.validate()?;
 
+        for (module, url) in &self.go.module_overrides {
+            url::Url::parse(url).map_err(|err| {
+                StarmetalError::Config(format!("go.module_overrides.{module}: invalid URL '{url}': {err}"))
+            })?;
+        }
+
         for (name, upstream) in &self.upstream {
             validate_upstream_url(name, &upstream.url, upstream)?;
             if let Some(artifact_url) = &upstream.artifact_url {
@@ -736,7 +799,8 @@ impl Config {
     /// behavior. Upstream keys that do not name a known ecosystem are skipped.
     pub fn resolved_repositories(&self) -> Vec<RepositoryConfig> {
         let mut repositories = if self.repositories.is_empty() {
-            self.upstream
+            let mut repositories: Vec<RepositoryConfig> = self
+                .upstream
                 .iter()
                 .filter(|(_, upstream)| upstream.enabled)
                 .filter_map(|(name, _)| {
@@ -747,7 +811,18 @@ impl Config {
                         members: Vec::new(),
                     })
                 })
-                .collect()
+                .collect();
+            // Go has no `[upstream]` entry (ADR-0023 — no single base URL), so it is derived from
+            // `[go].enabled` instead of the upstream-map scan above.
+            if self.go.enabled {
+                repositories.push(RepositoryConfig {
+                    name: "go".to_string(),
+                    kind: RepositoryKind::Proxy,
+                    ecosystem: Ecosystem::Go,
+                    members: Vec::new(),
+                });
+            }
+            repositories
         } else {
             self.repositories.clone()
         };
@@ -808,6 +883,7 @@ impl Default for Config {
             signing: SigningConfig::default(),
             metadata: MetadataConfig::default(),
             supply_chain: SupplyChainConfig::default(),
+            go: GoConfig::default(),
         }
     }
 }
