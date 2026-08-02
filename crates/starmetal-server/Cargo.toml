@@ -23,6 +23,8 @@ pub = ["starmetal-adapters/pub"]
 go = ["starmetal-adapters/go", "dep:starmetal-git"]
 # Same shape as `go` — only the `GitMirror` port is needed here.
 zig = ["starmetal-adapters/zig", "dep:starmetal-git"]
+# Same shape as `go`/`zig` — only the `GitMirror` port is needed here.
+swift = ["starmetal-adapters/swift", "dep:starmetal-git"]
 
 [dependencies]
 axum.workspace = true

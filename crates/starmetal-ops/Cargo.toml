@@ -22,6 +22,9 @@ go = ["starmetal-adapters/go", "starmetal-server/go", "dep:starmetal-git", "star
 # Same shape as `go` — selects the gitoxide-backed GitMirror implementation for the Zig tarball
 # proxy.
 zig = ["starmetal-adapters/zig", "starmetal-server/zig", "dep:starmetal-git", "starmetal-git/gix-backend"]
+# Same shape as `go`/`zig` — selects the gitoxide-backed GitMirror implementation for the Swift
+# Package Registry proxy.
+swift = ["starmetal-adapters/swift", "starmetal-server/swift", "dep:starmetal-git", "starmetal-git/gix-backend"]
 backend-fs = ["starmetal-storage/backend-fs"]
 backend-memory = ["starmetal-storage/backend-memory"]
 backend-s3 = ["starmetal-storage/backend-s3"]

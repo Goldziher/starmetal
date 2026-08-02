@@ -251,6 +251,10 @@ impl StarmetalRuntime {
         // tarball proxy reads through this mirror handle directly.
         #[cfg(feature = "zig")]
         let zig_mirror = build_zig_mirror(&config);
+        // Swift, like Go and Zig, is never registered into `clients`/`CachingPackageService`
+        // (ADR-0023): the registry proxy reads through this mirror handle directly.
+        #[cfg(feature = "swift")]
+        let swift_mirror = build_swift_mirror(&config);
 
         let signing = SigningService::from_config(&config.signing)?;
         let service =
@@ -302,12 +306,13 @@ impl StarmetalRuntime {
         // are wired end-to-end (validate_mvp rejects others), so only proxy recipes are registered.
         let mut recipe_registry = RecipeRegistry::new();
         for repository in config.resolved_repositories() {
-            // Go and Zig have no ProxyFacet recipe (ADR-0023): `build_app` mounts each
+            // Go, Zig, and Swift have no ProxyFacet recipe (ADR-0023): `build_app` mounts each
             // unconditionally as a proxy repository instead of consulting the recipe registry,
-            // since neither's translation goes through `CachingPackageService`.
+            // since none of their translations go through `CachingPackageService`.
             if repository.kind == RepositoryKind::Proxy
                 && repository.ecosystem != Ecosystem::Go
                 && repository.ecosystem != Ecosystem::Zig
+                && repository.ecosystem != Ecosystem::Swift
             {
                 recipe_registry.register(Arc::new(ProxyRecipe::new(
                     repository.ecosystem,
@@ -397,6 +402,8 @@ impl StarmetalRuntime {
             go_mirror,
             #[cfg(feature = "zig")]
             zig_mirror,
+            #[cfg(feature = "swift")]
+            swift_mirror,
         };
 
         Ok(Self {
@@ -788,6 +795,15 @@ fn registry_statuses(config: &Config) -> Vec<RegistryStatus> {
         url: None,
         artifact_url: None,
     });
+    // Swift, like Go and Zig, has no `[upstream]` entry; its status comes from `[swift]`.
+    statuses.push(RegistryStatus {
+        ecosystem: Ecosystem::Swift,
+        configured: true,
+        enabled: config.swift.enabled,
+        compiled: cfg!(feature = "swift"),
+        url: None,
+        artifact_url: None,
+    });
     statuses
 }
 
@@ -813,6 +829,19 @@ fn build_zig_mirror(config: &Config) -> Arc<dyn starmetal_git::GitMirror> {
     Arc::new(starmetal_git::GixMirror::new(
         config.zig.mirror_cache_dir.clone(),
         std::time::Duration::from_secs(config.zig.mirror_refresh_interval_secs),
+    ))
+}
+
+/// Construct the gitoxide-backed [`starmetal_git::GitMirror`] backing the Swift Package Registry
+/// proxy.
+///
+/// Same shape as [`build_go_mirror`]/[`build_zig_mirror`]: built unconditionally whenever the
+/// `swift` feature is compiled in; `config.swift.enabled` only governs whether the route reaches it.
+#[cfg(feature = "swift")]
+fn build_swift_mirror(config: &Config) -> Arc<dyn starmetal_git::GitMirror> {
+    Arc::new(starmetal_git::GixMirror::new(
+        config.swift.mirror_cache_dir.clone(),
+        std::time::Duration::from_secs(config.swift.mirror_refresh_interval_secs),
     ))
 }
 

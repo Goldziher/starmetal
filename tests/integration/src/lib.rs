@@ -28,6 +28,9 @@ pub struct TestServer {
     _go_mirror_cache: tempfile::TempDir,
     // Kept alive for the server's lifetime: the Zig tarball proxy's git-mirror cache lives here.
     _zig_mirror_cache: tempfile::TempDir,
+    // Kept alive for the server's lifetime: the Swift Package Registry proxy's git-mirror cache
+    // lives here.
+    _swift_mirror_cache: tempfile::TempDir,
 }
 
 impl TestServer {
@@ -142,6 +145,15 @@ impl TestServer {
             std::time::Duration::from_secs(300),
         ));
 
+        // Swift, like Go and Zig, is never registered into `upstream_clients`/
+        // `CachingPackageService` (ADR-0023): the registry proxy reads through this mirror handle
+        // directly.
+        let swift_mirror_cache = tempfile::tempdir().expect("swift mirror cache tempdir");
+        let swift_mirror: Arc<dyn starmetal_git::GitMirror> = Arc::new(GixMirror::new(
+            swift_mirror_cache.path(),
+            std::time::Duration::from_secs(300),
+        ));
+
         let service = Arc::new(CachingPackageService::new(
             Arc::new(storage),
             upstream_clients,
@@ -159,6 +171,7 @@ impl TestServer {
             }
             config.go.enabled = true;
             config.zig.enabled = true;
+            config.swift.enabled = true;
         }
         configure(&mut config);
         let upstreams = UpstreamClients {
@@ -172,15 +185,18 @@ impl TestServer {
             pub_upstream: pub_client,
             go_mirror,
             zig_mirror,
+            swift_mirror,
         };
         // Populate the facet recipe registry the same way the runtime does, so `build_app`'s
-        // registry-driven mounting produces the historical proxy routes (ADR-0019). Go and Zig
-        // have no ProxyFacet recipe (ADR-0023) — `build_app` mounts each unconditionally instead.
+        // registry-driven mounting produces the historical proxy routes (ADR-0019). Go, Zig, and
+        // Swift have no ProxyFacet recipe (ADR-0023) — `build_app` mounts each unconditionally
+        // instead.
         let mut recipe_registry = RecipeRegistry::new();
         for repository in config.resolved_repositories() {
             if repository.kind == RepositoryKind::Proxy
                 && repository.ecosystem != Ecosystem::Go
                 && repository.ecosystem != Ecosystem::Zig
+                && repository.ecosystem != Ecosystem::Swift
             {
                 recipe_registry.register(Arc::new(ProxyRecipe::new(
                     repository.ecosystem,
@@ -214,6 +230,7 @@ impl TestServer {
             shutdown: shutdown_tx,
             _go_mirror_cache: go_mirror_cache,
             _zig_mirror_cache: zig_mirror_cache,
+            _swift_mirror_cache: swift_mirror_cache,
         }
     }
 
@@ -270,6 +287,11 @@ impl TestServer {
     /// Zig tarball proxy base URL, mounted at `/zig`.
     pub fn zig_proxy_url(&self) -> String {
         format!("{}/zig", self.base_url())
+    }
+
+    /// Swift Package Registry proxy base URL, mounted at `/swift`.
+    pub fn swift_proxy_url(&self) -> String {
+        format!("{}/swift", self.base_url())
     }
 
     /// Shutdown the server.

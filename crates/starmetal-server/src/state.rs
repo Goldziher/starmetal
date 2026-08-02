@@ -108,6 +108,11 @@ pub struct UpstreamClients {
     /// implementation selected in `starmetal-ops`.
     #[cfg(feature = "zig")]
     pub zig_mirror: Arc<dyn starmetal_git::GitMirror>,
+    /// Git-mirror handle backing the Swift Package Registry proxy (ADR-0023). Same shape as
+    /// [`UpstreamClients::go_mirror`] — a port trait object, with the concrete gitoxide-backed
+    /// implementation selected in `starmetal-ops`.
+    #[cfg(feature = "swift")]
+    pub swift_mirror: Arc<dyn starmetal_git::GitMirror>,
 }
 
 impl AppState {
@@ -520,6 +525,17 @@ impl starmetal_adapters::zig::HasZigState for AppState {
 
     fn git_mirror(&self) -> &Arc<dyn starmetal_git::GitMirror> {
         &self.upstreams.zig_mirror
+    }
+}
+
+#[cfg(feature = "swift")]
+impl starmetal_adapters::swift::HasSwiftState for AppState {
+    fn config(&self) -> &Arc<Config> {
+        &self.config
+    }
+
+    fn git_mirror(&self) -> &Arc<dyn starmetal_git::GitMirror> {
+        &self.upstreams.swift_mirror
     }
 }
 

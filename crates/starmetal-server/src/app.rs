@@ -28,13 +28,16 @@ pub fn build_app(state: AppState) -> Router {
     for repository in state.config.resolved_repositories() {
         match repository.kind {
             RepositoryKind::Proxy
-                if repository.ecosystem == Ecosystem::Go || repository.ecosystem == Ecosystem::Zig =>
+                if repository.ecosystem == Ecosystem::Go
+                    || repository.ecosystem == Ecosystem::Zig
+                    || repository.ecosystem == Ecosystem::Swift =>
             {
-                // Go and Zig are git-sourced (ADR-0023): their translation reads directly through
-                // the GitMirror port rather than the ProxyFacet/CachingPackageService pipeline the
-                // other ecosystems share, so there is no recipe registered for either — each mounts
-                // unconditionally once resolved as a proxy repository (still feature-gated in
-                // `ecosystem_router`, so a build without the `go`/`zig` feature mounts nothing here).
+                // Go, Zig, and Swift are git-sourced (ADR-0023): their translation reads directly
+                // through the GitMirror port rather than the ProxyFacet/CachingPackageService
+                // pipeline the other ecosystems share, so there is no recipe registered for any of
+                // them — each mounts unconditionally once resolved as a proxy repository (still
+                // feature-gated in `ecosystem_router`, so a build without the `go`/`zig`/`swift`
+                // feature mounts nothing here).
                 app = mount_proxy(app, &repository.name, repository.ecosystem);
             }
             RepositoryKind::Proxy => {
@@ -107,6 +110,8 @@ fn ecosystem_router(ecosystem: Ecosystem) -> Option<Router<AppState>> {
         Ecosystem::Go => Some(starmetal_adapters::go::router()),
         #[cfg(feature = "zig")]
         Ecosystem::Zig => Some(starmetal_adapters::zig::router()),
+        #[cfg(feature = "swift")]
+        Ecosystem::Swift => Some(starmetal_adapters::swift::router()),
         // Ecosystems whose adapter feature is not compiled in are not mounted.
         #[allow(unreachable_patterns)]
         _ => None,
