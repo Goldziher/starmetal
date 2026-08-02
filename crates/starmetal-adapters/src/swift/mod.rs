@@ -66,7 +66,7 @@ use std::sync::Arc;
 
 use axum::Router;
 use axum::body::Body;
-use axum::extract::{Path, State};
+use axum::extract::{OriginalUri, Path, State};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
@@ -101,6 +101,15 @@ fn with_content_version(mut response: Response) -> Response {
     response
 }
 
+/// The absolute URL SwiftPM should use to fetch a release's metadata, derived from the list
+/// request's own mount path (`request_path`, e.g. `/swift/{scope}/{name}`) rather than a hardcoded
+/// `/swift/` prefix — so the emitted link stays correct when an operator mounts the Swift proxy
+/// under a non-default repository name (`[[repositories]] name = "my-swift"`).
+fn release_metadata_url(base_url: &str, request_path: &str, version: &str) -> String {
+    let path = request_path.trim_end_matches('/');
+    format!("{base_url}{path}/{version}")
+}
+
 /// Build the Swift Package Registry router. `{scope}` and `{name}` are always single path segments
 /// per SE-0292, so (unlike the Go module proxy and the Zig tarball proxy) no catch-all is needed for
 /// them; only the version-bearing tail is a wildcard, since it may be `{version}`, `{version}.zip`,
@@ -114,9 +123,10 @@ pub fn router<S: HasSwiftState>() -> Router<S> {
 async fn list_releases<S: HasSwiftState>(
     State(state): State<S>,
     Path((scope, name)): Path<(String, String)>,
+    OriginalUri(original_uri): OriginalUri,
     headers: HeaderMap,
 ) -> Response {
-    let response = list_releases_inner(&state, &scope, &name, &headers).await;
+    let response = list_releases_inner(&state, &scope, &name, original_uri.path(), &headers).await;
     with_content_version(response.unwrap_or_else(IntoResponse::into_response))
 }
 
@@ -124,6 +134,7 @@ async fn list_releases_inner<S: HasSwiftState>(
     state: &S,
     scope: &str,
     name: &str,
+    request_path: &str,
     headers: &HeaderMap,
 ) -> Result<Response, (StatusCode, String)> {
     let identifier = models::registry_identifier(scope, name);
@@ -139,7 +150,7 @@ async fn list_releases_inner<S: HasSwiftState>(
         .filter(|reference| reference.kind == GitRefKind::Tag)
         .filter_map(|reference| models::normalize_version_tag(&reference.name))
         .map(|version| {
-            let url = format!("{base_url}/swift/{scope}/{name}/{version}");
+            let url = release_metadata_url(&base_url, request_path, &version);
             (version, ReleaseLink { url })
         })
         .collect();
@@ -300,4 +311,27 @@ fn json_response<T: serde::Serialize>(body: &T) -> Result<Response, (StatusCode,
 fn map_error(err: &StarmetalError) -> (StatusCode, String) {
     tracing::warn!(error = %err, "Swift Package Registry proxy request failed");
     crate::map_public_error(err)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn release_metadata_url_is_derived_from_the_default_mount_path() {
+        assert_eq!(
+            release_metadata_url("http://localhost:8080", "/swift/test/fixture", "1.0.0"),
+            "http://localhost:8080/swift/test/fixture/1.0.0"
+        );
+    }
+
+    #[test]
+    fn release_metadata_url_honors_a_custom_mount_name() {
+        // An operator mounting the Swift proxy as `[[repositories]] name = "my-swift"` must get
+        // links under `/my-swift/`, not a hardcoded `/swift/`.
+        assert_eq!(
+            release_metadata_url("https://registry.example", "/my-swift/test/fixture", "2.3.4"),
+            "https://registry.example/my-swift/test/fixture/2.3.4"
+        );
+    }
 }
