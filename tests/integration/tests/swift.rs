@@ -8,7 +8,7 @@
 use std::path::Path;
 
 use sha2::{Digest, Sha256};
-use starmetal_integration_tests::{GitFixture, TestServer, require_swift, swift_package_fixture};
+use starmetal_integration_tests::{GitFixture, GitFixtureBuilder, TestServer, require_swift, swift_package_fixture};
 use tokio::process::Command;
 
 async fn start_server_with_fixture(fixture: &GitFixture) -> TestServer {
@@ -86,6 +86,13 @@ async fn swift_proxy_serves_release_metadata_with_a_checksum_matching_the_zip() 
             .get("content-version")
             .and_then(|value| value.to_str().ok()),
         Some("1")
+    );
+    assert_eq!(
+        metadata_response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok()),
+        Some("application/json")
     );
     let metadata: serde_json::Value = metadata_response.json().await.expect("release metadata body");
     assert_eq!(metadata["id"], "test.fixture");
@@ -214,6 +221,155 @@ async fn swift_proxy_reports_404_for_a_package_absent_from_overrides() {
     assert_eq!(response.status(), 404);
 
     server.shutdown();
+}
+
+#[tokio::test]
+async fn swift_proxy_lists_every_tagged_release_ascending() {
+    let fixture = GitFixtureBuilder::new()
+        .file("Package.swift", "// swift-tools-version:5.9\n")
+        .tag("1.0.0")
+        .commit()
+        .file("Package.swift", "// swift-tools-version:5.9\n// v2\n")
+        .tag("2.0.0")
+        .build();
+    let git_url = fixture.url.clone();
+    let server = TestServer::start_with_config(move |config| {
+        config.swift.enabled = true;
+        config
+            .swift
+            .package_overrides
+            .insert("test.fixture".to_string(), git_url);
+    })
+    .await;
+    let client = reqwest::Client::new();
+
+    let response = client
+        .get(format!("{}/test/fixture", server.swift_proxy_url()))
+        .send()
+        .await
+        .expect("list releases request");
+    assert_eq!(response.status(), 200);
+    let body: serde_json::Value = response.json().await.expect("list releases body");
+    let releases = body["releases"].as_object().expect("releases object");
+    assert_eq!(releases.len(), 2);
+    assert_eq!(
+        releases["1.0.0"]["url"].as_str(),
+        Some(format!("{}/test/fixture/1.0.0", server.swift_proxy_url()).as_str())
+    );
+    assert_eq!(
+        releases["2.0.0"]["url"].as_str(),
+        Some(format!("{}/test/fixture/2.0.0", server.swift_proxy_url()).as_str())
+    );
+
+    server.shutdown();
+}
+
+#[tokio::test]
+async fn swift_proxy_sets_content_version_header_on_every_response_including_a_404() {
+    let fixture = swift_package_fixture();
+    let server = start_server_with_fixture(&fixture).await;
+    let client = reqwest::Client::new();
+
+    let list = client
+        .get(format!("{}/test/fixture", server.swift_proxy_url()))
+        .send()
+        .await
+        .expect("list releases request");
+    let metadata = client
+        .get(format!("{}/test/fixture/1.0.0", server.swift_proxy_url()))
+        .send()
+        .await
+        .expect("release metadata request");
+    let manifest = client
+        .get(format!("{}/test/fixture/1.0.0/Package.swift", server.swift_proxy_url()))
+        .send()
+        .await
+        .expect("manifest request");
+    let archive = client
+        .get(format!("{}/test/fixture/1.0.0.zip", server.swift_proxy_url()))
+        .send()
+        .await
+        .expect("archive request");
+    let not_found = client
+        .get(format!("{}/test/fixture/9.9.9", server.swift_proxy_url()))
+        .send()
+        .await
+        .expect("unknown-version request");
+
+    for (name, response) in [
+        ("list releases", &list),
+        ("release metadata", &metadata),
+        ("manifest", &manifest),
+        ("archive", &archive),
+        ("404", &not_found),
+    ] {
+        assert_eq!(
+            response
+                .headers()
+                .get("content-version")
+                .and_then(|value| value.to_str().ok()),
+            Some("1"),
+            "expected Content-Version: 1 on the {name} response"
+        );
+    }
+    assert_eq!(not_found.status(), 404);
+
+    server.shutdown();
+}
+
+#[tokio::test]
+async fn swift_proxy_archive_and_checksum_are_stable_across_a_server_restart() {
+    let fixture = swift_package_fixture();
+    let client = reqwest::Client::new();
+
+    let server = start_server_with_fixture(&fixture).await;
+    let first_zip = client
+        .get(format!("{}/test/fixture/1.0.0.zip", server.swift_proxy_url()))
+        .send()
+        .await
+        .expect("archive request")
+        .bytes()
+        .await
+        .expect("archive body");
+    let first_metadata: serde_json::Value = client
+        .get(format!("{}/test/fixture/1.0.0", server.swift_proxy_url()))
+        .send()
+        .await
+        .expect("release metadata request")
+        .json()
+        .await
+        .expect("release metadata body");
+    server.shutdown();
+
+    // A fresh server, same fixture: the git-mirror cache and the archive cache are both rebuilt
+    // from scratch, so byte-identical output here is the fixed commit dates paying off.
+    let server = start_server_with_fixture(&fixture).await;
+    let second_zip = client
+        .get(format!("{}/test/fixture/1.0.0.zip", server.swift_proxy_url()))
+        .send()
+        .await
+        .expect("archive request")
+        .bytes()
+        .await
+        .expect("archive body");
+    let second_metadata: serde_json::Value = client
+        .get(format!("{}/test/fixture/1.0.0", server.swift_proxy_url()))
+        .send()
+        .await
+        .expect("release metadata request")
+        .json()
+        .await
+        .expect("release metadata body");
+    server.shutdown();
+
+    assert_eq!(
+        first_zip, second_zip,
+        "the source archive must be byte-identical across a restart"
+    );
+    assert_eq!(
+        first_metadata["resources"][0]["checksum"], second_metadata["resources"][0]["checksum"],
+        "the release-metadata checksum must be identical across a restart"
+    );
 }
 
 #[tokio::test]

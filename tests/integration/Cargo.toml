@@ -6,9 +6,17 @@ edition.workspace = true
 license.workspace = true
 publish = false
 
+[features]
+# Off by default: fronts the flat-token authorizer with a static-JWKS OIDC `CompositeAuthenticator`
+# (ADR-0022) when `config.oidc.enabled`, mirroring `starmetal-ops`'s `oidc` feature.
+oidc = ["dep:starmetal-oidc"]
+
 [dependencies]
 ahash.workspace = true
 axum.workspace = true
+blake3.workspace = true
+ed25519-dalek = { workspace = true, features = ["alloc"] }
+pkcs8.workspace = true
 starmetal-adapters = { workspace = true, features = [
   "cargo-registry",
   "go",
@@ -22,8 +30,9 @@ starmetal-adapters = { workspace = true, features = [
   "swift",
   "zig",
 ] }
-starmetal-core.workspace = true
+starmetal-core = { workspace = true, features = ["test-support"] }
 starmetal-git = { workspace = true, features = ["gix-backend"] }
+starmetal-oidc = { workspace = true, optional = true }
 starmetal-server = { workspace = true, features = [
   "cargo-registry",
   "go",

@@ -12,7 +12,10 @@ use std::process::Command as StdCommand;
 
 /// Fixed author/committer timestamp applied to every fixture commit, so commit SHAs (and anything
 /// derived from them, such as a served module's mtime) are reproducible across runs and machines.
-const FIXTURE_COMMIT_DATE: &str = "2020-01-01T00:00:00Z";
+///
+/// Public so tests that assert on a derived timestamp (e.g. the Go proxy's `.info` `Time` field)
+/// can compare against this constant instead of duplicating the literal.
+pub const FIXTURE_COMMIT_DATE: &str = "2020-01-01T00:00:00Z";
 
 /// Fixture git identity applied to every commit. The value is arbitrary but must stay constant so
 /// commit SHAs remain stable across test runs.
@@ -33,13 +36,32 @@ pub struct GitFixture {
     pub url: String,
 }
 
+/// One finalized commit round staged via [`GitFixtureBuilder::commit`]: the files added at that
+/// point (on top of everything already written by prior rounds) plus the tags applied to it once
+/// committed.
+struct PendingCommit {
+    files: Vec<(String, String)>,
+    tags: Vec<String>,
+    message: String,
+}
+
 /// Builds a [`GitFixture`]: a temporary git repository with the given working-tree files
 /// committed and tagged, deterministic across runs (fixed author/committer identity *and* fixed
 /// author/committer dates -- see [`FIXTURE_COMMIT_DATE`]).
+///
+/// By default `.file()`/`.tag()` stage a single commit, finalized by `.build()` -- matching every
+/// fixture in this module before multi-version coverage was added. Call `.commit()` between
+/// `.file()`/`.tag()` groups to produce a fixture with more than one tagged release, each with
+/// genuinely distinct content (e.g. for testing that a version listing returns every tag, or that
+/// `@latest` picks the highest semver one) while every commit's date stays fixed.
 #[derive(Default)]
 pub struct GitFixtureBuilder {
+    /// Files staged for the commit currently being built up via `.file()`.
     files: Vec<(String, String)>,
+    /// Tags staged for the commit currently being built up via `.tag()`.
     tags: Vec<String>,
+    /// Already-finalized commit rounds, applied to the repository in order by `.build()`.
+    commits: Vec<PendingCommit>,
 }
 
 impl GitFixtureBuilder {
@@ -48,35 +70,56 @@ impl GitFixtureBuilder {
     }
 
     /// Adds a working-tree file at `relative_path` (created under the fixture's repo root) with
-    /// the given `contents`. Parent directories are created as needed.
+    /// the given `contents`, staged for the commit currently being built up. Parent directories
+    /// are created as needed.
     pub fn file(mut self, relative_path: impl Into<String>, contents: impl Into<String>) -> Self {
         self.files.push((relative_path.into(), contents.into()));
         self
     }
 
-    /// Tags the fixture's single commit with `name`. May be called more than once to apply
-    /// multiple tags to the same commit.
+    /// Tags the commit currently being built up with `name`. May be called more than once to
+    /// apply multiple tags to the same commit.
     pub fn tag(mut self, name: impl Into<String>) -> Self {
         self.tags.push(name.into());
         self
     }
 
-    /// Initializes a `main`-branch repo, writes every registered file, commits them all with a
-    /// fixed identity and date, applies every registered tag, and returns the resulting
-    /// [`GitFixture`].
+    /// Finalizes the files and tags staged so far into a discrete commit round, so subsequent
+    /// `.file()`/`.tag()` calls stage a *new* commit on top of it. The final round need not call
+    /// `.commit()` explicitly -- `.build()` flushes it automatically.
+    pub fn commit(mut self) -> Self {
+        let round = self.commits.len() + 1;
+        self.commits.push(PendingCommit {
+            files: std::mem::take(&mut self.files),
+            tags: std::mem::take(&mut self.tags),
+            message: format!("{DEFAULT_COMMIT_MESSAGE} (round {round})"),
+        });
+        self
+    }
+
+    /// Initializes a `main`-branch repo, then applies every finalized commit round (flushing any
+    /// still-staged files/tags as the final round first) with a fixed identity and date, and
+    /// returns the resulting [`GitFixture`].
     pub fn build(self) -> GitFixture {
+        let mut builder = self;
+        if !builder.files.is_empty() || !builder.tags.is_empty() || builder.commits.is_empty() {
+            builder = builder.commit();
+        }
+
         let root = tempfile::tempdir().expect("tempdir");
         let work = root.path().join("upstream");
         std::fs::create_dir_all(&work).expect("create work dir");
 
         git(&work, &["init", "-b", "main"]);
-        for (relative_path, contents) in &self.files {
-            write_file(&work, relative_path, contents);
-        }
-        git(&work, &["add", "-A"]);
-        git(&work, &["commit", "-m", DEFAULT_COMMIT_MESSAGE]);
-        for tag in &self.tags {
-            git(&work, &["tag", tag]);
+        for round in &builder.commits {
+            for (relative_path, contents) in &round.files {
+                write_file(&work, relative_path, contents);
+            }
+            git(&work, &["add", "-A"]);
+            git(&work, &["commit", "-m", &round.message]);
+            for tag in &round.tags {
+                git(&work, &["tag", tag]);
+            }
         }
 
         let url = format!("file://{}", work.display());
@@ -185,4 +228,39 @@ pub async fn require_zig() -> String {
 /// Probes for the `swift` toolchain, matching `swift.rs`'s original `require_swift`.
 pub async fn require_swift() -> String {
     require_tool("swift", "--version", "Swift").await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn commit_stages_a_second_tagged_release_with_distinct_content_on_top_of_the_first() {
+        let fixture = GitFixtureBuilder::new()
+            .file("VERSION", "1.0.0\n")
+            .tag("v1.0.0")
+            .commit()
+            .file("VERSION", "2.0.0\n")
+            .tag("v2.0.0")
+            .build();
+
+        let path = fixture.url.strip_prefix("file://").expect("file:// URL");
+        let tags = StdCommand::new("git")
+            .args(["tag", "--list"])
+            .current_dir(path)
+            .output()
+            .expect("git tag --list");
+        let mut tag_names: Vec<String> = String::from_utf8(tags.stdout)
+            .expect("utf-8 tag list")
+            .lines()
+            .map(str::to_string)
+            .collect();
+        tag_names.sort();
+        assert_eq!(tag_names, vec!["v1.0.0", "v2.0.0"]);
+
+        let version_at_v1 = git(Path::new(path), &["show", "v1.0.0:VERSION"]);
+        assert_eq!(version_at_v1, "1.0.0\n");
+        let version_at_v2 = git(Path::new(path), &["show", "v2.0.0:VERSION"]);
+        assert_eq!(version_at_v2, "2.0.0\n");
+    }
 }
