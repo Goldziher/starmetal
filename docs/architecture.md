@@ -10,6 +10,7 @@ in-memory metrics when explicitly enabled.
 Support is experimental and read/proxy focused:
 
 - PyPI, npm, Cargo, Hex, Maven, RubyGems, NuGet, and pub.dev are experimental core capabilities.
+- Go, Zig, and Swift are experimental git-sourced adapters, disabled by default (ADR-0023).
 - Native publishing is not supported.
 - Local publishing is experimental and disabled by default.
 
@@ -25,6 +26,7 @@ graph TB
         cargo_cli[cargo]
         mix[mix]
         extra_clients[Maven / Bundler / dotnet / dart pub]
+        git_clients[go / zig / swift]
         admin_client[Admin clients]
     end
 
@@ -46,6 +48,7 @@ graph TB
         cargo[Cargo]
         hex[Hex]
         extra[Maven / RubyGems / NuGet / pub.dev]
+        git_adapters[Go / Zig / Swift, experimental]
         admin[Admin JSON API]
     end
 
@@ -64,6 +67,7 @@ graph TB
     subgraph Ports
         storage[StoragePort]
         upstreams[UpstreamClient]
+        git_mirror[GitMirror]
     end
 
     subgraph Backends
@@ -78,6 +82,7 @@ graph TB
     cargo_cli --> trace
     mix --> trace
     extra_clients --> trace
+    git_clients --> trace
     admin_client --> trace
 
     trace --> cors --> auth --> compress
@@ -87,6 +92,7 @@ graph TB
     compress --> cargo
     compress --> hex
     compress --> extra
+    compress --> git_adapters
     compress --> admin
 
     pypi --> package_service
@@ -102,6 +108,8 @@ graph TB
     cargo -. native shape .-> upstreams
     hex -. native shape .-> upstreams
     extra -. native shape .-> upstreams
+
+    git_adapters -. bypasses PackageService .-> git_mirror
 
     package_service --> caching
     publishing --> caching
@@ -127,8 +135,11 @@ graph LR
     ops --> adapters[starmetal-adapters]
     ops --> authz[starmetal-authz]
     ops --> metadata[starmetal-metadata]
+    ops --> git[starmetal-git]
     server --> adapters
     server --> service
+    server --> git
+    adapters --> git
     adapters --> core[starmetal-core]
     service --> core
     storage --> core
@@ -142,6 +153,7 @@ graph LR
 | `starmetal-service` | Pull-through cache, Blake3 verification, policy checks, experimental local publishing |
 | `starmetal-storage` | OpenDAL `StoragePort` implementation |
 | `starmetal-adapters` | Feature-gated protocol routers and upstream clients |
+| `starmetal-git` | `GitMirror` port and its gitoxide-backed implementation (`gix-backend` feature), quarantining git-library access for the Go/Zig/Swift adapters (ADR-0023) |
 | `starmetal-server` | Axum app assembly and Tower middleware |
 | `starmetal-authz` | `LocalAuthorizer`: deny-by-default `Authorizer`/`Authenticator` implementation migrating flat auth/admin/publishing tokens into a grant model (ADR-0022) |
 | `starmetal-metadata` | Postgres-backed content model: component/asset/blob, blake3 dedup, garbage collection, retention (ADR-0020) |
@@ -201,9 +213,61 @@ sequenceDiagram
 | RubyGems | `/rubygems` | Yes | Experimental core |
 | NuGet | `/nuget` | Yes | Experimental core |
 | pub.dev | `/pub` | Yes | Experimental core |
+| Go | `/go` | No (`[go].enabled`) | Experimental, git-sourced |
+| Zig | `/zig` | No (`[zig].enabled`) | Experimental, git-sourced |
+| Swift | `/swift` | No (`[swift].enabled`) | Experimental, git-sourced |
 
 Runtime defaults are defined in `Config::default()`. Full CLI builds compile all adapters, but
 compiled does not mean production-supported.
+
+## Repository Kinds & Facets
+
+`RepositoryKind` (`Proxy`/`Hosted`/`Group`) and a set of capability facets (`ProxyFacet`,
+`HostedFacet`, `GroupFacet`) live in `starmetal-core::repository` (ADR-0019). A `RecipeRegistry`
+maps `(Ecosystem, RepositoryKind)` to a `Recipe` exposing the facets that kind needs; `build_app`
+resolves `Config::resolved_repositories()` and mounts one adapter instance per repository by
+looking up its recipe.
+
+- **Proxy** — the existing pull-through cache, unchanged; every ecosystem's default repository.
+- **Group** — a read-only virtual repository that merges the proxy members of the same ecosystem
+  declared in its `members` list. `AppState::for_group_mount` bakes a per-repository, per-group
+  service into the ecosystem's router, so the same adapter code serves both a single proxy and a
+  merged group.
+- **Hosted** — still rejected by `Config::validate_mvp`: a hosted repository needs
+  repository-scoped storage keys (ADR-0021), which are not implemented yet.
+
+Go, Zig, and Swift resolve as `Proxy` repositories but skip the recipe registry entirely — see
+below.
+
+## Git as a Dependency Source
+
+Go, Zig, and Swift resolve dependencies from git tags rather than a package-index protocol
+(ADR-0023). The `starmetal-git` crate defines an inbound `GitMirror` port — mirror an upstream
+repository, list refs, resolve a ref to a commit, read a blob, and produce a source archive — with
+a `gix`-backed implementation behind the `gix-backend` feature so the port trait itself stays free
+of any git library.
+
+The three adapters read directly through `GitMirror` and bypass `CachingPackageService`, `Policy`,
+Blake3 sidecar verification, and `StoragePort` entirely: there is no upstream-metadata cache, no
+policy check, and no OpenDAL-backed artifact store in this path, only the `GitMirror`
+implementation's own TTL-gated bare-repository mirror. Each adapter translates git tags and trees
+into its ecosystem's shape:
+
+- **Go** (`/go`) — the GOPROXY protocol (`@v/list`, `@v/<version>.info`, `@v/<version>.mod`,
+  `@v/<version>.zip`), module path mapped to a git URL via `[go].module_overrides` plus a built-in
+  github.com/gitlab.com/bitbucket.org/golang.org/x mapping.
+- **Zig** (`/zig`) — a single `{host}/{user}/{repo}/{ref}.tar.gz` route serving a source tarball,
+  mapped via `[zig].repo_overrides` plus the same built-in host mapping.
+- **Swift** (`/swift`) — the Package Registry protocol (SE-0292: list releases, release metadata,
+  `Package.swift`, source archive), mapped via `[swift].package_overrides` only — a Swift
+  registry identifier carries no host, so every package must be listed explicitly.
+
+All three are disabled by default (`enabled = false` in their respective `[go]`/`[zig]`/`[swift]`
+config sections), gated behind the `go`/`zig`/`swift` build features, and proved by a live
+native-client end-to-end test rather than HTTP conformance alone: `go mod download`, `zig fetch`,
+and `swift package resolve` plus `swift build`. Earlier design work considered serving read-only
+git smart-HTTP (`upload-pack`) directly; the shipped adapters translate into each ecosystem's own
+protocol instead, and upload-pack proved unnecessary.
 
 ## Admin Surface
 
@@ -356,10 +420,10 @@ not create support claims without live E2E evidence.
 - [0016 - Dependency Update Engine](adr/0016-dependency-update-engine.md)
 - [0017 - Forge and Git Integration Port](adr/0017-forge-git-port.md)
 - [0018 - Universal Artifact Repository Direction](adr/0018-universal-artifact-repository-direction.md)
-- [0019 - Repository Kinds and the Recipe/Facet Model, proposed](adr/0019-repository-kinds-recipe-facet-model.md)
+- [0019 - Repository Kinds and the Recipe/Facet Model, accepted (partial)](adr/0019-repository-kinds-recipe-facet-model.md)
 - [0020 - Universal Content Model and Garbage Collection](adr/0020-content-model-and-garbage-collection.md)
-- [0021 - Native Hosted Publishing, proposed](adr/0021-native-hosted-publishing.md)
+- [0021 - Native Hosted Publishing, accepted (partial)](adr/0021-native-hosted-publishing.md)
 - [0022 - Access Control Model](adr/0022-access-control-model.md)
-- [0023 - Git as a Dependency Source, proposed](adr/0023-git-as-dependency-source.md)
+- [0023 - Git as a Dependency Source, accepted (partial)](adr/0023-git-as-dependency-source.md)
 - [0024 - Supply-Chain Security Pipeline, accepted (partial)](adr/0024-supply-chain-security-pipeline.md)
 - [0025 - Supply-Chain Enforcement Architecture (As-Built)](adr/0025-supply-chain-enforcement-architecture.md)

@@ -13,7 +13,7 @@ StarMetal is experimental. All currently implemented registry read/proxy workflo
 core capabilities; native publishing is not supported yet, and local publishing remains experimental
 and disabled by default.
 
-PyPI · npm · Cargo · Hex · Maven · RubyGems · NuGet · pub.dev
+PyPI · npm · Cargo · Hex · Maven · RubyGems · NuGet · pub.dev · Go · Zig · Swift
 
 [![CI](https://img.shields.io/github/actions/workflow/status/Goldziher/starmetal/ci.yaml?style=flat-square)](https://github.com/Goldziher/starmetal/actions/workflows/ci.yaml)
 [![Rust 2024](https://img.shields.io/badge/rust-2024-orange?style=flat-square)](https://www.rust-lang.org/)
@@ -43,6 +43,7 @@ Starmetal sits between package-manager clients and upstream registries:
 | Integrity | Stores Blake3 sidecars and re-verifies cached artifacts before serving |
 | Policy | Blocks packages, licenses, and vulnerability severities through shared service checks |
 | Protocol adapters | Feature-gated routers for PyPI, npm, Cargo, Hex, Maven, RubyGems, NuGet, and pub.dev |
+| Git-sourced adapters | Feature-gated Go, Zig, and Swift adapters that read directly through a `GitMirror` port instead of the shared cache (experimental, disabled by default) |
 | Storage | OpenDAL-backed filesystem, S3, GCS, and memory backends |
 | Operations | CLI plus stdio MCP tools over the same local operations layer |
 | Dependency updates | Scans manifests and opens update PRs, reusing the proxy as the version datasource (experimental; Cargo + GitHub) |
@@ -66,8 +67,16 @@ native-client E2E passes for that ecosystem.
 | RubyGems | `/rubygems` | Experimental | Experimental, disabled by default | Unsupported | HTTP/native Docker proxy E2E |
 | NuGet | `/nuget` | Experimental | Experimental, disabled by default | Unsupported | HTTP/native Docker proxy E2E |
 | pub.dev | `/pub` | Experimental | Experimental, disabled by default | Unsupported | HTTP/native Docker proxy E2E |
+| Go | `/go` | Experimental (git-sourced) | Not applicable (read-only, git-sourced) | Unsupported | Live native-client E2E (`go mod download`) |
+| Zig | `/zig` | Experimental (git-sourced) | Not applicable (read-only, git-sourced) | Unsupported | Live native-client E2E (`zig fetch`) |
+| Swift | `/swift` | Experimental (git-sourced) | Not applicable (read-only, git-sourced) | Unsupported | Live native-client E2E (`swift package resolve` + build) |
 
-Planned registry work includes OCI/distribution, Go modules, Composer, Conda, Debian/APT, and RPM/YUM.
+Go, Zig, and Swift are git-sourced (ADR-0023): rather than proxying a package-index protocol, their
+adapters mirror an upstream git repository through the `starmetal-git` crate's `GitMirror` port and
+translate tags/trees into each ecosystem's artifact shape. They bypass `CachingPackageService`
+entirely, are disabled by default, and are gated behind the `go`/`zig`/`swift` build features.
+
+Planned registry work includes OCI/distribution, Composer, Conda, Debian/APT, and RPM/YUM.
 See [ADR-0011](docs/adr/0011-mvp-support-matrix.md) for experimental support criteria and promotion gates.
 Configured Ed25519 Starmetal DSSE sidecars are experimental. Protocol-native signing, PQ signing,
 and client-verified PQ support are planned only; `ecdsa-p256-sha256`, `ml-dsa65`, and the `pq`
@@ -277,6 +286,7 @@ service/core boundary.
 | `starmetal-service` | Pull-through cache, Blake3 verification, policy checks, experimental local publishing |
 | `starmetal-storage` | OpenDAL-backed `StoragePort` implementation |
 | `starmetal-adapters` | Feature-gated protocol routers and upstream clients |
+| `starmetal-git` | Feature-gated gitoxide-backed `GitMirror` port implementation powering the Go, Zig, and Swift git-sourced adapters (ADR-0023) |
 | `starmetal-server` | Axum app assembly and Tower middleware |
 | `starmetal-authz` | `LocalAuthorizer`: deny-by-default `Authorizer`/`Authenticator` implementation migrating flat auth/admin/publishing tokens into a grant model (ADR-0022) |
 | `starmetal-oidc` | `OidcAuthenticator`: offline static-JWKS OIDC bearer validator behind the `Authenticator` port, composed ahead of the flat-token backend (ADR-0022) |
@@ -340,11 +350,11 @@ under [`schemas/`](schemas/):
 - [0016 - Dependency Update Engine](docs/adr/0016-dependency-update-engine.md)
 - [0017 - Forge and Git Integration Port](docs/adr/0017-forge-git-port.md)
 - [0018 - Universal Artifact Repository Direction](docs/adr/0018-universal-artifact-repository-direction.md)
-- [0019 - Repository Kinds and the Recipe/Facet Model, proposed](docs/adr/0019-repository-kinds-recipe-facet-model.md)
+- [0019 - Repository Kinds and the Recipe/Facet Model, accepted (partial)](docs/adr/0019-repository-kinds-recipe-facet-model.md)
 - [0020 - Universal Content Model and Garbage Collection](docs/adr/0020-content-model-and-garbage-collection.md)
-- [0021 - Native Hosted Publishing, proposed](docs/adr/0021-native-hosted-publishing.md)
+- [0021 - Native Hosted Publishing, accepted (partial)](docs/adr/0021-native-hosted-publishing.md)
 - [0022 - Access Control Model](docs/adr/0022-access-control-model.md)
-- [0023 - Git as a Dependency Source, proposed](docs/adr/0023-git-as-dependency-source.md)
+- [0023 - Git as a Dependency Source, accepted (partial)](docs/adr/0023-git-as-dependency-source.md)
 - [0024 - Supply-Chain Security Pipeline, accepted (partial)](docs/adr/0024-supply-chain-security-pipeline.md)
 - [0025 - Supply-Chain Enforcement Architecture (As-Built)](docs/adr/0025-supply-chain-enforcement-architecture.md)
 

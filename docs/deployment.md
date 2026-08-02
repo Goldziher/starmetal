@@ -225,6 +225,65 @@ bucket = "starmetal-packages"
 Additional OpenDAL options can be supplied under `[storage.options]` when a deployment needs a
 backend knob that is not modeled by the typed `s3` or `gcs` sections.
 
+## Git-Sourced Ecosystems (Go, Zig, Swift)
+
+Experimental, disabled by default. Go, Zig, and Swift resolve packages from mirrored git
+repositories rather than a package-index protocol (ADR-0023), so each has its own `[go]`/
+`[zig]`/`[swift]` config section instead of an `[upstream.*]` entry. Enable the matching build
+feature (or use `full`, which includes all three):
+
+```sh
+cargo build --release -p starmetal-cli --features go,zig,swift,backend-fs
+```
+
+Each ecosystem mirrors upstream git repositories into its own **mirror cache directory**
+(`go.mirror_cache_dir`, `zig.mirror_cache_dir`, `swift.mirror_cache_dir`; all default to
+`./starmetal-data/git-mirrors`). This directory holds bare repositories and fetch-freshness
+stamps — it must be writable by the server process and, like the OpenDAL artifact store, should
+be a persistent volume in a container deployment. It is a rebuildable cache: deleting it forces a
+fresh mirror clone on next request and does not lose any published data.
+
+```toml
+[go]
+enabled = true
+mirror_cache_dir = "/var/lib/starmetal/git-mirrors/go"
+
+[zig]
+enabled = true
+mirror_cache_dir = "/var/lib/starmetal/git-mirrors/zig"
+
+[swift]
+enabled = true
+mirror_cache_dir = "/var/lib/starmetal/git-mirrors/swift"
+```
+
+Go and Zig derive a package's git remote from the request itself (`github.com/user/repo`,
+`gitlab.com/user/repo`, `bitbucket.org/user/repo`, and `golang.org/x/name` for Go), so private
+mirrors or vanity import paths need an explicit override: `go.module_overrides` (module path or
+prefix to git URL) or `zig.repo_overrides` (repository path or prefix to git URL). Swift is
+different — a Swift registry identifier (`{scope}.{name}`) carries no host at all, so there is
+**no default host mapping**: every package the Swift proxy serves requires an explicit
+`swift.package_overrides` entry, or it cannot be resolved.
+
+```toml
+[go.module_overrides]
+"example.com/mod" = "https://git.internal.example.com/mod.git"
+
+[swift.package_overrides]
+"example.pkg" = "https://git.internal.example.com/example-pkg.git"
+```
+
+`file://` URLs are permitted in all three override maps for private mirrors or offline testing,
+since these are trusted operator configuration, not client-supplied paths.
+
+Run the matching live E2E task before treating any of these as ready for use:
+
+```sh
+task test:e2e:go
+task test:e2e:zig
+task test:e2e:swift
+```
+
 ## Metadata Store (Postgres)
 
 Experimental, disabled by default. Enabling `[metadata]` adds a Postgres-backed content model
@@ -292,6 +351,25 @@ Do not commit real tokens.
 `[auth]`, `[admin]`, and `[publishing]` tokens are the configuration surface; at startup they are
 migrated into `starmetal-authz`'s deny-by-default `Authorizer` grant model (ADR-0022), which the admin
 API and every publish adapter consult. There is no separate authz config to deploy.
+
+### OIDC (Static JWKS)
+
+Optional second identity backend (ADR-0022), disabled by default. It authenticates JWT bearer
+tokens against a static JWKS read once at startup — there is no JWKS-URL fetch or token refresh,
+so rotate keys by redeploying with an updated `jwks`/`jwks_file`. Requires the `oidc` build
+feature (included in `full`).
+
+```toml
+[oidc]
+enabled = true
+issuer = "https://issuer.example.com"
+audience = "starmetal"
+jwks_file = "/etc/starmetal/jwks.json"
+```
+
+Mount the JWKS file read-only alongside the config file. See
+[Configuration Reference](configuration.md#oidc-identity-static-jwks) for the full option
+reference.
 
 ## Admin API
 

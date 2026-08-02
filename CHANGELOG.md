@@ -9,6 +9,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Git-as-source ecosystems (ADR-0023): a feature-gated `starmetal-git` crate providing a
+  gitoxide-backed (`gix`) `GitMirror` port (bare-repo mirroring, ref/tag refresh with a
+  freshness TTL, tree/blob reads at a ref), plus experimental adapters that resolve dependencies
+  from a mirrored git repository instead of a package-index protocol: **Go** (GOPROXY module
+  proxy: `/@v/list`, `/@v/<v>.info`, `/@v/<v>.mod`, `/@v/<v>.zip`), **Zig** (`zig fetch` source
+  tarball at `GET /zig/{host}/{user}/{repo}/{ref}.tar.gz`), and **Swift** (Package Registry
+  protocol, SE-0292). Each has a live native-client E2E (`task test:e2e:go`, `test:e2e:zig`,
+  `test:e2e:swift`). Disabled by default; gated behind the `go`, `zig`, and `swift` build
+  features (included in `full`) and the separate `[go]`, `[zig]`, and `[swift]` config sections
+  (no single upstream base URL, so they are not `[upstream.*]` entries).
+- Repository kinds and facets (ADR-0019): `RepositoryKind` (`Proxy`/`Hosted`/`Group`) and a
+  `RecipeRegistry` drive repository mounting from `(kind, ecosystem)` recipes.
+  `RepositoryKind::Group` is a read-only virtual repository merging member proxies of the same
+  ecosystem — union version listings, first-match artifact resolution — configured via
+  `repositories` with `members`; a group cannot be published to.
+- SBOM generation (ADR-0024): CycloneDX 1.5 and SPDX 2.3 documents generated and stored per
+  artifact on publish (`supply_chain.sbom`), retrievable through the admin API.
+- Signature and provenance gate (ADR-0024): `supply_chain.require_signature` and
+  `require_provenance` gate serve and publish against Starmetal's own DSSE-signed in-toto/SLSA
+  provenance graph, failing closed on a missing signature or failing provenance. A `Verifier`
+  port is the seam for a future external cosign/sigstore backend.
+- Ingest-time quarantine (ADR-0024): `supply_chain.ingest_quarantine` holds a scan-blocked hosted
+  publish for operator review instead of hard-denying it; the same admin
+  `POST /admin/api/v1/quarantine/{digest}/promote` and `.../reject` endpoints complete or purge
+  the held publish.
+- Publish quota (ADR-0021): opt-in `supply_chain.quota` enforces per-`(ecosystem, namespace)`
+  version-count and byte ceilings via a reserve-then-reconcile ledger, denying with
+  `PolicyReason::QuotaExceeded` before a quota-exceeding publish writes any bytes.
+- Retention "both" resolution (ADR-0020): `metadata.retention_per_repository` joins the existing
+  per-ecosystem and global retention policies, resolved with precedence
+  per-repository > per-ecosystem > global, backed by a new `repository` attribution column on
+  each component.
+- Read-path authorization and audit log (ADR-0022): read requests now route through the
+  `Authorizer` port instead of the legacy flat-token check, emitting structured
+  `starmetal::audit` tracing events on every allow/deny decision. New
+  `GET /api/v1/components` browse endpoint authorizes `Action::Browse` and pushes the resulting
+  predicate into the metadata store's query, so listings are filtered in-query per principal.
+- Centralized policy-decision surfacing (ADR-0024/ADR-0025): a single
+  `PolicyReason::http_status` mapping in `starmetal-core::supply_chain`, applied uniformly by
+  every protocol adapter and the admin API, so the same policy denial always returns the same
+  HTTP status (e.g. `QuotaExceeded` now returns 413 instead of a flattened 403).
 - `starmetal-oidc` crate: an offline static-JWKS OIDC bearer validator (ADR-0022) that proves the
   `Authenticator` port is a clean seam for a second identity backend. `OidcAuthenticator` verifies JWT
   bearer tokens (RS256/ES256 only — `alg: none` and HMAC algorithms are rejected as an
