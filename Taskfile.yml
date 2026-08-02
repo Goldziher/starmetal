@@ -303,6 +303,8 @@ tasks:
       - cargo check -p starmetal-cli --no-default-features --features pq,backend-memory
       - cargo check -p starmetal-cli --no-default-features --features metadata,backend-memory
       - cargo check -p starmetal-cli --no-default-features --features scanner-osv,backend-memory
+      - cargo check -p starmetal-git
+      - cargo check -p starmetal-git --all-features
       - cargo check -p starmetal-cli --all-features
 
   deny:
