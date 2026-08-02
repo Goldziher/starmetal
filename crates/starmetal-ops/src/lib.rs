@@ -243,6 +243,10 @@ impl StarmetalRuntime {
         let nuget_upstream = register_nuget_upstream(&config, &mut clients);
         #[cfg(feature = "pub")]
         let pub_upstream = register_pub_upstream(&config, &mut clients);
+        // Go is not registered into `clients`/`CachingPackageService` at all (ADR-0023): the
+        // GOPROXY adapter reads through this mirror handle directly, never through PackageService.
+        #[cfg(feature = "go")]
+        let go_mirror = build_go_mirror(&config);
 
         let signing = SigningService::from_config(&config.signing)?;
         let service =
@@ -294,7 +298,10 @@ impl StarmetalRuntime {
         // are wired end-to-end (validate_mvp rejects others), so only proxy recipes are registered.
         let mut recipe_registry = RecipeRegistry::new();
         for repository in config.resolved_repositories() {
-            if repository.kind == RepositoryKind::Proxy {
+            // Go has no ProxyFacet recipe (ADR-0023): `build_app` mounts it unconditionally as a
+            // proxy repository instead of consulting the recipe registry, since its GOPROXY
+            // translation never goes through `CachingPackageService`.
+            if repository.kind == RepositoryKind::Proxy && repository.ecosystem != Ecosystem::Go {
                 recipe_registry.register(Arc::new(ProxyRecipe::new(
                     repository.ecosystem,
                     service.clone() as Arc<dyn ProxyFacet>,
@@ -379,6 +386,8 @@ impl StarmetalRuntime {
             nuget_upstream,
             #[cfg(feature = "pub")]
             pub_upstream,
+            #[cfg(feature = "go")]
+            go_mirror,
         };
 
         Ok(Self {
@@ -729,7 +738,7 @@ fn normalize_name(ecosystem: Ecosystem, name: &str) -> PackageName {
 }
 
 fn registry_statuses(config: &Config) -> Vec<RegistryStatus> {
-    [
+    let mut statuses: Vec<RegistryStatus> = [
         (Ecosystem::PyPI, "pypi", cfg!(feature = "pypi")),
         (Ecosystem::Npm, "npm", cfg!(feature = "npm")),
         (Ecosystem::Cargo, "cargo", cfg!(feature = "cargo-registry")),
@@ -751,7 +760,30 @@ fn registry_statuses(config: &Config) -> Vec<RegistryStatus> {
             artifact_url: upstream.and_then(|upstream| upstream.artifact_url.clone()),
         }
     })
-    .collect()
+    .collect();
+    // Go has no `[upstream]` entry (ADR-0023 — no single base URL); its status comes from `[go]`.
+    statuses.push(RegistryStatus {
+        ecosystem: Ecosystem::Go,
+        configured: true,
+        enabled: config.go.enabled,
+        compiled: cfg!(feature = "go"),
+        url: None,
+        artifact_url: None,
+    });
+    statuses
+}
+
+/// Construct the gitoxide-backed [`starmetal_git::GitMirror`] backing the Go module proxy.
+///
+/// Built unconditionally whenever the `go` feature is compiled in, mirroring how the other
+/// upstream clients are always constructed regardless of `enabled` — `config.go.enabled` only
+/// governs whether [`Config::resolved_repositories`] mounts the route that reaches it.
+#[cfg(feature = "go")]
+fn build_go_mirror(config: &Config) -> Arc<dyn starmetal_git::GitMirror> {
+    Arc::new(starmetal_git::GixMirror::new(
+        config.go.mirror_cache_dir.clone(),
+        std::time::Duration::from_secs(config.go.mirror_refresh_interval_secs),
+    ))
 }
 
 #[cfg(feature = "maven")]

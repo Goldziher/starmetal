@@ -18,6 +18,9 @@ maven = ["starmetal-adapters/maven"]
 rubygems = ["starmetal-adapters/rubygems"]
 nuget = ["starmetal-adapters/nuget"]
 pub = ["starmetal-adapters/pub"]
+# Only the `GitMirror` port is needed here (to type the state's mirror handle) — the concrete
+# gitoxide backend is selected in `starmetal-ops`.
+go = ["starmetal-adapters/go", "dep:starmetal-git"]
 
 [dependencies]
 axum.workspace = true
@@ -25,6 +28,7 @@ serde.workspace = true
 starmetal-adapters = { workspace = true, default-features = false }
 starmetal-authz.workspace = true
 starmetal-core.workspace = true
+starmetal-git = { workspace = true, optional = true }
 starmetal-storage = { workspace = true, default-features = false }
 tokio.workspace = true
 tower.workspace = true

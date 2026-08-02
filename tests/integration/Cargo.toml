@@ -11,6 +11,7 @@ ahash.workspace = true
 axum.workspace = true
 starmetal-adapters = { workspace = true, features = [
   "cargo-registry",
+  "go",
   "hex",
   "maven",
   "npm",
@@ -20,8 +21,10 @@ starmetal-adapters = { workspace = true, features = [
   "rubygems",
 ] }
 starmetal-core.workspace = true
+starmetal-git = { workspace = true, features = ["gix-backend"] }
 starmetal-server = { workspace = true, features = [
   "cargo-registry",
+  "go",
   "hex",
   "maven",
   "npm",
@@ -32,11 +35,11 @@ starmetal-server = { workspace = true, features = [
 ] }
 starmetal-service.workspace = true
 starmetal-storage = { workspace = true, features = ["backend-memory"] }
+tempfile.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
 bytes.workspace = true
 reqwest.workspace = true
 serde_json.workspace = true
-tempfile.workspace = true
 tracing-subscriber.workspace = true

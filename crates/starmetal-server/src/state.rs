@@ -97,6 +97,12 @@ pub struct UpstreamClients {
     pub nuget_upstream: Arc<starmetal_adapters::nuget::upstream::NuGetUpstreamClient>,
     #[cfg(feature = "pub")]
     pub pub_upstream: Arc<starmetal_adapters::pubdev::upstream::PubUpstreamClient>,
+    /// Git-mirror handle backing the Go module proxy (ADR-0023). Unlike the other upstream
+    /// clients, this is a port trait object (`starmetal_git::GitMirror`) rather than a concrete
+    /// adapter type: the concrete gitoxide-backed implementation is selected in `starmetal-ops`, so
+    /// neither this crate nor `starmetal-adapters` depends on a git library.
+    #[cfg(feature = "go")]
+    pub go_mirror: Arc<dyn starmetal_git::GitMirror>,
 }
 
 impl AppState {
@@ -487,6 +493,17 @@ impl starmetal_adapters::nuget::HasNuGetState for AppState {
             ecosystem,
             name,
         )
+    }
+}
+
+#[cfg(feature = "go")]
+impl starmetal_adapters::go::HasGoState for AppState {
+    fn config(&self) -> &Arc<Config> {
+        &self.config
+    }
+
+    fn git_mirror(&self) -> &Arc<dyn starmetal_git::GitMirror> {
+        &self.upstreams.go_mirror
     }
 }
 

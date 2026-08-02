@@ -25,6 +25,7 @@ use starmetal_core::policy::PolicyConfig;
 use starmetal_core::ports::{PackageService, PublishingService, StatisticsService};
 use starmetal_core::publishing::{ProtocolMetadata, PublishRequest, PublishedArtifact};
 use starmetal_core::repository::RepositoryKind;
+use starmetal_git::GixMirror;
 use starmetal_server::state::{AppState, GroupMount, UpstreamClients};
 use starmetal_service::{CachingPackageService, GroupPackageService};
 use starmetal_storage::OpenDalStorage;
@@ -76,6 +77,12 @@ fn unused_upstreams() -> UpstreamClients {
         rubygems_upstream: Arc::new(RubyGemsUpstreamClient::new(dummy.clone())),
         nuget_upstream: Arc::new(NuGetUpstreamClient::new(dummy.clone())),
         pub_upstream: Arc::new(PubUpstreamClient::new(dummy)),
+        // The group flow never reaches Go (this test mounts only a PyPI group), so a mirror over a
+        // leaked-but-never-touched cache dir is a fine placeholder.
+        go_mirror: Arc::new(GixMirror::new(
+            tempfile::tempdir().expect("go mirror cache tempdir").keep(),
+            std::time::Duration::from_secs(300),
+        )),
     }
 }
 

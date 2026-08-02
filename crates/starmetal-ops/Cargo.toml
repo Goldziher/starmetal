@@ -15,6 +15,10 @@ maven = ["starmetal-adapters/maven", "starmetal-server/maven"]
 rubygems = ["starmetal-adapters/rubygems", "starmetal-server/rubygems"]
 nuget = ["starmetal-adapters/nuget", "starmetal-server/nuget"]
 pub = ["starmetal-adapters/pub", "starmetal-server/pub"]
+# Selects the gitoxide-backed GitMirror implementation for the Go module proxy — the only place in
+# the workspace that picks a concrete git-library backend (`starmetal-adapters` and
+# `starmetal-server` see only the `GitMirror` port).
+go = ["starmetal-adapters/go", "starmetal-server/go", "dep:starmetal-git", "starmetal-git/gix-backend"]
 backend-fs = ["starmetal-storage/backend-fs"]
 backend-memory = ["starmetal-storage/backend-memory"]
 backend-s3 = ["starmetal-storage/backend-s3"]
@@ -40,6 +44,7 @@ schemars.workspace = true
 serde.workspace = true
 starmetal-adapters = { workspace = true, default-features = false }
 starmetal-core.workspace = true
+starmetal-git = { workspace = true, optional = true }
 starmetal-managers = { workspace = true, optional = true }
 starmetal-metadata = { workspace = true, optional = true }
 starmetal-oidc = { workspace = true, optional = true }
