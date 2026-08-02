@@ -4,8 +4,10 @@ use std::net::SocketAddr;
 use std::os::unix::fs::PermissionsExt;
 use std::sync::Arc;
 
+mod content_fake;
 mod git_fixture;
 
+pub use content_fake::ContentBrowseFake;
 pub use git_fixture::{
     FIXTURE_COMMIT_DATE, GitFixture, GitFixtureBuilder, go_module_fixture, require_go, require_swift, require_tool,
     require_zig, swift_package_fixture, zig_package_fixture,
@@ -25,6 +27,7 @@ use starmetal_adapters::rubygems::upstream::RubyGemsUpstreamClient;
 #[cfg(feature = "oidc")]
 use starmetal_core::authz::{Authenticator, CompositeAuthenticator};
 use starmetal_core::config::Config;
+use starmetal_core::content::ContentBrowse;
 use starmetal_core::package::Ecosystem;
 use starmetal_core::ports::{PackageService, UpstreamClient};
 use starmetal_core::publishing::{PublishTokenConfig, TokenScope};
@@ -199,6 +202,7 @@ pub struct TestServerBuilder {
     verifier: Option<Arc<dyn Verifier>>,
     signing_key: Option<TestSigningKey>,
     group_members: HashMap<String, Vec<Arc<dyn PackageService>>>,
+    content_browse: Option<Arc<dyn ContentBrowse>>,
 }
 
 impl TestServerBuilder {
@@ -210,6 +214,7 @@ impl TestServerBuilder {
             verifier: None,
             signing_key: None,
             group_members: HashMap::new(),
+            content_browse: None,
         }
     }
 
@@ -247,6 +252,17 @@ impl TestServerBuilder {
         self
     }
 
+    /// Attach an in-memory content-browse handle (ADR-0022), making `GET /api/v1/components`
+    /// reachable so the browse route's authorization path runs instead of the default
+    /// content-model-absent 404. This is the lightweight seam the Postgres-backed content store
+    /// (milestone M5) will supersede; here it lets a test drive the authorizer's pushed-down browse
+    /// predicate — and the OIDC/flat authentication in front of it — over real HTTP. Pass a
+    /// [`ContentBrowseFake`] seeded with the components the test expects to filter.
+    pub fn with_content_browse(mut self, content_browse: Arc<dyn ContentBrowse>) -> Self {
+        self.content_browse = Some(content_browse);
+        self
+    }
+
     /// Inject a publish signing key (ADR-0004/ADR-0024), wiring `config.signing` so the real
     /// `SigningService::from_config` path loads it (private-key-permission check included). Applied
     /// before the `configure` closure runs, so a test can further customize `config.signing` (e.g.
@@ -279,6 +295,7 @@ impl TestServerBuilder {
             verifier,
             signing_key,
             mut group_members,
+            content_browse,
         } = self;
 
         let storage = OpenDalStorage::memory().expect("failed to create memory storage");
@@ -509,10 +526,12 @@ impl TestServerBuilder {
             .with_group_mounts(Arc::new(group_mounts))
             .with_quarantine(quarantine)
             .with_ingest_quarantine(ingest_quarantine)
-            .with_sbom(sbom);
-        // Postgres-backed content store (ADR-0020): deferred to milestone M5, so `with_content_store`
-        // is never wired here and `content_maintenance`/`content_browse` stay at the `AppState`
-        // default of `None`.
+            .with_sbom(sbom)
+            // In-memory browse handle (ADR-0022) when a test opted in via `with_content_browse`, so
+            // `GET /api/v1/components` reaches the authorizer instead of the content-model-absent 404.
+            .with_content_browse(content_browse);
+        // The Postgres-backed content store (ADR-0020) that also drives `content_maintenance` is
+        // deferred to milestone M5; `content_maintenance` stays at the `AppState` default of `None`.
 
         // Compose the OIDC backend ahead of the flat-token authenticator (ADR-0022), mirroring
         // `starmetal-ops`'s `app_state` (~:545-555), using the inline `config.oidc.jwks` only — no

@@ -5306,12 +5306,15 @@ name = "starmetal-integration-tests"
 version = "0.3.0"
 dependencies = [
  "ahash",
+ "async-trait",
  "axum",
+ "base64 0.23.0",
  "blake3",
  "bytes",
  "ed25519-dalek 3.0.0",
  "flate2",
  "hex",
+ "p256",
  "pkcs8 0.11.0",
  "reqwest",
  "serde_json",
@@ -5326,6 +5329,7 @@ dependencies = [
  "tar",
  "tempfile",
  "tokio",
+ "tracing",
  "tracing-subscriber",
  "zip",
 ]
