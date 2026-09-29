@@ -3,7 +3,7 @@ version = '4.0'
 name = 'starmetal'
 description = 'Multi-language high-performance self-hosted package registry and registry proxy'
 gitignore = true
-presets = ["claude", "codex"]
+presets = ["claude", "codex", "opencode"]
 builtins = ['rust', 'default-commands']
 
 [[marketplaces]]

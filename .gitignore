@@ -12,10 +12,19 @@ packages/pypi/*.egg-info/
 
 # BEGIN ai-rulez (DO NOT EDIT - managed by ai-rulez)
 .ai-rulez/.generated-manifest.json
-.claude/
-.codex/
+.claude/agents/
+.claude/plugins.json
+.claude/settings.json
+.claude/skills/
+.codex/agents/
+.codex/commands/
+.codex/plugins.json
+.codex/skills/
 .mcp.json
+.opencode/agents/
+.opencode/skills/
 AGENTS.md
 CLAUDE.md
 # END ai-rulez
+
 poly.local.toml
