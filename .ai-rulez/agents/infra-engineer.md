@@ -1,7 +1,13 @@
 ---
-name: infra-engineer
-description: "Storage, middleware, and server infrastructure specialist"
-model: sonnet
+type: Reference
+title: Infra Engineer
+description: Storage, middleware, and server infrastructure specialist
+x-ai-rulez:
+  kind: agent
+  id: infra-engineer
+  metadata:
+    model: sonnet
+    name: infra-engineer
 ---
 
 # Infrastructure Engineer

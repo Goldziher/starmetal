@@ -1,7 +1,13 @@
 ---
-name: core-architect
-description: "Domain modeling and core business logic specialist for starmetal-core"
-model: opus
+type: Reference
+title: Core Architect
+description: Domain modeling and core business logic specialist for starmetal-core
+x-ai-rulez:
+  kind: agent
+  id: core-architect
+  metadata:
+    model: opus
+    name: core-architect
 ---
 
 # Core Architect

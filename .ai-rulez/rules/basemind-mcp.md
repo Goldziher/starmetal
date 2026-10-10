@@ -1,5 +1,11 @@
 ---
-priority: high
+type: Decision
+title: Basemind Mcp
+x-ai-rulez:
+  kind: rule
+  id: basemind-mcp
+  metadata:
+    priority: high
 ---
 
 # Basemind MCP

@@ -1,5 +1,11 @@
 ---
-priority: high
+type: Concept
+title: Conventions
+x-ai-rulez:
+  kind: context
+  id: conventions
+  metadata:
+    priority: high
 ---
 
 # Conventions

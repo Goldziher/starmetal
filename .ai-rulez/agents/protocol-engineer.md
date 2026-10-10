@@ -1,7 +1,13 @@
 ---
-name: protocol-engineer
-description: "Registry protocol adapter specialist for PyPI, npm, Cargo, Hex, Maven, RubyGems, NuGet, and pub.dev"
-model: sonnet
+type: Reference
+title: Protocol Engineer
+description: Registry protocol adapter specialist for PyPI, npm, Cargo, Hex, Maven, RubyGems, NuGet, and pub.dev
+x-ai-rulez:
+  kind: agent
+  id: protocol-engineer
+  metadata:
+    model: sonnet
+    name: protocol-engineer
 ---
 
 # Protocol Engineer

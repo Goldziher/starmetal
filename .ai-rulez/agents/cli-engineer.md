@@ -1,7 +1,13 @@
 ---
-name: cli-engineer
-description: "CLI binary and user-facing command specialist"
-model: sonnet
+type: Reference
+title: Cli Engineer
+description: CLI binary and user-facing command specialist
+x-ai-rulez:
+  kind: agent
+  id: cli-engineer
+  metadata:
+    model: sonnet
+    name: cli-engineer
 ---
 
 # CLI Engineer

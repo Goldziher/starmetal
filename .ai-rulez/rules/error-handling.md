@@ -1,5 +1,11 @@
 ---
-priority: high
+type: Decision
+title: Error Handling
+x-ai-rulez:
+  kind: rule
+  id: error-handling
+  metadata:
+    priority: high
 ---
 
 # Error Handling

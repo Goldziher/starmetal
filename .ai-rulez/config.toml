@@ -1,9 +1,9 @@
 
-version = '4.0'
+version = "5.0"
 name = 'starmetal'
 description = 'Multi-language high-performance self-hosted package registry and registry proxy'
 gitignore = true
-presets = ["claude", "codex", "opencode"]
+presets = ["claude", "codex", "opencode", "pi"]
 builtins = ['rust', 'default-commands']
 
 [[marketplaces]]
@@ -21,3 +21,7 @@ enabled = true
 name = "ai-rulez"
 command = "npx"
 args = ["-y", "ai-rulez@latest", "mcp"]
+
+# Pinned by `ai-rulez migrate v5`: the 4.x default. Remove this line to take the v5 default.
+[header]
+hashes = "full"

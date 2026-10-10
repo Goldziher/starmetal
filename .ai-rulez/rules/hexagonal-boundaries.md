@@ -1,5 +1,11 @@
 ---
-priority: critical
+type: Decision
+title: Hexagonal Boundaries
+x-ai-rulez:
+  kind: rule
+  id: hexagonal-boundaries
+  metadata:
+    priority: critical
 ---
 
 # Hexagonal Architecture Boundaries

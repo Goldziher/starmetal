@@ -1,7 +1,13 @@
 ---
-name: qa-engineer
-description: "Testing, CI, and quality assurance specialist"
-model: sonnet
+type: Reference
+title: Qa Engineer
+description: Testing, CI, and quality assurance specialist
+x-ai-rulez:
+  kind: agent
+  id: qa-engineer
+  metadata:
+    model: sonnet
+    name: qa-engineer
 ---
 
 # QA Engineer
