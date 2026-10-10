@@ -6,11 +6,15 @@ version = "0.4.0"
 edition = "2024"
 description = "High-performance, self-hosted multi-language package registry and pull-through registry proxy for private software supply chains."
 license = "MIT"
+license-file = "../../../LICENSE"
+authors = ["Na'aman Hirschfeld <nhirschfeld@gmail.com>"]
 repository = "https://github.com/Goldziher/starmetal"
 homepage = "https://github.com/Goldziher/starmetal"
 readme = "README.md"
 keywords = ["package-registry", "registry-proxy", "package-cache", "self-hosted", "supply-chain"]
 categories = ["command-line-utilities", "development-tools"]
+
+include = ["/Cargo.toml", "/Cargo.lock", "/README.md", "/LICENSE*", "/src/**"]
 
 [[bin]]
 name = "sm"
