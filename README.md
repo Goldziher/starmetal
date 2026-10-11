@@ -91,7 +91,7 @@ download.
 ```bash
 docker run --rm -p 8080:8080 -v starmetal-data:/var/lib/starmetal ghcr.io/goldziher/starmetal:latest
 brew install Goldziher/tap/starmetal
-npm install -g starmetal
+pnpm add -g starmetal
 pipx install starmetal
 ```
 

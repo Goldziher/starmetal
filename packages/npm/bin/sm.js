@@ -32,7 +32,7 @@ if (!ensureBinaryExists()) {
   console.error(
     "sm: native binary is unavailable.\n" +
       "The postinstall step that downloads the binary from GitHub releases may have failed.\n" +
-      "Try reinstalling with `npm install -g starmetal`, or use Homebrew, Docker, or cargo from source.",
+      "Try reinstalling with `pnpm add -g starmetal`, or use Homebrew, Docker, or cargo from source.",
   );
   process.exit(1);
 }

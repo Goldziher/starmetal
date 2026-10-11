@@ -1,15 +1,10 @@
 <!--
-🤖 AI-RULEZ :: GENERATED FILE — DO NOT EDIT
-Project: starmetal
-Source: .ai-rulez/config.toml
-
-NEVER edit this file - modify .ai-rulez/ content instead
-Use MCP server: npx -y ai-rulez@latest mcp
-Regenerate: ai-rulez generate
-
-Docs: https://github.com/Goldziher/ai-rulez
-Content-Hash: blake3:a44cf2d5f3d8d8752eaeb3c86d6e1dc1caaa502ac4fc199912a72ecf057e5a15
-Source-Hash: blake3:00df54d0603ff4168e7876ac752d5e6fb2a67d96f556e45f66c2d2b087163903
+AI-RULEZ :: GENERATED FILE — DO NOT EDIT
+Source: .ai-rulez/config.toml and .ai-rulez/
+Regenerate: pnpm dlx ai-rulez@5.0.1 generate
+Use MCP server: pnpm dlx ai-rulez@5.0.1 mcp
+Content-Hash: blake3:8630af4380628a819a3434327ef30e065f3244461ad03b849759f1ef26e0ef28
+Source-Hash: blake3:61390e139f4c5065b0591c85c83e8c154f2b47a218169ab7fc26ce3af5c520b5
 -->
 
 # starmetal
@@ -80,8 +75,8 @@ One logical change per commit — never mix unrelated changes. Small, focused co
 **Priority:** high
 
 - Keep Basemind configured as an ai-rulez plugin through `[[plugins]]`; do not add Basemind as a raw `mcp_server`.
-- Configure the ai-rulez MCP server with `npx -y ai-rulez@latest mcp` so agents can manage `.ai-rulez/` safely.
-- Edit ai-rulez source files first, then regenerate outputs with `npx -y ai-rulez@latest generate --gitignore`.
+- Configure the ai-rulez MCP server with `pnpm dlx ai-rulez@latest mcp` so agents can manage `.ai-rulez/` safely.
+- Edit ai-rulez source files first, then regenerate outputs with `pnpm dlx ai-rulez@latest generate --gitignore`.
 - When Basemind MCP tools are available, prefer them for code navigation and repository context before falling back to shell tools:
   `outline`, `search_symbols`, `find_references`, `find_callers`, and `workspace_grep` for code search;
   `recent_changes`, `blame_file`, `blame_symbol`, `diff_file`, `diff_outline`, and `commits_touching` for git history;

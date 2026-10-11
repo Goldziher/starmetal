@@ -30,7 +30,7 @@ task release:tag VERSION=0.2.0
 Tag publishing is handled by `.github/workflows/publish.yaml`:
 
 - crates.io uses `rust-lang/crates-io-auth-action` and crates.io trusted publishing.
-- npm uses `npm publish --provenance`; configure npm trusted publishing for project `starmetal`,
+- npm uses `pnpm publish --provenance`; configure npm trusted publishing for project `starmetal`,
   owner `Goldziher/starmetal`, workflow `publish.yaml`.
 - PyPI uses `pypa/gh-action-pypi-publish` with environment `pypi`; configure PyPI trusted
   publishing for project `starmetal`, owner `Goldziher/starmetal`, workflow `publish.yaml`, and

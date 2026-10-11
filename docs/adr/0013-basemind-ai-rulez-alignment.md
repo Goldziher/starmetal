@@ -22,7 +22,7 @@ Rules:
 
 - Do not edit `AGENTS.md` directly.
 - Edit `.ai-rulez/` source files when AI instructions need to change.
-- Run `task setup:ai-rulez` or `npx -y ai-rulez@latest generate` after AI-Rulez source changes.
+- Run `task setup:ai-rulez` or `pnpm dlx ai-rulez@latest generate` after AI-Rulez source changes.
 - Keep Basemind-provided guidance subordinate to repo ADRs, tests, and generated support matrices.
 - Do not let AI instructions describe registry adapters or publishing as more supported than ADR-0011
   and ADR-0009 allow.

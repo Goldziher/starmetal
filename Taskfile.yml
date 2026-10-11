@@ -101,7 +101,7 @@ tasks:
       - ./docker/proxy-e2e/run.sh --native
 
   docker:proxy:e2e:pnpm:
-    desc: Run pnpm Docker proxy E2E tests for read-through cache and local npm publish/install
+    desc: Run pnpm Docker proxy E2E tests for read-through cache and local pnpm publish/install
     cmds:
       - ./docker/proxy-e2e/run.sh --pnpm
 
@@ -173,7 +173,7 @@ tasks:
   setup:ai-rulez:
     desc: Generate AI assistant configuration files
     cmds:
-      - npx -y ai-rulez@latest generate --gitignore
+      - pnpm dlx ai-rulez@latest generate --gitignore
 
   test:generate:
     desc: Generate integration tests from fixtures

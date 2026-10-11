@@ -2,7 +2,13 @@
   "name": "starmetal",
   "version": "0.4.0",
   "description": "High-performance, self-hosted multi-language package registry and pull-through registry proxy for private software supply chains.",
-  "keywords": ["package-registry", "package-cache", "registry-proxy", "self-hosted", "supply-chain"],
+  "keywords": [
+    "package-registry",
+    "package-cache",
+    "registry-proxy",
+    "self-hosted",
+    "supply-chain"
+  ],
   "homepage": "https://github.com/Goldziher/starmetal#readme",
   "bugs": {
     "url": "https://github.com/Goldziher/starmetal/issues"
@@ -16,19 +22,25 @@
   "bin": {
     "sm": "bin/sm.js"
   },
-  "files": ["README.md", "bin/", "install.js", "index.js"],
+  "files": [
+    "README.md",
+    "bin/",
+    "install.js",
+    "index.js"
+  ],
   "main": "index.js",
   "scripts": {
     "postinstall": "node install.js"
   },
   "dependencies": {
-    "adm-zip": "^0.5.16",
-    "tar": "^7.5.16"
+    "adm-zip": "^0.6.1",
+    "tar": "^7.5.22"
   },
   "publishConfig": {
     "access": "public"
   },
   "engines": {
     "node": ">=22"
-  }
+  },
+  "packageManager": "pnpm@12.11.2"
 }
