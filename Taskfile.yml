@@ -40,7 +40,7 @@ tasks:
   setup:hooks:
     desc: Install poly git hooks
     cmds:
-      - poly hooks install
+      - task: governance:hooks
 
   docker:build:
     desc: Build the local Starmetal container image
@@ -413,3 +413,26 @@ tasks:
       - echo "Updating pre-commit hooks..."
       - poly hooks update
       - echo "All dependencies updated"
+
+  governance:hooks:
+    desc: Provision pinned native governance hooks without replacing local preferences
+    cmds:
+      - >-
+        python3 -c 'from pathlib import Path;
+        p = Path("poly.local.toml");
+        p.exists() or p.write_text("[hook_preferences]\nchannels = [\"system\"]\n")'
+      - poly hooks update
+      - poly hooks install
+
+  governance:generate:
+    desc: Generate native AI governance outputs
+    cmds:
+      - ai-rulez generate --no-local --strict-config
+
+  governance:check:
+    desc: Validate native AI governance and freshness
+    cmds:
+      - ai-rulez migrate okf --check
+      - ai-rulez validate --strict --no-local
+      - ai-rulez lock --check
+      - ai-rulez generate --check --no-local --strict-config
