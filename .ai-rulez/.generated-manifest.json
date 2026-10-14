@@ -73,5 +73,31 @@
     ".mcp.json": [],
     ".pi/mcp.json": [],
     "opencode.json": []
+  },
+  "servers": {
+    ".codex/config.toml": [
+      [
+        "mcp_servers",
+        "ai-rulez"
+      ]
+    ],
+    ".mcp.json": [
+      [
+        "mcpServers",
+        "ai-rulez"
+      ]
+    ],
+    ".pi/mcp.json": [
+      [
+        "mcpServers",
+        "ai-rulez"
+      ]
+    ],
+    "opencode.json": [
+      [
+        "mcp",
+        "ai-rulez"
+      ]
+    ]
   }
 }

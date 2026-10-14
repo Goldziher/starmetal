@@ -24,8 +24,6 @@ packages/pypi/*.egg-info/
 .pi/agents/
 .pi/mcp.json
 .pi/prompts/
-AGENTS.md
-CLAUDE.md
 opencode.json
 # END ai-rulez
 

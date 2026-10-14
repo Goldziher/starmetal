@@ -1,0 +1,150 @@
+# ai-rulez.lock: pins remote includes, installed skills and authored content. Commit this file.
+# Refresh it with `ai-rulez lock`; `ai-rulez generate --locked` fails when it is stale.
+
+version = 1
+ai_rulez_version = '5.3.0'
+scope = 'all'
+tree = 'sha256:fa21c995882b8c85a9f9e267cc4e3bb1b793299b2bf2fef5a35ee5c9829f3702'
+
+[[served]]
+name = 'code-quality-standards'
+source = 'builtin://universal/code-quality/skills/code-quality-standards/SKILL.md'
+commit = ''
+digest = 'sha256:0126cc7c038b3e343ee56866949865dd799bde0de4884ba0bdfeb28655fa8134'
+
+[[served]]
+name = 'dependency-awareness'
+source = 'builtin://universal/security/skills/dependency-awareness/SKILL.md'
+commit = ''
+digest = 'sha256:e108ed344fe20948fcbda61b96266026bb9b2318df089964c088c0455294f8d3'
+
+[[served]]
+name = 'error-handling'
+source = 'builtin://universal/code-quality/skills/error-handling/SKILL.md'
+commit = ''
+digest = 'sha256:fddb5f980e8d98c91b459be578cdea7e0fc765d8219f66088892e936f0d1e349'
+
+[[served]]
+name = 'incremental-approach'
+source = 'builtin://universal/token-efficiency/skills/incremental-approach/SKILL.md'
+commit = ''
+digest = 'sha256:ff56cbdc4813ee427a3b6f7d23f6b41b82b7c3cc8dc2b64ccd256a90e75e02f8'
+
+[[served]]
+name = 'iterate'
+source = ''
+commit = ''
+digest = 'sha256:5cb87728d1449fadda6d8557501fcc0823509c60a37058ce4d2dda123296f67c'
+
+[[served]]
+name = 'owasp-quick-reference'
+source = 'builtin://universal/security/skills/owasp-quick-reference/SKILL.md'
+commit = ''
+digest = 'sha256:de4f3b595b88e88d7bff0c342b5253637d08d79b3baebe888bd465f133ff512c'
+
+[[served]]
+name = 'parallelize'
+source = ''
+commit = ''
+digest = 'sha256:2700d984ba10baa2e16ed19b48cc8fd5f7351776f2ce03f6712394d3912f91cb'
+
+[[served]]
+name = 'rust-conventions'
+source = 'builtin://languages/rust/skills/rust-conventions/SKILL.md'
+commit = ''
+digest = 'sha256:0a7c23c09a7fc29a7237fc838ab1491504f51f8d90fc114b52c1d914bf52214d'
+
+[[served]]
+name = 'task-runner'
+source = 'builtin://universal/token-efficiency/skills/task-runner/SKILL.md'
+commit = ''
+digest = 'sha256:9f3cadda648798b049869c463d7a69f6f7b5953bcad2a43ea02e645d1ec3e19b'
+
+[[served]]
+name = 'tdd-workflow'
+source = 'builtin://universal/testing/skills/tdd-workflow/SKILL.md'
+commit = ''
+digest = 'sha256:90ddeb170606792596979de6444904f88b5fbcdc52ea2462109401865d17f6ec'
+
+[[served]]
+name = 'testing-conventions'
+source = 'builtin://universal/testing/skills/testing-conventions/SKILL.md'
+commit = ''
+digest = 'sha256:562385aa3c563ffbf327d6776932b43175052b00ec4418695ed6c50c335f1686'
+
+[[item]]
+kind = 'agent'
+id = 'cli-engineer'
+path = 'agents/cli-engineer.md'
+digest = 'sha256:8c8d3923bcf1cc9de6c664c534f705148defb2652241fba8ea9997a732be0b68'
+
+[[item]]
+kind = 'agent'
+id = 'core-architect'
+path = 'agents/core-architect.md'
+digest = 'sha256:eaff99db5227d8ad6abdc70ec7a4d881b6c6fbe6a5535bf4d6688132a4f22cf8'
+
+[[item]]
+kind = 'agent'
+id = 'infra-engineer'
+path = 'agents/infra-engineer.md'
+digest = 'sha256:23ded5ec62345f4cc0d328012385067522093e76e40e35cfeb00a3e56176d2d6'
+
+[[item]]
+kind = 'agent'
+id = 'protocol-engineer'
+path = 'agents/protocol-engineer.md'
+digest = 'sha256:603ce848d4833974909de31b421cc6ea20605b6437c4a61b4d113ccb3e71fed4'
+
+[[item]]
+kind = 'agent'
+id = 'qa-engineer'
+path = 'agents/qa-engineer.md'
+digest = 'sha256:3fb7d8584502ee2729d1d32655fafe776834188ecd4759a8d0a6250aaf1bfcb3'
+
+[[item]]
+kind = 'context'
+id = 'architecture'
+path = 'context/architecture.md'
+digest = 'sha256:130dcd20ec079e4da58331a3abfecbdb836a3cc4220a84b14ba95d73b5b368ad'
+
+[[item]]
+kind = 'context'
+id = 'conventions'
+path = 'context/conventions.md'
+digest = 'sha256:42aa9c03805443938fce5b20941b294393aad61b1e163d81a0094da40a96eb00'
+
+[[item]]
+kind = 'context'
+id = 'poly'
+path = 'context/poly.md'
+digest = 'sha256:da4c74a626f369da986d69839df18999d003f1be02b2239cc07764cd8496b1e0'
+
+[[item]]
+kind = 'rule'
+id = 'basemind-mcp'
+path = 'rules/basemind-mcp.md'
+digest = 'sha256:b1edcd7e1cd06a70274e22b43f898e7bdf1e8c8ee36376457aa7e35bfa753aae'
+
+[[item]]
+kind = 'rule'
+id = 'error-handling'
+path = 'rules/error-handling.md'
+digest = 'sha256:a20e5b1ce2efc35e63450da360122c878a648bfce69f10d1c557211f3dcdd785'
+
+[[item]]
+kind = 'rule'
+id = 'feature-flags'
+path = 'rules/feature-flags.md'
+digest = 'sha256:db58915722f48f9e03ce68512811c1ad0c4e9c78abac67c2c5cd159fc6b9d469'
+
+[[item]]
+kind = 'rule'
+id = 'hexagonal-boundaries'
+path = 'rules/hexagonal-boundaries.md'
+digest = 'sha256:227a25ba2822e389a74c734fa95624de12e491a85dfd3255099ee3eb121837c8'
+
+[[item]]
+kind = 'settings'
+id = 'mcp-servers'
+digest = 'sha256:b6acdcb9b3d3c11a1ce5e1aee64fb1923b44c105a3f8534abc4b82e46dad2a73'

@@ -173,7 +173,7 @@ tasks:
   setup:ai-rulez:
     desc: Generate AI assistant configuration files
     cmds:
-      - pnpm dlx ai-rulez@latest generate --gitignore
+      - ai-rulez generate --no-local --strict-config
 
   test:generate:
     desc: Generate integration tests from fixtures
@@ -411,5 +411,5 @@ tasks:
       - echo "Updating Rust dependencies..."
       - cargo upgrade --incompatible
       - echo "Updating pre-commit hooks..."
-      - prek autoupdate
+      - poly hooks update
       - echo "All dependencies updated"
