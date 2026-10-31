@@ -1,12 +1,12 @@
 # syntax=docker/dockerfile:1.7
 
-ARG RUST_IMAGE=cgr.dev/chainguard/rust:latest-dev@sha256:da65b4401105bc6ba992ed22d6a43fc261e31fe73797cfbb7514e301f0295e9d
-ARG RUNTIME_IMAGE=cgr.dev/chainguard/glibc-dynamic:latest@sha256:ea9eab0adc5716fb9937ab60155a31bce9cbc8b56e6f2e21fb9af9218be195b7
+ARG RUST_IMAGE=cgr.dev/chainguard/rust:latest-dev@sha256:36c7dcdaf98640742966fa3b05c8896286268988e016c305ee038db28641ead4
+ARG RUNTIME_IMAGE=cgr.dev/chainguard/glibc-dynamic:latest@sha256:709673274b417a48f56374da8a7633ef7b2f5b27e34612ce98a335737318cc94
 # Git binary source. The Go/Zig/Swift proxies (ADR-0023) fetch through gix, which is built
 # blocking-network-client only (no native transport) and shells out to `git upload-pack` for every
 # fetch — including file:// and git:// — so the runtime image must ship a git binary or those
 # ecosystems return 502. Same wolfi/glibc lineage as the runtime, so its shared objects load as-is.
-ARG GIT_IMAGE=cgr.dev/chainguard/git:latest@sha256:866f7a1d877f2d809df031d550088429c7f45c19fe390c94fcf99128fee12f16
+ARG GIT_IMAGE=cgr.dev/chainguard/git:latest@sha256:9af245693971eacc8414e52060ddaab20387a50908bb72fb3f142ba0bcf5d003
 
 FROM ${GIT_IMAGE} AS git
 

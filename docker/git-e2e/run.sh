@@ -26,8 +26,8 @@ Environment:
   STARMETAL_GIT_E2E_IMAGE        Image tag to build and test (default: starmetal:local)
   STARMETAL_GIT_E2E_SKIP_BUILD   Skip `docker build` and reuse the existing image (default: 0)
   GIT_BUILDER_IMAGE              git-CLI image that builds the fixtures (default: alpine/git:latest)
-  GO_CLIENT_IMAGE               Go toolchain image (default: golang:1.26-bookworm)
-  SWIFT_CLIENT_IMAGE            Swift toolchain image (default: swift:6.1)
+  GO_CLIENT_IMAGE               Go toolchain image (default: golang:1.27.3-trixie)
+  SWIFT_CLIENT_IMAGE            Swift toolchain image (default: swift:6.4.2-trixie)
   ZIG_VERSION                    Zig version for the self-built client image (default: 0.16.0)
   ZIG_SHA256                     sha256 of the Zig x86_64-linux tarball (pinned; must match ZIG_VERSION)
   INSPECT_IMAGE                  Volume-inspection image (default: cgr.dev/chainguard/busybox:latest)
@@ -46,8 +46,8 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 image="${STARMETAL_GIT_E2E_IMAGE:-starmetal:local}"
 skip_build="${STARMETAL_GIT_E2E_SKIP_BUILD:-0}"
 git_builder_image="${GIT_BUILDER_IMAGE:-alpine/git:latest}"
-go_client_image="${GO_CLIENT_IMAGE:-golang:1.26-bookworm}"
-swift_client_image="${SWIFT_CLIENT_IMAGE:-swift:6.1}"
+go_client_image="${GO_CLIENT_IMAGE:-golang:1.27.3-trixie}"
+swift_client_image="${SWIFT_CLIENT_IMAGE:-swift:6.4.2-trixie}"
 zig_version="${ZIG_VERSION:-0.16.0}"
 zig_sha256="${ZIG_SHA256:-70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00}"
 inspect_image="${INSPECT_IMAGE:-cgr.dev/chainguard/busybox:latest}"
@@ -159,7 +159,7 @@ build_zig_client_image() {
   local dockerfile="${tmp_dir}/Dockerfile.zig-client"
   # No official Zig image exists, so build a minimal one from a pinned tarball (version + sha256).
   cat >"$dockerfile" <<'EOF'
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 ARG ZIG_VERSION
 ARG ZIG_SHA256
 RUN apt-get update \

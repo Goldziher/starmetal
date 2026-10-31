@@ -26,16 +26,16 @@ Runs deterministic Docker-based StarMetal proxy E2E tests:
 
 Environment:
   STARMETAL_PROXY_IMAGE       Image tag to build and test (default: starmetal:local)
-  PYTHON_IMAGE                Python client/upstream image (default: python:3.12-slim)
+  PYTHON_IMAGE                Python client/upstream image (default: python:3.15.2-slim-trixie)
   INSPECT_IMAGE               Volume inspection image (default: cgr.dev/chainguard/busybox:latest)
-  NODE_IMAGE                  npm client image (default: node:22-slim)
-  RUST_CLIENT_IMAGE           Cargo client image (default: rust:1-slim)
-  MAVEN_IMAGE                 Maven client image (default: maven:3.9-eclipse-temurin-21)
-  RUBY_IMAGE                  RubyGems/Bundler client image (default: ruby:3.3-slim)
-  DOTNET_IMAGE                NuGet client image (default: mcr.microsoft.com/dotnet/sdk:8.0)
+  NODE_IMAGE                  npm client image (default: node:26.13.0-trixie-slim)
+  RUST_CLIENT_IMAGE           Cargo client image (default: rust:1.99.1-slim-trixie)
+  MAVEN_IMAGE                 Maven client image (default: maven:3.9-eclipse-temurin-25)
+  RUBY_IMAGE                  RubyGems/Bundler client image (default: ruby:4.0.9-slim-trixie)
+  DOTNET_IMAGE                NuGet client image (default: mcr.microsoft.com/dotnet/sdk:10.0)
   DART_IMAGE                  pub.dev client image (default: dart:stable)
-  PNPM_IMAGE                  pnpm base image (default: ghcr.io/pnpm/pnpm:12.11.2)
-  PNPM_NODE_VERSION           Node.js version installed into pnpm client image (default: 22)
+  PNPM_IMAGE                  pnpm base image (default: ghcr.io/pnpm/pnpm:12.17.0)
+  PNPM_NODE_VERSION           Node.js version installed into pnpm client image (default: 26)
   STARMETAL_PNPM_PUBLISH_TOKEN pnpm publish token for --pnpm mode (default: pnpm-publish-token)
   KEEP_DOCKER_PROXY_E2E=1     Keep containers/network/volume/tempdir for debugging
   SM_PROXY_E2E_ARTIFACTS      Directory for logs and stored-file listings
@@ -68,16 +68,16 @@ fi
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 image="${STARMETAL_PROXY_IMAGE:-starmetal:local}"
 skip_build="${STARMETAL_PROXY_E2E_SKIP_BUILD:-0}"
-python_image="${PYTHON_IMAGE:-python:3.12-slim}"
+python_image="${PYTHON_IMAGE:-python:3.15.2-slim-trixie}"
 inspect_image="${INSPECT_IMAGE:-cgr.dev/chainguard/busybox:latest}"
-node_image="${NODE_IMAGE:-node:22-slim}"
-rust_client_image="${RUST_CLIENT_IMAGE:-rust:1-slim}"
-maven_image="${MAVEN_IMAGE:-maven:3.9-eclipse-temurin-21}"
-ruby_image="${RUBY_IMAGE:-ruby:3.3-slim}"
-dotnet_image="${DOTNET_IMAGE:-mcr.microsoft.com/dotnet/sdk:8.0}"
+node_image="${NODE_IMAGE:-node:26.13.0-trixie-slim}"
+rust_client_image="${RUST_CLIENT_IMAGE:-rust:1.99.1-slim-trixie}"
+maven_image="${MAVEN_IMAGE:-maven:3.9-eclipse-temurin-25}"
+ruby_image="${RUBY_IMAGE:-ruby:4.0.9-slim-trixie}"
+dotnet_image="${DOTNET_IMAGE:-mcr.microsoft.com/dotnet/sdk:10.0}"
 dart_image="${DART_IMAGE:-dart:stable}"
-pnpm_image="${PNPM_IMAGE:-ghcr.io/pnpm/pnpm:12.11.2}"
-pnpm_node_version="${PNPM_NODE_VERSION:-22}"
+pnpm_image="${PNPM_IMAGE:-ghcr.io/pnpm/pnpm:12.17.0}"
+pnpm_node_version="${PNPM_NODE_VERSION:-26}"
 token="${STARMETAL_PROXY_E2E_TOKEN:-proxy-e2e-token}"
 pnpm_publish_token="${STARMETAL_PNPM_PUBLISH_TOKEN:-pnpm-publish-token}"
 run_id="${RANDOM}-${RANDOM}"
@@ -250,8 +250,8 @@ EOF
 build_pnpm_client_image() {
   local dockerfile="${tmp_dir}/Dockerfile.pnpm-client"
   cat >"$dockerfile" <<'EOF'
-ARG PNPM_BASE_IMAGE=ghcr.io/pnpm/pnpm:12.11.2
-ARG PNPM_NODE_VERSION=22
+ARG PNPM_BASE_IMAGE=ghcr.io/pnpm/pnpm:12.17.0
+ARG PNPM_NODE_VERSION=26
 FROM ${PNPM_BASE_IMAGE}
 RUN pnpm runtime set node "${PNPM_NODE_VERSION}" -g
 WORKDIR /workspace
