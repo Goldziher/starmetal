@@ -8,13 +8,13 @@ StarMetal publishes the public package name `starmetal` while keeping the instal
 Use one version across Cargo, npm, PyPI, Docker tags, GitHub release assets, and Homebrew:
 
 ```sh
-task release:sync-version VERSION=0.2.0
+mise run release:sync-version 0.2.0
 ```
 
 Open a PR or push the version-sync commit, then run the dry-run release workflows from GitHub:
 
 ```sh
-task release:dry-run VERSION=0.2.0 REF=main
+mise run release:dry-run 0.2.0 main
 ```
 
 Dry runs build and smoke-test platform archives, generate checksums, dry-run package-manager builds,
@@ -24,7 +24,7 @@ updating Homebrew.
 Cut the release only after the dry-run workflows and normal CI are green:
 
 ```sh
-task release:tag VERSION=0.2.0
+mise run release:tag 0.2.0
 ```
 
 Tag publishing is handled by `.github/workflows/publish.yaml`:
@@ -48,7 +48,7 @@ The initial `0.0.1` npm, PyPI, and crates.io packages have already been publishe
 holds. Check their status with:
 
 ```sh
-task release:namespaces
+mise run release:namespaces
 ```
 
 ## Docker
@@ -67,7 +67,7 @@ gh workflow run publish-docker.yaml -f tag=v0.2.0 -f ref=main -f dry_run=true
 Publish for a tag:
 
 ```sh
-task release:tag VERSION=0.2.0
+mise run release:tag 0.2.0
 ```
 
 The default image is:

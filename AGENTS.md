@@ -8,7 +8,7 @@ Use MCP server: pnpm dlx ai-rulez@5.3.0 mcp
 Regenerate: ai-rulez generate
 
 Docs: https://github.com/Goldziher/ai-rulez
-Content-Hash: blake3:65e6a23ca1ac6cd4afae847031e0b358d762c4f380af663e1e8e63e66072284d
+Content-Hash: blake3:e7ed20c036126e5fb9585b4026948797d32658413a29d8d5e351015b243fa421
 -->
 
 # starmetal
@@ -22,6 +22,12 @@ Multi-language high-performance self-hosted package registry and registry proxy
 **Priority:** critical
 
 Be concise and precise — no fluff, no emojis, no unnecessary checklists. PR descriptions: what changed and why in 1-3 sentences, not a bullet-point essay. Issue comments: answer the question directly. Code review: state the problem and suggest the fix, skip praise and filler. Never pad output to appear thorough.
+
+### customer-data-boundary
+
+**Priority:** critical
+
+Customer data and anything derived from it stays in controlled systems: never a public or secret Gist, paste site, file-sharing service, image host, third-party dashboard or LLM playground. Write local debugging output to /tmp or another untracked location, never a tracked directory.
 
 ### hexagonal-boundaries
 
@@ -54,19 +60,19 @@ Never force-push a shared branch. Pull before pushing. Use `--force-with-lease`,
 
 **Priority:** critical
 
-Never hardcode a secret, API key, token or password — read it from the environment or a secret manager. Never log or echo a sensitive value. Refuse to commit a file containing one.
+Never hardcode a secret, API key, token or password — read it from the environment or a secret manager. Never log or echo a sensitive value. Refuse to commit a file containing one. Never give a missing secret a default value; fail with a clear error instead.
 
 ### verification-before-completion
 
 **Priority:** critical
 
-Verify before acting and before claiming done. Check current state (branch, working directory, running processes) before changing it. Run the test and see it pass, check the file exists, watch the build succeed. Evidence before assertions — if you cannot verify, say so instead of claiming success.
+Verify before acting and before claiming done. Check current state (branch, working directory, running processes) before changing it. Run the test and see it pass, check the file exists, watch the build succeed. Evidence before assertions — if you cannot verify, say so instead of claiming success. A green result may test nothing: confirm the fixture is valid input and the test was collected before trusting it.
 
 ### agent-workflow
 
 **Priority:** high
 
-Delegate non-trivial implementation, research and file exploration to subagents, launching independent ones in a single message. Never trust a subagent summary — it describes intent, not what happened; read the actual file changes and fix what is wrong before reporting done. Iterate: delegate → review → fix → verify.
+Delegate non-trivial implementation, research and file exploration to subagents, launching independent ones in a single message. Never trust a subagent summary — it describes intent, not what happened; read the actual file changes and fix what is wrong before reporting done. Iterate: delegate → review → fix → verify. Give each subagent a self-contained brief (goal, files, constraints, what to verify and what to return). Run risky or long-lived parallel work in its own git worktree, and check you are in the right one before edits. When a finished subagent has a large context, start a fresh one with a short brief of what changed and what to check instead of resuming it, because resuming re-writes its whole history to the cache.
 
 ### atomic-commits
 
@@ -111,6 +117,12 @@ Conventional commits: `feat:`, `fix:`, `chore:`, `refactor:`, `docs:`, `test:`, 
 - Feature flags are additive — combining features must never break builds.
 - Use `#[cfg(feature = "...")]` on modules, not on individual functions.
 - When adding a new adapter or backend, add corresponding feature flags and update `starmetal-cli`'s `full` feature.
+
+### generated-files
+
+**Priority:** high
+
+Never hand-edit a generated file (lock files, generated specs, rendered config). Edit the source and rerun the generator, also to resolve a merge conflict.
 
 ### input-validation
 
@@ -223,16 +235,16 @@ Architecture Decision Records are in `docs/adr/`. Read them before making archit
 ## Build & Test
 
 ```bash
-task fmt:check
-task clippy
-task test:all
-task schema:check
-task schema:validate
-task conformance
-task feature:check
-task docker:integration
-task security
-task ci
+mise run fmt:check
+mise run clippy
+mise run test:all
+mise run schema:check
+mise run schema:validate
+mise run conformance
+mise run feature:check
+mise run docker:integration
+mise run security
+mise run ci
 ```
 
 ## Commit step

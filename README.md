@@ -105,15 +105,15 @@ layout is finalized.
 Requirements:
 
 - Rust edition 2024, Rust 1.85+
-- [Task](https://taskfile.dev/) for the documented workflow commands
-- [sccache](https://github.com/mozilla/sccache), optional but used automatically by Taskfile cargo commands
+- [mise](https://mise.jdx.dev/) for the toolchain and the documented workflow commands
+- [sccache](https://github.com/mozilla/sccache), optional but used automatically by the mise cargo tasks
 
 ```bash
-# First-time setup: hooks, sccache check, generated AI config
-task setup
+# First-time setup: tools, sccache, hooks, generated AI config
+mise run setup
 
 # Build and run tests
-task ci
+mise run ci
 
 # Install the local sm binary from this checkout
 cargo install --path crates/starmetal-cli --bin sm
@@ -138,13 +138,13 @@ sm package fetch pypi six 1.16.0 six-1.16.0.tar.gz
 Run live native-client E2E before treating an experimental read workflow as ready:
 
 ```bash
-task test:e2e:pypi
-task test:e2e:npm
-task test:e2e:cargo
-task test:e2e:hex
+mise run test:e2e:pypi
+mise run test:e2e:npm
+mise run test:e2e:cargo
+mise run test:e2e:hex
 ```
 
-`task ci:live-e2e` runs live schema freshness plus the PyPI, npm, Cargo, and Hex read gates. Maven,
+`mise run ci:live-e2e` runs live schema freshness plus the PyPI, npm, Cargo, and Hex read gates. Maven,
 RubyGems, NuGet, and pub.dev have separate live tasks and must pass before their workflows are
 promoted.
 
@@ -167,7 +167,7 @@ docker run --rm starmetal:local mcp serve
 Run the deterministic local proxy gate:
 
 ```bash
-task docker:proxy:e2e
+mise run docker:proxy:e2e
 ```
 
 That gate builds the image, runs a local fixture upstream plus StarMetal on an isolated Docker
@@ -306,18 +306,18 @@ See [docs/architecture.md](docs/architecture.md) for diagrams and component deta
 Normal PR-safe gate:
 
 ```bash
-task fmt:check
-task clippy
-task test:all
-task schema:check
-task schema:validate
-task conformance
-task docker:proxy:e2e
-task security
-task ci
+mise run fmt:check
+mise run clippy
+mise run test:all
+mise run schema:check
+mise run schema:validate
+mise run conformance
+mise run docker:proxy:e2e
+mise run security
+mise run ci
 ```
 
-`task docker:proxy:e2e` uses disposable client containers, not host package-manager CLIs. Live E2E
+`mise run docker:proxy:e2e` uses disposable client containers, not host package-manager CLIs. Live E2E
 and live Docker pressure tests are intentionally separate from normal PR CI because they require
 public registry access.
 

@@ -2,7 +2,7 @@
 
 ## AI governance
 
-Install ai-rulez 5.3.0 and Poly, then run `task governance:hooks`.
+Install [mise](https://mise.jdx.dev/), run `mise install`, then run `mise run governance:hooks`.
 Installing governance hooks requires Python 3.11 or newer. CI uses the reviewed
 5.3.0 source revision `1dd46d774f156f3d170ecd1b702598b12d1eaf5b`.
 

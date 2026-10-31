@@ -27,7 +27,7 @@ docker build -t starmetal:local .
 Run the deterministic container proxy E2E test:
 
 ```sh
-task docker:proxy:e2e
+mise run docker:proxy:e2e
 ```
 
 This starts a local fixture upstream, starts the StarMetal image with a mounted private config and
@@ -42,7 +42,7 @@ responses.
 Run the live PyPI container pressure test when you want public-network pressure coverage:
 
 ```sh
-task docker:pressure:live
+mise run docker:pressure:live
 ```
 
 The live pressure test starts the image with a named volume, warms the PyPI route, fetches a real
@@ -93,14 +93,14 @@ docker build \
 cargo build --release -p starmetal-cli
 ```
 
-For development workflows, prefer the Taskfile:
+For development workflows, prefer the mise tasks:
 
 ```sh
-task setup
-task sccache:stats
+mise run setup
+mise run sccache:stats
 ```
 
-`sccache` is optional. The Taskfile uses it automatically when it is installed.
+`sccache` is optional. The mise tasks use it automatically when it is on PATH.
 
 ## Minimal Config
 
@@ -163,10 +163,10 @@ url = "https://pub.dev"
 Run matching live E2E tasks before treating any experimental workflow as ready:
 
 ```sh
-task test:e2e:maven
-task test:e2e:rubygems
-task test:e2e:nuget
-task test:e2e:pub
+mise run test:e2e:maven
+mise run test:e2e:rubygems
+mise run test:e2e:nuget
+mise run test:e2e:pub
 ```
 
 ## Start the Server
@@ -286,9 +286,9 @@ no HTTP git transport, so `https://` git remotes are not supported regardless of
 Run the matching live E2E task before treating any of these as ready for use:
 
 ```sh
-task test:e2e:go
-task test:e2e:zig
-task test:e2e:swift
+mise run test:e2e:go
+mise run test:e2e:zig
+mise run test:e2e:swift
 ```
 
 ## Metadata Store (Postgres)
@@ -425,22 +425,22 @@ Offline checks:
 ```sh
 cargo fmt --check
 cargo test --workspace
-task schema:check
-task schema:validate
-task conformance
-task docker:proxy:e2e
+mise run schema:check
+mise run schema:validate
+mise run conformance
+mise run docker:proxy:e2e
 ```
 
-Use `task docker:proxy:e2e:http`, `task docker:proxy:e2e:native`, or
-`task docker:proxy:e2e:pnpm` for targeted Docker proxy debugging.
+Use `mise run docker:proxy:e2e:http`, `mise run docker:proxy:e2e:native`, or
+`mise run docker:proxy:e2e:pnpm` for targeted Docker proxy debugging.
 
 Live read E2E:
 
 ```sh
-task test:e2e:pypi
-task test:e2e:npm
-task test:e2e:cargo
-task test:e2e:hex
+mise run test:e2e:pypi
+mise run test:e2e:npm
+mise run test:e2e:cargo
+mise run test:e2e:hex
 ```
 
 These live tests require network access and native package-manager CLIs.

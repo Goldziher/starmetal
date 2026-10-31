@@ -27,18 +27,18 @@ This directory contains Starmetal's registry schema evidence and generated JSON 
 ## Commands
 
 ```sh
-task schema:fetch
-task schema:generate
-task schema:refresh
-task schema:check
-task schema:check-live
-task schema:validate
-task conformance
+mise run schema:fetch
+mise run schema:generate
+mise run schema:refresh
+mise run schema:check
+mise run schema:check-live
+mise run schema:validate
+mise run conformance
 ```
 
-Use `task schema:refresh` when intentionally updating upstream artifacts or generated schemas. Use
-`task schema:check` in review and CI to fail on stale committed artifacts, generated schemas, or
-manifest hashes without depending on mutable live upstream state. Use `task schema:check-live` when
+Use `mise run schema:refresh` when intentionally updating upstream artifacts or generated schemas. Use
+`mise run schema:check` in review and CI to fail on stale committed artifacts, generated schemas, or
+manifest hashes without depending on mutable live upstream state. Use `mise run schema:check-live` when
 explicitly comparing committed fetched artifacts against current upstream sources.
 
 ## Conformance Requirement

@@ -392,9 +392,9 @@ schemas/
 Use:
 
 ```sh
-task schema:check
-task schema:validate
-task conformance
+mise run schema:check
+mise run schema:validate
+mise run conformance
 ```
 
 Runtime upstream-response validation is deferred. Schemas support documentation and tests; they do

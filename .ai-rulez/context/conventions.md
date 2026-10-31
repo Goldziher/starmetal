@@ -13,16 +13,16 @@ x-ai-rulez:
 ## Build & Test
 
 ```bash
-task fmt:check
-task clippy
-task test:all
-task schema:check
-task schema:validate
-task conformance
-task feature:check
-task docker:integration
-task security
-task ci
+mise run fmt:check
+mise run clippy
+mise run test:all
+mise run schema:check
+mise run schema:validate
+mise run conformance
+mise run feature:check
+mise run docker:integration
+mise run security
+mise run ci
 ```
 
 ## Commit step
