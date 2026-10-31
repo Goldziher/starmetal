@@ -56,7 +56,7 @@ jobs:
       - uses: xberg-io/actions/setup-mise@v1
         with:
           tools: go zig
-      # Swift is not installed through mise. ~keep
+      # Swift is not installed through mise. Held on v2: the v3 tag is only a 3.0.0 beta. ~keep
       - uses: swift-actions/setup-swift@v2
         with:
           swift-version: "6.1"
@@ -81,7 +81,7 @@ jobs:
           SM_GIT_E2E_ARTIFACTS: .artifacts/docker-git-e2e
       - name: Upload Docker git E2E logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: docker-git-e2e-logs
           path: .artifacts/docker-git-e2e
