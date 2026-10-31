@@ -29,7 +29,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: xberg-io/actions/setup-mise@v1
         with:
-          tools: python node pnpm ruby java maven
+          tools: python node ruby
       # dotnet, Dart and BEAM are not installed through mise. ~keep
       - uses: actions/setup-dotnet@v6
         with:
