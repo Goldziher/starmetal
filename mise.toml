@@ -29,5 +29,301 @@ cargo-deny = "0.20.2"
 # empty RUSTC_WRAPPER means no wrapper. Not in [tools]: template exec does not see mise tool paths. ~keep
 RUSTC_WRAPPER = "{{ exec(command='command -v sccache || true') }}"
 
+[tasks.setup]
+description = "First-time setup — install tools and hooks and generate AI config"
+run = [{ task = "setup:sccache" }, "mise install", { task = "governance:hooks" }, { task = "governance:generate" }]
+
+[tasks."setup:sccache"]
+description = "Install sccache globally through mise if it is not already available"
+run = "command -v sccache >/dev/null || mise use --global sccache@0.19.0"
+
+[tasks."sccache:stats"]
+description = "Show sccache compiler cache statistics"
+run = "sccache --show-stats"
+
+[tasks."docker:build"]
+description = "Build the local Starmetal container image"
+run = "docker build --tag starmetal:local ."
+
+[tasks."docker:pressure:live"]
+description = "Build the image and pressure-test Docker against live PyPI"
+alias = "docker:pressure"
+run = [{ task = "docker:build" }, "./docker/pressure-test.sh"]
+
+[tasks."docker:proxy:e2e"]
+description = "Run deterministic Docker proxy HTTP, native-client, and pnpm E2E tests"
+env = { STARMETAL_PROXY_E2E_SKIP_BUILD = "1" }
+run = [
+  { task = "docker:build" },
+  "./docker/proxy-e2e/run.sh --http",
+  "./docker/proxy-e2e/run.sh --native",
+  "./docker/proxy-e2e/run.sh --pnpm",
+]
+
+[tasks."docker:proxy:e2e:http"]
+description = "Run deterministic Docker proxy HTTP E2E tests for all implemented registries"
+run = "./docker/proxy-e2e/run.sh --http"
+
+[tasks."docker:proxy:e2e:native"]
+description = "Run native-client Docker proxy E2E tests without read auth"
+run = "./docker/proxy-e2e/run.sh --native"
+
+[tasks."docker:proxy:e2e:pnpm"]
+description = "Run pnpm Docker proxy E2E tests for read-through cache and local pnpm publish/install"
+alias = "docker:publish:e2e"
+run = "./docker/proxy-e2e/run.sh --pnpm"
+
+[tasks."docker:git:e2e"]
+description = "Run the deterministic Docker git-as-source E2E (Go/Zig/Swift, file:// upstream, offline flip)"
+env = { STARMETAL_GIT_E2E_SKIP_BUILD = "1" }
+run = [{ task = "docker:build" }, "./docker/git-e2e/run.sh"]
+
+[tasks."docker:proxy:e2e:live"]
+description = "Run live Docker proxy E2E tests when available"
+run = "./docker/proxy-e2e/run.sh --live"
+
+[tasks."docker:integration"]
+description = "Run Docker smoke and deterministic proxy integration tests"
+run = [{ task = "docker:smoke" }, { task = "docker:proxy:e2e" }]
+
+[tasks."docker:run"]
+description = "Run Starmetal with filesystem storage in a Docker volume"
+run = "docker run --rm --publish 8080:8080 --volume starmetal-data:/var/lib/starmetal starmetal:local"
+
+[tasks."docker:publish:ghcr"]
+description = "Build and push the Starmetal image to GitHub Container Registry"
+run = "./scripts/publish-docker-ghcr.sh --push"
+
+[tasks."release:namespaces"]
+description = "Dry-run the npm, PyPI, and crates.io namespace packages"
+run = "./scripts/release-namespaces.sh --dry-run"
+
+[tasks."release:namespaces:publish"]
+description = "Publish the npm, PyPI, and crates.io namespace packages"
+run = "./scripts/release-namespaces.sh --publish"
+
+[tasks."release:sync-version"]
+description = "Sync Cargo, npm, PyPI, and wrapper versions for a release"
+usage = 'arg "<version>" help="Release version, e.g. 0.2.0"'
+run = './scripts/release-bump.sh "{{usage.version}}"'
+
+[tasks."release:dry-run"]
+description = "Dispatch package and Docker dry-run release workflows"
+usage = '''
+arg "<version>" help="Release version, e.g. 0.2.0"
+arg "[ref]" default="main" help="Git ref the dry-run workflows build"
+'''
+run = './scripts/release-dry-run.sh "{{usage.version}}" "{{usage.ref}}"'
+
+[tasks."release:tag"]
+description = "Create and push a release tag; package and Docker workflows publish from the tag"
+usage = 'arg "<version>" help="Release version, e.g. 0.2.0"'
+run = './scripts/release-tag.sh "{{usage.version}}"'
+
+[tasks."test:generate"]
+description = "Generate integration tests from fixtures"
+run = [
+  "cargo run -p starmetal-test-generator -- --fixtures crates/starmetal-core/testing_data --output crates/starmetal-core/tests/generated_tests.rs",
+  "cargo fmt --all",
+]
+
+[tasks."schema:fetch"]
+description = "Download pinned official registry schema/spec artifacts"
+run = "cargo run -p starmetal-schema-manager -- fetch"
+
+[tasks."schema:generate"]
+description = "Generate Starmetal JSON schemas and schema manifest"
+run = "cargo run -p starmetal-schema-manager -- generate"
+
+[tasks."schema:refresh"]
+description = "Download upstream schema/spec artifacts and regenerate schemas"
+run = "cargo run -p starmetal-schema-manager -- refresh"
+
+[tasks."schema:check"]
+description = "Verify fetched schema/spec artifacts and generated schemas are current"
+run = [
+  "cargo run -p starmetal-schema-manager -- fetch --check",
+  "cargo run -p starmetal-schema-manager -- generate --check",
+]
+
+[tasks."schema:check-live"]
+description = "Compare fetched schema/spec artifacts with current upstream sources"
+run = "cargo run -p starmetal-schema-manager -- fetch --check --live"
+
+[tasks."schema:validate"]
+description = "Validate schema files against representative fixtures"
+run = "cargo test -p starmetal-core --test schema_validation"
+
+[tasks."db:generate"]
+description = "Regenerate typed SQL access code from schema and queries (scythe)"
+run = ["scythe generate", "cargo fmt -p starmetal-metadata"]
+
+[tasks."db:check"]
+description = "Validate SQL queries against the schema and lint (scythe)"
+run = "scythe check"
+
+[tasks."test:metadata"]
+description = "Run Postgres-backed content-store tests (requires Docker)"
+run = "cargo test -p starmetal-metadata -- --ignored --test-threads=1"
+
+[tasks."test:content-store"]
+description = "Run the full Postgres-backed content-store surface across crates (requires Docker)"
+run = [
+  { task = "test:metadata" },
+  "cargo test -p starmetal-service --test content_publish -- --ignored --test-threads=1",
+  "cargo test -p starmetal-integration-tests --features metadata --test content_store_http -- --ignored --test-threads=1",
+]
+
+[tasks.conformance]
+description = "Run fixture-based registry conformance tests"
+run = "cargo test -p starmetal-conformance-tests"
+
+[tasks."test:e2e"]
+description = "Run live native-client E2E tests for all registries"
+run = "cargo test -p starmetal-integration-tests -- --ignored --test-threads=1"
+
+[tasks."test:e2e:pypi"]
+description = "Run live PyPI/pip E2E tests"
+run = "cargo test -p starmetal-integration-tests --test pypi_pip -- --ignored --test-threads=1"
+
+[tasks."test:e2e:npm"]
+description = "Run live npm E2E tests"
+run = "cargo test -p starmetal-integration-tests --test npm -- --ignored --test-threads=1"
+
+[tasks."test:e2e:cargo"]
+description = "Run live Cargo E2E tests"
+run = "cargo test -p starmetal-integration-tests --test cargo_registry -- --ignored --test-threads=1"
+
+[tasks."test:e2e:hex"]
+description = "Run live Hex/mix E2E tests"
+run = "cargo test -p starmetal-integration-tests --test hex -- --ignored --test-threads=1"
+
+[tasks."test:e2e:maven"]
+description = "Run live Maven E2E tests"
+run = "cargo test -p starmetal-integration-tests --test maven -- --ignored --test-threads=1"
+
+[tasks."test:e2e:rubygems"]
+description = "Run live RubyGems/Bundler E2E tests"
+run = "cargo test -p starmetal-integration-tests --test rubygems -- --ignored --test-threads=1"
+
+[tasks."test:e2e:nuget"]
+description = "Run live NuGet/dotnet E2E tests"
+run = "cargo test -p starmetal-integration-tests --test nuget -- --ignored --test-threads=1"
+
+[tasks."test:e2e:pub"]
+description = "Run live pub.dev/dart E2E tests"
+run = "cargo test -p starmetal-integration-tests --test pubdev -- --ignored --test-threads=1"
+
+[tasks."test:e2e:go"]
+description = "Run live Go module proxy (go get/go mod download) E2E tests"
+run = "cargo test -p starmetal-integration-tests --test go -- --ignored --test-threads=1"
+
+[tasks."test:e2e:zig"]
+description = "Run live Zig tarball proxy (zig fetch) E2E tests"
+run = "cargo test -p starmetal-integration-tests --test zig -- --ignored --test-threads=1"
+
+[tasks."test:e2e:swift"]
+description = "Run live Swift Package Registry (swift package resolve) E2E tests"
+run = "cargo test -p starmetal-integration-tests --test swift -- --ignored --test-threads=1"
+
+[tasks."test:e2e:git"]
+description = "Run deterministic git-as-source (Go/Zig/Swift) E2E tests through hermetic file:// fixtures (requires go/zig/swift toolchains)"
+run = [{ task = "test:e2e:go" }, { task = "test:e2e:zig" }, { task = "test:e2e:swift" }]
+
+[tasks."fmt:check"]
+description = "Check Rust formatting"
+run = "cargo fmt --all -- --check"
+
+[tasks.clippy]
+description = "Run clippy with warnings denied"
+run = "cargo clippy --workspace --all-targets --all-features -- -D warnings"
+
+[tasks.build]
+description = "Build the workspace"
+run = "cargo build --workspace"
+
+[tasks.deny]
+description = "Run cargo-deny policy checks"
+run = "cargo deny check all"
+
+[tasks.audit]
+description = "Run cargo-audit with documented temporary ignores from audit.toml"
+run = "cargo audit --ignore RUSTSEC-2023-0071 --ignore RUSTSEC-2026-0194 --ignore RUSTSEC-2026-0195"
+
+[tasks.security]
+description = "Run Rust dependency policy and advisory checks"
+run = [{ task = "deny" }, { task = "audit" }]
+
+[tasks.generate]
+description = "Regenerate committed artifacts"
+run = [{ task = "schema:generate" }, { task = "test:generate" }]
+
+[tasks.check]
+description = "Run PR-safe offline checks and tests"
+run = [{ task = "schema:check" }, { task = "schema:validate" }, { task = "conformance" }, { task = "test:all" }]
+
+[tasks.lint]
+description = "Run poly formatting and lint checks across the repository"
+run = ["poly fmt --check .", "poly lint ."]
+
+[tasks.ci]
+description = "Run PR-safe CI checks"
+run = [
+  { task = "fmt:check" },
+  { task = "clippy" },
+  { task = "build" },
+  { task = "feature:check" },
+  { task = "check" },
+  { task = "security" },
+]
+
+[tasks."ci:live-e2e"]
+description = "Run live upstream checks and MVP native-client E2E tests"
+run = [
+  { task = "schema:check-live" },
+  { task = "test:e2e:pypi" },
+  { task = "test:e2e:npm" },
+  { task = "test:e2e:cargo" },
+  { task = "test:e2e:hex" },
+]
+
+[tasks."test:all"]
+description = "Run all tests"
+run = "cargo test --workspace"
+
+[tasks.update]
+description = "Update all dependencies and tools"
+# cargo upgrade comes from cargo-edit (cargo install cargo-edit --locked); it is not part of stock
+# cargo. ~keep
+run = ["cargo upgrade --incompatible", "poly hooks update"]
+
+# Defined, not aliased: the polyrepo root's setup:hooks and setup:ai-rulez would shadow an alias. ~keep
+[tasks."setup:hooks"]
+description = "Install poly git hooks"
+run = [{ task = "governance:hooks" }]
+
+[tasks."setup:ai-rulez"]
+description = "Generate AI assistant configuration files"
+run = [{ task = "governance:generate" }]
+
+[tasks."governance:hooks"]
+description = "Update the pinned governance hook sources and install them"
+run = ["poly hooks update", { task = "governance:hooks:install" }]
+
+[tasks."governance:generate"]
+description = "Generate native AI governance outputs"
+tools = { node = "26.12.1" }
+run = "npx -y ai-rulez@latest generate --no-local --strict-config"
+
+[tasks."governance:check"]
+description = "Validate native AI governance and freshness"
+tools = { node = "26.12.1" }
+run = [
+  "npx -y ai-rulez@latest migrate okf --check",
+  "npx -y ai-rulez@latest validate --strict --no-local",
+  "npx -y ai-rulez@latest lock --check",
+  "npx -y ai-rulez@latest generate --check --no-local --strict-config",
+]
+
 [task_config]
 includes = ["mise-tasks", "mise-tasks/shared.toml"]

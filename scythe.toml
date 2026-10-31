@@ -1,5 +1,5 @@
 # scythe SQL -> Rust code generation (https://github.com/Goldziher/scythe).
-# Write SQL in crates/*/sql, then `task db:generate` (or `scythe generate`) to
+# Write SQL in crates/*/sql, then `mise run db:generate` (or `scythe generate`) to
 # regenerate the committed `src/generated/queries.rs`. Generation is static — it
 # never connects to a database.
 

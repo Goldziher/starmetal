@@ -41,7 +41,7 @@ Environment:
   SM_PROXY_E2E_ARTIFACTS      Directory for logs and stored-file listings
 
 Notes:
-  task docker:proxy:e2e runs --http, --native, and --pnpm.
+  mise run docker:proxy:e2e runs --http, --native, and --pnpm.
   --http covers Bearer auth, CORS, response limits, URL rewriting, and cache assertions.
   --live runs the existing live PyPI Docker pressure test against the built image.
   --native uses no read-auth because package-manager support for Bearer read auth is uneven.

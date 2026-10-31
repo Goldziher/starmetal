@@ -18,7 +18,7 @@ fi
 current_version="$(grep -E '^\[workspace\.package\]' -A3 Cargo.toml | grep -E '^version = ' | head -1 | cut -d'"' -f2)"
 if [[ "$current_version" != "$VERSION" ]]; then
 	echo "Cargo workspace version is $current_version, expected $VERSION." >&2
-	echo "Run: task release:sync-version VERSION=$VERSION" >&2
+	echo "Run: mise run release:sync-version $VERSION" >&2
 	exit 1
 fi
 
