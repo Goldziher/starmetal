@@ -31,29 +31,29 @@ mkdir -p "$upstream_dir"
 # Commit the working tree at $1 into a fresh repo, tag it $2, and bare-clone it to
 # $upstream_dir/$3.git. `git clone --bare` copies HEAD, branches, and tags.
 build_repo() {
-	work="$1"
-	tag="$2"
-	name="$3"
-	git -C "$work" init -q -b main
-	git -C "$work" add -A
-	git -C "$work" commit -q -m "release 1.0.0"
-	git -C "$work" tag "$tag"
-	git clone -q --bare "$work" "${upstream_dir}/${name}.git"
+  work="$1"
+  tag="$2"
+  name="$3"
+  git -C "$work" init -q -b main
+  git -C "$work" add -A
+  git -C "$work" commit -q -m "release 1.0.0"
+  git -C "$work" tag "$tag"
+  git clone -q --bare "$work" "${upstream_dir}/${name}.git"
 }
 
 # --- Go module: example.com/mod, tag v1.0.0 ------------------------------------------------------
 go_work="$(mktemp -d)"
 printf 'module example.com/mod\n\ngo 1.21\n' >"${go_work}/go.mod"
 printf 'package mod\n\n// Greet returns a fixed greeting.\nfunc Greet() string { return "hello" }\n' \
-	>"${go_work}/greet.go"
+  >"${go_work}/greet.go"
 build_repo "$go_work" "v1.0.0" "go"
 
 # --- Zig package: example.com/pkg, tag v1.0.0 ----------------------------------------------------
 zig_work="$(mktemp -d)"
 printf '.{\n    .name = .fixture,\n    .version = "1.0.0",\n    .fingerprint = 0x5e540eeeedcbb0d,\n    .paths = .{""},\n}\n' \
-	>"${zig_work}/build.zig.zon"
+  >"${zig_work}/build.zig.zon"
 printf 'const std = @import("std");\npub fn build(b: *std.Build) void {\n    _ = b;\n}\n' \
-	>"${zig_work}/build.zig"
+  >"${zig_work}/build.zig"
 mkdir -p "${zig_work}/src"
 printf 'pub fn main() void {}\n' >"${zig_work}/src/main.zig"
 build_repo "$zig_work" "v1.0.0" "zig"
