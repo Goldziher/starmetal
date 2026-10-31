@@ -356,7 +356,7 @@
       "url": "https://github.com/hexpm/specifications/blob/main/package_metadata.md"
     },
     {
-      "blake3": "38bd091ff4d20d3684f0d80e69873f47a174b7632de23a470286fdb40fae0342",
+      "blake3": "1e2362b930c9dee46d7371ce08fc19c46e1dada0d8746c9d661f2900d36d1916",
       "description": "Official Maven POM 4.0.0 XML Schema.",
       "fetched": true,
       "id": "maven-pom-xsd",
@@ -367,7 +367,7 @@
       "url": "https://maven.apache.org/xsd/maven-4.0.0.xsd"
     },
     {
-      "blake3": "69b79178eb2588307a36141d0dafb68249f8988b23203b83f7db5335bef4f2b5",
+      "blake3": "385ffdb4560c04613c046ca2b626c352a6a0fd73633af4bc8cd3918bfd3c8e08",
       "description": "Official Maven repository metadata XML Schema.",
       "fetched": true,
       "id": "maven-repository-metadata-xsd",
@@ -378,7 +378,7 @@
       "url": "https://maven.apache.org/xsd/repository-metadata-1.1.0.xsd"
     },
     {
-      "blake3": "25381c8d2a8aed702f7849b7367df2d538ec3a03e90f6751823dd9a45fc750a3",
+      "blake3": "1a1636499120a6e12f01394df1d6a80ad7d69fbff83819170665a17cdd46aaa9",
       "description": "Official Central Publisher API OpenAPI document; not used for Maven artifact serving.",
       "fetched": true,
       "id": "sonatype-central-publisher-openapi",
@@ -389,7 +389,7 @@
       "url": "https://central.sonatype.com/swagger.json"
     },
     {
-      "blake3": "26e5138153078573f1066e9cb1c92145a1774cd53deb0ae03addd8f5cd2ec42e",
+      "blake3": "6f3090fa221e0350f913e50b1338f77dd35f583ca9de77b8d47ef91e1ab058f2",
       "description": "Official published copy of Nexus Repository REST API Swagger; not used for Maven artifact serving.",
       "fetched": true,
       "id": "sonatype-nexus-rest-swagger",
@@ -411,15 +411,15 @@
       "url": "https://guides.rubygems.org/rubygems-org-compact-index-api/"
     },
     {
-      "blake3": "0cecdc95c1ee5bb8fcbe05d5c5fd7566a49bcee7151a5842554180d758fa629d",
-      "description": "Bundler compact index parser; machine-readable reference for client interpretation of compact index text.",
+      "blake3": "a8a6927f96033d96da918f5f1b0b202c0ab228dddc253a41642e7e59ca148fa9",
+      "description": "RubyGems compact index parser (Gem::CompactIndexClient, which Bundler uses); machine-readable reference for client interpretation of compact index text.",
       "fetched": true,
       "id": "rubygems-bundler-compact-index-parser",
       "kind": "official-ruby-source",
       "official": true,
       "path": "upstream/rubygems/bundler/compact_index_client/parser.rb",
       "registry": "rubygems",
-      "url": "https://raw.githubusercontent.com/ruby/rubygems/master/bundler/lib/bundler/compact_index_client/parser.rb"
+      "url": "https://raw.githubusercontent.com/ruby/rubygems/master/lib/rubygems/compact_index_client/parser.rb"
     },
     {
       "blake3": null,
@@ -455,7 +455,7 @@
       "url": "https://blog.rubygems.org/2023/02/22/dependency-api-deprecation.html"
     },
     {
-      "blake3": "239b81182b96678bfea3b3448dc57b18d983b9d5adb2edeee786fe9df579ae91",
+      "blake3": "9056beaddac8b861f8d70c7a35819f9fb01cb977ad967b7e45667425a0218e7e",
       "description": "RubyGems.org schema-like Ruby hash for validating most gemspec metadata and checksums; not standards-compliant JSON Schema.",
       "fetched": true,
       "id": "rubygems-gem-validator-schema",
@@ -587,7 +587,7 @@
       "url": "https://raw.githubusercontent.com/dart-lang/pub-dev/master/pkg/_pub_shared/lib/data/package_api.dart"
     },
     {
-      "blake3": "0318da148c93bcb7c2a62976dbadfc1e6de265eb13aba335e54e72b5bf86d7bc",
+      "blake3": "30877b8ea0d4399c78c8f43379c0b826c402482c2b87d109637a306ec878aeff",
       "description": "OSV JSON Schema referenced by Hosted Pub Repository Specification v2 for package security advisories only.",
       "fetched": true,
       "id": "osv-schema",

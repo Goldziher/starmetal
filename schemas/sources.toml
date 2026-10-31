@@ -209,11 +209,11 @@ description = "Official RubyGems.org Compact Index API documentation for /versio
 id = "rubygems-bundler-compact-index-parser"
 registry = "rubygems"
 kind = "official-ruby-source"
-url = "https://raw.githubusercontent.com/ruby/rubygems/master/bundler/lib/bundler/compact_index_client/parser.rb"
+url = "https://raw.githubusercontent.com/ruby/rubygems/master/lib/rubygems/compact_index_client/parser.rb"
 official = true
 fetched = true
 path = "upstream/rubygems/bundler/compact_index_client/parser.rb"
-description = "Bundler compact index parser; machine-readable reference for client interpretation of compact index text."
+description = "RubyGems compact index parser (Gem::CompactIndexClient, which Bundler uses); machine-readable reference for client interpretation of compact index text."
 
 [[source]]
 id = "rubygems-api-v1"
