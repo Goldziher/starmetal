@@ -70,7 +70,6 @@
     ".pi/agents/qa-engineer.md",
     ".pi/agents/security-auditor.md",
     ".pi/agents/test-writer.md",
-    ".pi/mcp.json",
     ".pi/prompts/iterate.md",
     ".pi/prompts/parallelize.md",
     "AGENTS.md",
@@ -81,7 +80,6 @@
     ".claude/settings.json": [],
     ".codex/config.toml": [],
     ".mcp.json": [],
-    ".pi/mcp.json": [],
     "opencode.json": []
   },
   "servers": {
@@ -92,12 +90,6 @@
       ]
     ],
     ".mcp.json": [
-      [
-        "mcpServers",
-        "ai-rulez"
-      ]
-    ],
-    ".pi/mcp.json": [
       [
         "mcpServers",
         "ai-rulez"

@@ -8,11 +8,6 @@ gitignore_exclude = ["AGENTS.md", "CLAUDE.md"]
 presets = ["claude", "codex", "opencode", "pi"]
 builtins = ['rust', 'default-commands']
 
-[[mcp_servers]]
-name = "ai-rulez"
-command = "npx"
-args = ["-y", "ai-rulez@latest", "mcp"]
-
 # Pinned by `ai-rulez migrate v5`: the 4.x default. Remove this line to take the v5 default.
 [mcp]
 self_server_command = ["npx", "-y", "ai-rulez@latest", "mcp"]

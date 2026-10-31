@@ -4,7 +4,7 @@
 version = 1
 ai_rulez_version = '5.9.7'
 scope = 'all'
-tree = 'sha256:a1d98a5ea4f2c6c7e1e50317c81d4ca0b37328be008245092753ff20e558a70c'
+tree = 'sha256:6a5141ae351db12178e324c7c64d3a22460bb063177f8fb2a8b24af3cd656545'
 
 [[served]]
 name = 'code-quality-standards'
@@ -136,7 +136,7 @@ digest = 'sha256:da4c74a626f369da986d69839df18999d003f1be02b2239cc07764cd8496b1e
 kind = 'rule'
 id = 'basemind-mcp'
 path = 'rules/basemind-mcp.md'
-digest = 'sha256:991510e6a92fab27ac76e3967a825557a48ae51bf419d4e672b464f5e11713ed'
+digest = 'sha256:3b8e18676ff796bcff08095242038c35459eb86ff07c3c84901cee45cfbdf879'
 
 [[item]]
 kind = 'rule'
@@ -155,8 +155,3 @@ kind = 'rule'
 id = 'hexagonal-boundaries'
 path = 'rules/hexagonal-boundaries.md'
 digest = 'sha256:227a25ba2822e389a74c734fa95624de12e491a85dfd3255099ee3eb121837c8'
-
-[[item]]
-kind = 'settings'
-id = 'mcp-servers'
-digest = 'sha256:dc42a173f6f6aff0c60f811572b54aa0ade5739de433309fc12b4955311cc777'

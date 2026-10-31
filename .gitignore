@@ -24,7 +24,6 @@ packages/pypi/*.egg-info/
 .opencode/agents/
 .opencode/commands/
 .pi/agents/
-.pi/mcp.json
 .pi/prompts/
 /.mcp.json
 /opencode.json

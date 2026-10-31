@@ -11,7 +11,7 @@ x-ai-rulez:
 # Basemind MCP
 
 - Keep Basemind configured as an ai-rulez plugin through `[[plugins]]`; do not add Basemind as a raw `mcp_server`.
-- Configure the ai-rulez MCP server with `npx -y ai-rulez@latest mcp` so agents can manage `.ai-rulez/` safely.
+- Serve ai-rulez itself through `[mcp] self_server_command` in `.ai-rulez/config.toml` so agents can manage `.ai-rulez/` safely.
 - Edit ai-rulez source files first, then regenerate outputs with `mise run governance:generate`.
 - When Basemind MCP tools are available, prefer them for code navigation and repository context before falling back to shell tools:
   `outline`, `search_symbols`, `find_references`, `find_callers`, and `workspace_grep` for code search;
