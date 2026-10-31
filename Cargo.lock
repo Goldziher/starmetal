@@ -4184,7 +4184,6 @@ version = "0.8.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e058c7de0b26af77780c769414d6257830bb240f3c38477dbc2c16e5f54d6d4c"
 dependencies = [
- "libc",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
 ]
@@ -5394,7 +5393,7 @@ dependencies = [
  "base64 0.23.1",
  "hmac 0.12.1",
  "p256",
- "rand 0.8.8",
+ "rand 0.10.3",
  "rsa",
  "serde",
  "serde_json",
