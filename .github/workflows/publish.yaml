@@ -261,9 +261,9 @@ jobs:
           ref: ${{ needs.meta.outputs.checkout_ref }}
 
       - name: Setup Rust
-        # No rust-toolchain.toml: releases build on the stable channel. ~keep
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@v1
         with:
+          toolchain: stable
           targets: ${{ matrix.triple }}
 
       - name: Setup cache
@@ -377,8 +377,9 @@ jobs:
           ref: ${{ needs.meta.outputs.checkout_ref }}
 
       - name: Setup Rust
-        # No rust-toolchain.toml: releases build on the stable channel. ~keep
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
 
       - name: Setup Node.js, pnpm and uv
         uses: xberg-io/actions/setup-mise@v1
@@ -480,8 +481,9 @@ jobs:
           ref: ${{ needs.meta.outputs.checkout_ref }}
 
       - name: Setup Rust
-        # No rust-toolchain.toml: releases build on the stable channel. ~keep
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
 
       - name: Authenticate to crates.io
         id: crates_auth
@@ -561,7 +563,7 @@ jobs:
         run: uv build packages/pypi --out-dir packages/pypi/dist --clear
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@v1.14.3
         with:
           packages-dir: packages/pypi/dist
           skip-existing: true
