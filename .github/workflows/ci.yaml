@@ -18,6 +18,14 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
+  toolchain:
+    name: toolchain baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: xberg-io/actions/check-toolchain@v1
+
   validate:
     uses: xberg-io/actions/.github/workflows/reusable-validate.yml@v1
     with:
@@ -29,14 +37,15 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+      # No rust-toolchain.toml: CI follows the stable channel. ~keep
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
       - uses: Swatinem/rust-cache@v2
-      - uses: go-task/setup-task@v2
+      - uses: xberg-io/actions/setup-mise@v1
         with:
-          version: 3.51.1
-      - run: task fmt:check
+          install: "false"
+      - run: mise run fmt:check
 
   clippy:
     name: clippy
@@ -44,14 +53,15 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
+      # No rust-toolchain.toml: CI follows the stable channel. ~keep
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - uses: go-task/setup-task@v2
+      - uses: xberg-io/actions/setup-mise@v1
         with:
-          version: 3.51.1
-      - run: task clippy
+          install: "false"
+      - run: mise run clippy
 
   test:
     name: test
@@ -59,12 +69,13 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
+      # No rust-toolchain.toml: CI follows the stable channel. ~keep
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: go-task/setup-task@v2
+      - uses: xberg-io/actions/setup-mise@v1
         with:
-          version: 3.51.1
-      - run: task test:all
+          install: "false"
+      - run: mise run test:all
 
   schema:
     name: schema
@@ -72,13 +83,14 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+      # No rust-toolchain.toml: CI follows the stable channel. ~keep
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: go-task/setup-task@v2
+      - uses: xberg-io/actions/setup-mise@v1
         with:
-          version: 3.51.1
-      - run: task schema:check
-      - run: task schema:validate
+          install: "false"
+      - run: mise run schema:check
+      - run: mise run schema:validate
 
   conformance:
     name: conformance
@@ -86,12 +98,13 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+      # No rust-toolchain.toml: CI follows the stable channel. ~keep
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: go-task/setup-task@v2
+      - uses: xberg-io/actions/setup-mise@v1
         with:
-          version: 3.51.1
-      - run: task conformance
+          install: "false"
+      - run: mise run conformance
 
   build-release:
     name: release build
@@ -99,6 +112,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+      # No rust-toolchain.toml: CI follows the stable channel. ~keep
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --workspace --release
@@ -109,12 +123,13 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
+      # No rust-toolchain.toml: CI follows the stable channel. ~keep
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: go-task/setup-task@v2
+      - uses: xberg-io/actions/setup-mise@v1
         with:
-          version: 3.51.1
-      - run: task feature:check
+          install: "false"
+      - run: mise run feature:check
 
   release-packages:
     name: release package dry-run
@@ -122,15 +137,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+      # No rust-toolchain.toml: CI follows the stable channel. ~keep
       - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-node@v7
+      - uses: xberg-io/actions/setup-mise@v1
         with:
-          node-version: "22"
-      - uses: astral-sh/setup-uv@v7
-      - uses: go-task/setup-task@v2
-        with:
-          version: 3.51.1
-      - run: task release:namespaces
+          tools: node pnpm uv
+      - run: mise run release:namespaces
 
   docker:
     name: docker integration
@@ -139,11 +151,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
-      - uses: go-task/setup-task@v2
+      - uses: xberg-io/actions/setup-mise@v1
         with:
-          version: 3.51.1
+          install: "false"
       - name: Run deterministic Docker integration
-        run: task docker:integration
+        run: mise run docker:integration
         env:
           SM_PROXY_E2E_ARTIFACTS: .artifacts/docker-proxy-e2e
       - name: Upload Docker proxy logs
@@ -161,13 +173,10 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
+      # No rust-toolchain.toml: CI follows the stable channel. ~keep
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: Install cargo-deny and cargo-audit
-        run: |
-          cargo install cargo-deny --version 0.19.6 --locked
-          cargo install cargo-audit --version 0.22.1 --locked
-      - uses: go-task/setup-task@v2
+      - uses: xberg-io/actions/setup-mise@v1
         with:
-          version: 3.51.1
-      - run: task security
+          tools: cargo-deny github:rustsec/rustsec
+      - run: mise run security

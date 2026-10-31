@@ -15,7 +15,8 @@ on:
       - "tests/integration/**"
       - "docker/git-e2e/**"
       - "Dockerfile"
-      - "Taskfile.yml"
+      - "mise.toml"
+      - "mise.lock"
       - ".github/workflows/git-e2e.yaml"
   push:
     branches:
@@ -27,7 +28,8 @@ on:
       - "tests/integration/**"
       - "docker/git-e2e/**"
       - "Dockerfile"
-      - "Taskfile.yml"
+      - "mise.toml"
+      - "mise.lock"
       - ".github/workflows/git-e2e.yaml"
 
 concurrency:
@@ -48,24 +50,20 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
+      # No rust-toolchain.toml: CI follows the stable channel. ~keep
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-go@v7
+      - uses: xberg-io/actions/setup-mise@v1
         with:
-          go-version: "1.26"
-          # No go.sum at the repo root (the E2E fixtures are synthesized), so there is nothing to
-          # cache — disable it to avoid a spurious cache-miss warning on every run.
-          cache: false
-      - uses: mlugg/setup-zig@v2
-        with:
-          version: "0.16.0"
+          tools: go zig
+      # Swift is not installed through mise. ~keep
       - uses: swift-actions/setup-swift@v2
         with:
           swift-version: "6.1"
-      - uses: go-task/setup-task@v2
+      - uses: xberg-io/actions/setup-mise@v1
         with:
-          version: 3.51.1
-      - run: task test:e2e:git
+          install: "false"
+      - run: mise run test:e2e:git
 
   git-docker-e2e:
     name: git-as-source Docker E2E
@@ -74,11 +72,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
-      - uses: go-task/setup-task@v2
+      - uses: xberg-io/actions/setup-mise@v1
         with:
-          version: 3.51.1
+          install: "false"
       - name: Run deterministic Docker git-as-source E2E
-        run: task docker:git:e2e
+        run: mise run docker:git:e2e
         env:
           SM_GIT_E2E_ARTIFACTS: .artifacts/docker-git-e2e
       - name: Upload Docker git E2E logs

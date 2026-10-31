@@ -38,24 +38,21 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
+      # No rust-toolchain.toml: CI follows the stable channel. ~keep
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: go-task/setup-task@v2
+      - uses: xberg-io/actions/setup-mise@v1
         with:
-          version: 3.51.1
-      - name: Install scythe
-        run: |
-          curl -fL https://github.com/Goldziher/scythe/releases/latest/download/scythe-x86_64-unknown-linux-gnu.tar.gz | tar xz
-          sudo mv scythe /usr/local/bin/
+          tools: github:Goldziher/scythe
       - name: Verify Docker is available for testcontainers
         run: docker info
-      - run: task db:check
+      - run: mise run db:check
       - name: Check generated SQL bindings are up to date
         run: |
-          task db:generate
+          mise run db:generate
           if [ -n "$(git status --porcelain crates/starmetal-metadata/src/generated/)" ]; then
-            echo "::error::Generated scythe code is out of date. Run 'task db:generate' and commit the changes."
+            echo "::error::Generated scythe code is out of date. Run 'mise run db:generate' and commit the changes."
             git diff crates/starmetal-metadata/src/generated/
             exit 1
           fi
-      - run: task test:content-store
+      - run: mise run test:content-store

@@ -119,12 +119,14 @@ jobs:
           ref: ${{ needs.meta.outputs.checkout_ref }}
           fetch-depth: 0
 
-      - uses: go-task/setup-task@v2
+      - uses: xberg-io/actions/setup-mise@v1
         with:
-          version: 3.51.1
+          install: "false"
+          # An older release tag predates mise.toml; restore it from the workflow's commit. ~keep
+          config-ref: ${{ github.sha }}
 
       - name: Smoke-test local image
-        run: task docker:smoke
+        run: mise run docker:smoke
 
   build:
     name: Build Docker image / ${{ matrix.platform }}
