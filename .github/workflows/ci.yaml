@@ -37,6 +37,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+      # ~keep No rust-toolchain.toml; this job installs the stable channel directly.
       - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
@@ -53,6 +54,7 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
+      # ~keep No rust-toolchain.toml; this job installs the stable channel directly.
       - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
@@ -69,6 +71,7 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
+      # ~keep No rust-toolchain.toml; this job installs the stable channel directly.
       - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
@@ -84,6 +87,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+      # ~keep No rust-toolchain.toml; this job installs the stable channel directly.
       - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
@@ -100,6 +104,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+      # ~keep No rust-toolchain.toml; this job installs the stable channel directly.
       - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
@@ -115,6 +120,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+      # ~keep No rust-toolchain.toml; this job installs the stable channel directly.
       - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
@@ -127,6 +133,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
+      # ~keep No rust-toolchain.toml; this job installs the stable channel directly.
       - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
@@ -142,6 +149,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+      # ~keep No rust-toolchain.toml; this job installs the stable channel directly.
       - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
@@ -179,6 +187,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
+      # ~keep No rust-toolchain.toml; this job installs the stable channel directly.
       - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable

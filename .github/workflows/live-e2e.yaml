@@ -23,6 +23,7 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
+      # ~keep No rust-toolchain.toml; this job installs the stable channel directly.
       - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
@@ -34,7 +35,9 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "8.0.x"
+      # ~keep Dart stays on its setup action (mise toolchain policy); the pub client E2E needs it.
       - uses: dart-lang/setup-dart@v1
+      # ~keep BEAM stays on its setup action (mise toolchain policy); the hex client E2E needs it.
       - uses: erlef/setup-beam@v1
         with:
           otp-version: "27"
