@@ -60,9 +60,6 @@ jobs:
       - uses: swift-actions/setup-swift@v2
         with:
           swift-version: "6.1"
-      - uses: xberg-io/actions/setup-mise@v1
-        with:
-          install: "false"
       - run: mise run test:e2e:git
 
   git-docker-e2e:
