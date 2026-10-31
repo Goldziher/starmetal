@@ -8,6 +8,8 @@ on:
       - "crates/starmetal-server/**"
       - "tests/integration/**"
       - "scythe.toml"
+      - "mise.toml"
+      - "mise.lock"
       - ".github/workflows/ci-metadata.yaml"
   push:
     branches:
@@ -18,6 +20,8 @@ on:
       - "crates/starmetal-server/**"
       - "tests/integration/**"
       - "scythe.toml"
+      - "mise.toml"
+      - "mise.lock"
       - ".github/workflows/ci-metadata.yaml"
 
 concurrency:
