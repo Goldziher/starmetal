@@ -4,7 +4,7 @@
 version = 1
 ai_rulez_version = '5.9.7'
 scope = 'all'
-tree = 'sha256:3db5577186f4f32012c80875f640684d1e1ffd720ed533cbdb9bc8108fefe117'
+tree = 'sha256:a1d98a5ea4f2c6c7e1e50317c81d4ca0b37328be008245092753ff20e558a70c'
 
 [[served]]
 name = 'code-quality-standards'
@@ -136,7 +136,7 @@ digest = 'sha256:da4c74a626f369da986d69839df18999d003f1be02b2239cc07764cd8496b1e
 kind = 'rule'
 id = 'basemind-mcp'
 path = 'rules/basemind-mcp.md'
-digest = 'sha256:b1edcd7e1cd06a70274e22b43f898e7bdf1e8c8ee36376457aa7e35bfa753aae'
+digest = 'sha256:991510e6a92fab27ac76e3967a825557a48ae51bf419d4e672b464f5e11713ed'
 
 [[item]]
 kind = 'rule'
@@ -159,4 +159,4 @@ digest = 'sha256:227a25ba2822e389a74c734fa95624de12e491a85dfd3255099ee3eb121837c
 [[item]]
 kind = 'settings'
 id = 'mcp-servers'
-digest = 'sha256:b6acdcb9b3d3c11a1ce5e1aee64fb1923b44c105a3f8534abc4b82e46dad2a73'
+digest = 'sha256:dc42a173f6f6aff0c60f811572b54aa0ade5739de433309fc12b4955311cc777'

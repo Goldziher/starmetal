@@ -10,12 +10,12 @@ builtins = ['rust', 'default-commands']
 
 [[mcp_servers]]
 name = "ai-rulez"
-command = "pnpm"
-args = ["dlx", "ai-rulez@5.3.0", "mcp"]
+command = "npx"
+args = ["-y", "ai-rulez@latest", "mcp"]
 
 # Pinned by `ai-rulez migrate v5`: the 4.x default. Remove this line to take the v5 default.
 [mcp]
-self_server_command = ["pnpm", "dlx", "ai-rulez@5.3.0", "mcp"]
+self_server_command = ["npx", "-y", "ai-rulez@latest", "mcp"]
 
 [lock]
 include_outputs = false

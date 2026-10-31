@@ -4,7 +4,7 @@ Project: starmetal
 Source: .ai-rulez/config.toml
 
 NEVER edit this file - modify .ai-rulez/ content instead
-Use MCP server: pnpm dlx ai-rulez@5.3.0 mcp
+Use MCP server: npx -y ai-rulez@latest mcp
 Regenerate: ai-rulez generate
 
 Docs: https://github.com/Goldziher/ai-rulez

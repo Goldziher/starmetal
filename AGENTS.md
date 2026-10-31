@@ -4,11 +4,11 @@ Project: starmetal
 Source: .ai-rulez/config.toml
 
 NEVER edit this file - modify .ai-rulez/ content instead
-Use MCP server: pnpm dlx ai-rulez@5.3.0 mcp
+Use MCP server: npx -y ai-rulez@latest mcp
 Regenerate: ai-rulez generate
 
 Docs: https://github.com/Goldziher/ai-rulez
-Content-Hash: blake3:e7ed20c036126e5fb9585b4026948797d32658413a29d8d5e351015b243fa421
+Content-Hash: blake3:f41f29d0a7f600f34b7512beebff1baaebf783384f8fc002ce22fce78ca157e5
 -->
 
 # starmetal
@@ -85,8 +85,8 @@ One logical change per commit — never mix unrelated changes. Small, focused co
 **Priority:** high
 
 - Keep Basemind configured as an ai-rulez plugin through `[[plugins]]`; do not add Basemind as a raw `mcp_server`.
-- Configure the ai-rulez MCP server with `pnpm dlx ai-rulez@5.3.0 mcp` so agents can manage `.ai-rulez/` safely.
-- Edit ai-rulez source files first, then regenerate outputs with `pnpm dlx ai-rulez@5.3.0 generate --gitignore`.
+- Configure the ai-rulez MCP server with `npx -y ai-rulez@latest mcp` so agents can manage `.ai-rulez/` safely.
+- Edit ai-rulez source files first, then regenerate outputs with `mise run governance:generate`.
 - When Basemind MCP tools are available, prefer them for code navigation and repository context before falling back to shell tools:
   `outline`, `search_symbols`, `find_references`, `find_callers`, and `workspace_grep` for code search;
   `recent_changes`, `blame_file`, `blame_symbol`, `diff_file`, `diff_outline`, and `commits_touching` for git history;
