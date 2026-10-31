@@ -168,7 +168,10 @@ pub fn build_module_zip(module_path: &str, version: &str, source_zip: &[u8], max
         let file = archive
             .by_index(index)
             .map_err(|err| StarmetalError::Upstream(format!("invalid source tree archive entry: {err}")))?;
-        if let Some(dir) = file.name().strip_suffix("/go.mod") {
+        let name = file
+            .name()
+            .map_err(|err| StarmetalError::Upstream(format!("invalid source tree archive entry name: {err}")))?;
+        if let Some(dir) = name.strip_suffix("/go.mod") {
             nested_module_dirs.push(format!("{dir}/"));
         }
     }
@@ -184,7 +187,10 @@ pub fn build_module_zip(module_path: &str, version: &str, source_zip: &[u8], max
         if file.is_dir() {
             continue;
         }
-        let name = file.name().to_string();
+        let name = file
+            .name()
+            .map_err(|err| StarmetalError::Upstream(format!("invalid source tree archive entry name: {err}")))?
+            .into_owned();
         if is_vendor_path(&name) || nested_module_dirs.iter().any(|dir| name.starts_with(dir.as_str())) {
             continue;
         }
@@ -323,7 +329,14 @@ mod tests {
     fn zip_entry_names(bytes: &[u8]) -> Vec<String> {
         let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes.to_vec())).unwrap();
         (0..archive.len())
-            .map(|index| archive.by_index(index).unwrap().name().to_string())
+            .map(|index| {
+                archive
+                    .by_index(index)
+                    .unwrap()
+                    .name()
+                    .expect("utf-8 zip entry name")
+                    .to_string()
+            })
             .collect()
     }
 

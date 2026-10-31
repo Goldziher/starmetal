@@ -95,7 +95,14 @@ async fn go_proxy_serves_list_info_mod_and_zip() {
     let zip_bytes = zip.bytes().await.expect("zip body");
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(zip_bytes.to_vec())).expect("valid module zip");
     let names: Vec<String> = (0..archive.len())
-        .map(|index| archive.by_index(index).expect("entry").name().to_string())
+        .map(|index| {
+            archive
+                .by_index(index)
+                .expect("entry")
+                .name()
+                .expect("utf-8 zip entry name")
+                .to_string()
+        })
         .collect();
     assert_eq!(
         names,
@@ -216,7 +223,14 @@ async fn go_proxy_module_zip_excludes_vendor_and_nested_go_mod_and_synthesizes_r
     let zip_bytes = zip.bytes().await.expect("zip body");
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(zip_bytes.to_vec())).expect("valid module zip");
     let names: Vec<String> = (0..archive.len())
-        .map(|index| archive.by_index(index).expect("entry").name().to_string())
+        .map(|index| {
+            archive
+                .by_index(index)
+                .expect("entry")
+                .name()
+                .expect("utf-8 zip entry name")
+                .to_string()
+        })
         .collect();
     assert_eq!(
         names,

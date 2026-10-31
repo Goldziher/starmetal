@@ -267,8 +267,9 @@ async fn archive_zip_reflects_the_requested_ref() {
     let mut go_mod_name = None;
     for index in 0..zip.len() {
         let file = zip.by_index(index).expect("zip entry");
-        if file.name().ends_with("go.mod") {
-            go_mod_name = Some(file.name().to_owned());
+        let name = file.name().expect("utf-8 zip entry name");
+        if name.ends_with("go.mod") {
+            go_mod_name = Some(name.into_owned());
         }
     }
     let go_mod_name = go_mod_name.expect("go.mod present in v1.1.0 zip archive");

@@ -16,9 +16,9 @@ gix-backend = ["dep:blake3", "dep:gix", "dep:gix-archive", "dep:tokio"]
 async-trait.workspace = true
 blake3 = { workspace = true, optional = true }
 bytes.workspace = true
-gix = { version = "0.86", default-features = false, features = [
+gix = { version = "0.90", default-features = false, features = [
   "blocking-network-client",
-  "max-performance-safe",
+  "max-performance",
   "revision",
   "sha1",
   "worktree-archive",
@@ -26,7 +26,7 @@ gix = { version = "0.86", default-features = false, features = [
 ], optional = true }
 # Direct dependency so gix-archive's tar/zip/gzip container formats are enabled
 # via feature unification; gix itself pulls gix-archive with default-features off.
-gix-archive = { version = "0.35", default-features = false, features = ["tar_gz", "zip"], optional = true }
+gix-archive = { version = "0.39", default-features = false, features = ["tar_gz", "zip"], optional = true }
 thiserror.workspace = true
 tokio = { workspace = true, optional = true }
 

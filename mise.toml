@@ -248,8 +248,7 @@ run = "cargo deny check all"
 
 [tasks.audit]
 description = "Run cargo-audit with documented temporary ignores from audit.toml"
-run = """cargo audit --ignore RUSTSEC-2023-0071 \
-  --ignore RUSTSEC-2026-0367 --ignore RUSTSEC-2026-0368 --ignore RUSTSEC-2026-0369 --ignore RUSTSEC-2026-0387"""
+run = "cargo audit --ignore RUSTSEC-2023-0071 --ignore RUSTSEC-2026-0387"
 
 [tasks.security]
 description = "Run Rust dependency policy and advisory checks"

@@ -40,7 +40,10 @@ pub(crate) fn parse_nuget(data: &[u8]) -> Result<ArchiveMetadata> {
         let file = archive
             .by_index(index)
             .map_err(|err| StarmetalError::Adapter(format!("invalid NuGet package entry: {err}")))?;
-        let name = file.name().to_string();
+        let name = file
+            .name()
+            .map_err(|err| StarmetalError::Adapter(format!("invalid NuGet package entry name: {err}")))?
+            .into_owned();
         reject_unsafe_path(&name)?;
         if !name.ends_with(".nuspec") {
             continue;

@@ -177,7 +177,14 @@ async fn swift_proxy_serves_the_source_archive_with_correct_headers() {
     let bytes = response.bytes().await.expect("archive body");
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes.to_vec())).expect("valid zip archive");
     let mut names: Vec<String> = (0..archive.len())
-        .map(|index| archive.by_index(index).expect("zip entry").name().to_string())
+        .map(|index| {
+            archive
+                .by_index(index)
+                .expect("zip entry")
+                .name()
+                .expect("utf-8 zip entry name")
+                .to_string()
+        })
         .collect();
     names.sort();
     assert_eq!(

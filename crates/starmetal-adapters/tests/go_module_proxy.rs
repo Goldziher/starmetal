@@ -128,7 +128,14 @@ async fn module_zip_is_correctly_prefixed_contains_go_mod_and_decompresses() {
 
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(module_zip.to_vec())).expect("valid module zip");
     let names: Vec<String> = (0..archive.len())
-        .map(|index| archive.by_index(index).expect("entry").name().to_string())
+        .map(|index| {
+            archive
+                .by_index(index)
+                .expect("entry")
+                .name()
+                .expect("utf-8 zip entry name")
+                .to_string()
+        })
         .collect();
     assert_eq!(
         names,

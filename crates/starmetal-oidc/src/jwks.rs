@@ -165,14 +165,13 @@ impl RawJwk {
                 }
                 let x = decode_required(&self.x, "EC JWK missing x")?;
                 let y = decode_required(&self.y, "EC JWK missing y")?;
-                if x.len() != 32 || y.len() != 32 {
-                    return Err("EC P-256 JWK coordinates must be 32 bytes".to_string());
-                }
-                let point = p256::EncodedPoint::from_affine_coordinates(
-                    p256::FieldBytes::from_slice(&x),
-                    p256::FieldBytes::from_slice(&y),
-                    false,
-                );
+                let coordinate = |bytes: &[u8]| -> Result<p256::FieldBytes, String> {
+                    let array: [u8; 32] = bytes
+                        .try_into()
+                        .map_err(|_| "EC P-256 JWK coordinates must be 32 bytes".to_string())?;
+                    Ok(p256::FieldBytes::from(array))
+                };
+                let point = p256::EncodedPoint::from_affine_coordinates(&coordinate(&x)?, &coordinate(&y)?, false);
                 let verifying_key = p256::ecdsa::VerifyingKey::from_encoded_point(&point)
                     .map_err(|error| format!("invalid EC JWK: {error}"))?;
                 Ok(Some(Jwk {

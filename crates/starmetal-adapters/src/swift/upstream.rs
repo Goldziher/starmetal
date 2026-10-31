@@ -111,7 +111,10 @@ pub fn build_registry_zip(name: &str, source_zip: &[u8], max_archive_bytes: u64)
         if file.is_dir() {
             continue;
         }
-        let entry_name = file.name().to_string();
+        let entry_name = file
+            .name()
+            .map_err(|err| StarmetalError::Upstream(format!("invalid source tree archive entry name: {err}")))?
+            .into_owned();
         // Bound the read itself to one byte past the remaining budget, so a single oversized entry
         // cannot be fully inflated into memory before the cumulative cap below is checked.
         let remaining_budget = max_archive_bytes.saturating_sub(decompressed_total);
@@ -326,7 +329,14 @@ mod tests {
     fn zip_entry_names(bytes: &[u8]) -> Vec<String> {
         let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes.to_vec())).unwrap();
         (0..archive.len())
-            .map(|index| archive.by_index(index).unwrap().name().to_string())
+            .map(|index| {
+                archive
+                    .by_index(index)
+                    .unwrap()
+                    .name()
+                    .expect("utf-8 zip entry name")
+                    .to_string()
+            })
             .collect()
     }
 

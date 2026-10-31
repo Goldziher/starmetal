@@ -1,6 +1,6 @@
 use rmcp::handler::server::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::{CallToolResult, ServerCapabilities, ServerInfo};
+use rmcp::model::{CallToolResult, ServerCapabilities, ServerConfig};
 use rmcp::transport::stdio;
 use rmcp::{ErrorData as McpError, ServerHandler, ServiceExt, schemars, tool, tool_handler, tool_router};
 use serde::{Deserialize, Serialize};
@@ -189,8 +189,8 @@ impl StarmetalMcp {
 
 #[tool_handler]
 impl ServerHandler for StarmetalMcp {
-    fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
+    fn get_info(&self) -> ServerConfig {
+        ServerConfig::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
             "Starmetal package registry operations. Mutating tools require sm mcp serve --allow-writes.",
         )
     }
