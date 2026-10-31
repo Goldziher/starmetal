@@ -7,7 +7,7 @@ license.workspace = true
 
 [dependencies]
 base64.workspace = true
-p256 = { version = "0.13", features = ["ecdsa"] }
+p256 = { version = "0.14", features = ["ecdsa"] }
 rsa = "0.9"
 serde.workspace = true
 serde_json.workspace = true
