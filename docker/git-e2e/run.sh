@@ -61,6 +61,8 @@ upstream_volume="starmetal-git-e2e-upstream-${run_id}"
 mirror_volume="starmetal-git-e2e-mirror-${run_id}"
 zig_client_image="starmetal-git-e2e-zig-client-${run_id}"
 zig_client_image_built="0"
+swift_client_build_image="starmetal-git-e2e-swift-client-${run_id}"
+swift_client_image_built="0"
 tmp_dir="$(mktemp -d)"
 artifact_root="${SM_GIT_E2E_ARTIFACTS:-${repo_root}/.artifacts/docker-git-e2e}"
 artifact_dir="${artifact_root%/}/${run_id}"
@@ -90,6 +92,9 @@ cleanup() {
     docker volume rm "$upstream_volume" "$mirror_volume" >/dev/null 2>&1 || true
     if [[ "$zig_client_image_built" == "1" ]]; then
       docker image rm "$zig_client_image" >/dev/null 2>&1 || true
+    fi
+    if [[ "$swift_client_image_built" == "1" ]]; then
+      docker image rm "$swift_client_build_image" >/dev/null 2>&1 || true
     fi
     rm -rf "$tmp_dir"
     if [[ "$status" == "0" && -z "${SM_GIT_E2E_ARTIFACTS:-}" ]]; then
@@ -182,6 +187,24 @@ EOF
   zig_client_image_built="1"
 }
 
+build_swift_client_image() {
+  local dockerfile="${tmp_dir}/Dockerfile.swift-client"
+  # SwiftPM extracts registry source archives with unzip; the Debian swift images do not ship it.
+  cat >"$dockerfile" <<'EOF'
+ARG SWIFT_BASE_IMAGE
+FROM ${SWIFT_BASE_IMAGE}
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends unzip \
+  && rm -rf /var/lib/apt/lists/*
+EOF
+  docker build \
+    --build-arg "SWIFT_BASE_IMAGE=${swift_client_image}" \
+    --tag "$swift_client_build_image" \
+    --file "$dockerfile" \
+    "$tmp_dir"
+  swift_client_image_built="1"
+}
+
 start_starmetal() {
   # $1: "online" mounts the upstream volume (ro); "offline" omits it, leaving only the mirror.
   local phase="$1"
@@ -233,7 +256,7 @@ run_all_clients() {
   local phase="$1"
   run_client "$go_client_image" go "$phase"
   run_client "$zig_client_image" zig "$phase"
-  run_client "$swift_client_image" swift "$phase"
+  run_client "$swift_client_build_image" swift "$phase"
 }
 
 cd "$repo_root"
@@ -255,6 +278,8 @@ docker run \
 
 echo "building $zig_client_image (Zig ${zig_version})"
 build_zig_client_image
+echo "building $swift_client_build_image (from ${swift_client_image})"
+build_swift_client_image
 
 docker network create "$network" >/dev/null
 docker volume create "$upstream_volume" >/dev/null
