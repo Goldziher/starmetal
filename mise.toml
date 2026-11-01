@@ -312,12 +312,12 @@ run = ["poly hooks update", { task = "governance:hooks:install" }]
 
 [tasks."governance:generate"]
 description = "Generate native AI governance outputs"
-tools = { node = "26.12.1" }
+tools = { node = "26.13.0" }
 run = "npx -y ai-rulez@latest generate --no-local --strict-config"
 
 [tasks."governance:check"]
 description = "Validate native AI governance and freshness"
-tools = { node = "26.12.1" }
+tools = { node = "26.13.0" }
 run = [
   "npx -y ai-rulez@latest migrate okf --check",
   "npx -y ai-rulez@latest validate --strict --no-local",
