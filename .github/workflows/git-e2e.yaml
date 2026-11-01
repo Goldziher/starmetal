@@ -46,7 +46,8 @@ env:
 jobs:
   git-e2e:
     name: git-as-source E2E
-    runs-on: ubuntu-latest
+    # ~keep setup-swift has no Ubuntu 26.04 support yet (https://github.com/swift-actions/setup-swift/issues/805)
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
