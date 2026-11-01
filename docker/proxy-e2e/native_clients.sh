@@ -140,7 +140,7 @@ EOF
   cat >"$project/starmetal-nuget-e2e.csproj" <<'EOF'
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="sample.nuget" Version="1.0.0" />
