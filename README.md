@@ -95,7 +95,7 @@ pnpm add -g starmetal
 pipx install starmetal
 ```
 
-The npm package requires Node 22+. The PyPI package requires Python 3.10+. Both download the
+The npm package requires Node 22+. The PyPI package requires Python 3.11+. Both download the
 matching prebuilt binary from GitHub Releases and verify it against the release checksums file. The
 crates.io `starmetal` package currently holds the public namespace while the Rust crate publishing
 layout is finalized.

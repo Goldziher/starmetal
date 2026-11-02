@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Python 3.11 is now the minimum supported version; Python 3.10 reached end of life.
+
 ## [0.4.0] - 2026-08-02
 
 ### Added
