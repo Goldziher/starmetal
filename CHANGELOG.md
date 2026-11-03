@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Minimum supported versions raised: Rust 1.99.
 - Python 3.11 is now the minimum supported version; Python 3.10 reached end of life.
 
 ## [0.4.0] - 2026-08-02

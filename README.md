@@ -104,7 +104,7 @@ layout is finalized.
 
 Requirements:
 
-- Rust edition 2024, Rust 1.85+
+- Rust edition 2024, Rust 1.99+
 - [mise](https://mise.jdx.dev/) for the toolchain and the documented workflow commands
 - [sccache](https://github.com/mozilla/sccache), optional but used automatically by the mise cargo tasks
 
