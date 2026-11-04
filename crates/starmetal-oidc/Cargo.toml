@@ -11,7 +11,7 @@ p256 = { version = "0.13", features = ["ecdsa"] }
 rsa = "0.9"
 serde.workspace = true
 serde_json.workspace = true
-sha2 = { version = "0.10", features = ["oid"] }
+sha2 = { version = "0.11", features = ["oid"] }
 signature = "2"
 starmetal-core.workspace = true
 thiserror.workspace = true
